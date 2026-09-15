@@ -23,3 +23,33 @@ jobs:
           git config --global user.email ci@example.invalid
           git config --global user.name ci
           make test
+
+  release:
+    needs: lint-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag and release when VERSION has no tag yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n "s/^VERSION='\(.*\)'$/\1/p" bin/git-locks)"
+          [ -n "$version" ] || { echo "no VERSION in bin/git-locks"; exit 1; }
+          tag="v${version}"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1 || gh release view "$tag" >/dev/null 2>&1; then
+            echo "${tag} already exists; nothing to release"
+            exit 0
+          fi
+          notes="$(awk -v v="$version" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {if (f) exit} f' CHANGELOG.md)"
+          [ -n "$notes" ] || { echo "CHANGELOG.md has no section for ${version}"; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "git-locks ${version}"
+          git push origin "$tag"
+          gh release create "$tag" --title "git-locks ${tag}" --notes "$notes" bin/git-locks schema/git-locks.schema.json

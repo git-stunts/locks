@@ -2,16 +2,41 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/git-stunts/locks/main/schema/git-locks.schema.json",
   "title": "git-locks output",
-  "description": "Every line git-locks writes to stdout or stderr in its default mode is one JSON object matching exactly one of the definitions below. Lines are emitted as each result is known (JSON Lines); nothing is buffered into an array. `git locks schema` prints this document.",
+  "description": "Every line git-locks writes to stdout or stderr in its default mode is one JSON object matching exactly one of the definitions below. Lines are emitted as each result is known (JSON Lines); nothing is buffered into an array. `with` writes its claim, release and refusal lines to stderr so the wrapped command owns stdout. `git locks schema` prints this document.",
   "oneOf": [
-    { "$ref": "#/$defs/check_line" },
-    { "$ref": "#/$defs/list_line" },
-    { "$ref": "#/$defs/claim_line" },
-    { "$ref": "#/$defs/refusal_line" },
-    { "$ref": "#/$defs/release_line" },
-    { "$ref": "#/$defs/sweep_line" },
-    { "$ref": "#/$defs/store_line" },
-    { "$ref": "#/$defs/version_line" }
+    {
+      "$ref": "#/$defs/check_line"
+    },
+    {
+      "$ref": "#/$defs/list_line"
+    },
+    {
+      "$ref": "#/$defs/claim_line"
+    },
+    {
+      "$ref": "#/$defs/refusal_line"
+    },
+    {
+      "$ref": "#/$defs/release_line"
+    },
+    {
+      "$ref": "#/$defs/sweep_line"
+    },
+    {
+      "$ref": "#/$defs/store_line"
+    },
+    {
+      "$ref": "#/$defs/version_line"
+    },
+    {
+      "$ref": "#/$defs/ttl_line"
+    },
+    {
+      "$ref": "#/$defs/extend_line"
+    },
+    {
+      "$ref": "#/$defs/missing_line"
+    }
   ],
   "$defs": {
     "job": {
@@ -37,68 +62,270 @@
     "check_line": {
       "type": "object",
       "description": "One line per path from `git locks check`, in argument order, as each is examined.",
-      "required": ["path", "state"],
+      "required": [
+        "path",
+        "state"
+      ],
       "properties": {
-        "path": { "$ref": "#/$defs/path" },
-        "state": { "enum": ["free", "held", "expired"] },
-        "holder": { "$ref": "#/$defs/holder" },
-        "job": { "$ref": "#/$defs/job" },
-        "expires": { "$ref": "#/$defs/epoch" }
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "state": {
+          "enum": [
+            "free",
+            "held",
+            "expired"
+          ]
+        },
+        "holder": {
+          "$ref": "#/$defs/holder"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "remaining": {
+          "$ref": "#/$defs/remaining"
+        }
       },
       "additionalProperties": false,
-      "if": { "properties": { "state": { "const": "free" } } },
-      "then": { "required": ["path", "state"], "not": { "anyOf": [{ "required": ["holder"] }, { "required": ["job"] }, { "required": ["expires"] }] } },
-      "else": { "required": ["path", "state", "holder", "job", "expires"] }
+      "if": {
+        "properties": {
+          "state": {
+            "const": "free"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "path",
+          "state"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "holder"
+              ]
+            },
+            {
+              "required": [
+                "job"
+              ]
+            },
+            {
+              "required": [
+                "expires"
+              ]
+            },
+            {
+              "required": [
+                "remaining"
+              ]
+            }
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "path",
+          "state",
+          "holder",
+          "job",
+          "expires",
+          "remaining"
+        ]
+      }
     },
     "list_line": {
       "type": "object",
-      "description": "One line per lock from `git locks list`, live or expired, in ref order.",
-      "required": ["job", "holder", "state", "claimed", "expires", "paths"],
+      "description": "One line per lock from `git locks list`, live or expired, in ref order; also the single line of `git locks show --job <id>`.",
+      "required": [
+        "job",
+        "holder",
+        "state",
+        "claimed",
+        "expires",
+        "remaining",
+        "paths"
+      ],
       "properties": {
-        "job": { "$ref": "#/$defs/job" },
-        "holder": { "$ref": "#/$defs/holder" },
-        "state": { "enum": ["live", "expired"] },
-        "claimed": { "$ref": "#/$defs/epoch" },
-        "expires": { "$ref": "#/$defs/epoch" },
-        "paths": { "type": "array", "items": { "$ref": "#/$defs/path" }, "uniqueItems": true }
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "holder": {
+          "$ref": "#/$defs/holder"
+        },
+        "state": {
+          "enum": [
+            "live",
+            "expired"
+          ]
+        },
+        "claimed": {
+          "$ref": "#/$defs/epoch"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "uniqueItems": true
+        },
+        "remaining": {
+          "$ref": "#/$defs/remaining"
+        },
+        "parent": {
+          "$ref": "#/$defs/job",
+          "description": "Present when the lock is a child: it is released or swept with this job."
+        }
       },
       "additionalProperties": false
     },
     "claim_line": {
       "type": "object",
-      "description": "The single stdout line of a successful `git locks claim`.",
-      "required": ["event", "job", "holder", "claimed", "expires", "paths"],
+      "description": "The single stdout line of a successful `git locks claim`; one per record for `git locks batch`.",
+      "required": [
+        "event",
+        "job",
+        "holder",
+        "claimed",
+        "expires",
+        "paths"
+      ],
       "properties": {
-        "event": { "const": "claimed" },
-        "job": { "$ref": "#/$defs/job" },
-        "holder": { "$ref": "#/$defs/holder" },
-        "claimed": { "$ref": "#/$defs/epoch" },
-        "expires": { "$ref": "#/$defs/epoch" },
-        "paths": { "type": "array", "items": { "$ref": "#/$defs/path" }, "minItems": 1, "uniqueItems": true }
+        "event": {
+          "const": "claimed"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "holder": {
+          "$ref": "#/$defs/holder"
+        },
+        "claimed": {
+          "$ref": "#/$defs/epoch"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "parent": {
+          "$ref": "#/$defs/job"
+        }
       },
       "additionalProperties": false
     },
     "refusal_line": {
       "type": "object",
-      "description": "On stderr, one line per held path when a claim is refused (exit 1); or a single transaction failure with git's message.",
+      "description": "On stderr, one line per problem when a claim or batch is refused (exit 1): a held path naming its holder; a parent that is missing, expired or another holder's; a path named by two records of one batch; or a transaction failure with git's message.",
       "oneOf": [
         {
-          "required": ["event", "path", "holder", "job", "expires"],
+          "required": [
+            "event",
+            "path",
+            "holder",
+            "job",
+            "expires"
+          ],
           "properties": {
-            "event": { "const": "refused" },
-            "path": { "$ref": "#/$defs/path" },
-            "holder": { "$ref": "#/$defs/holder" },
-            "job": { "$ref": "#/$defs/job" },
-            "expires": { "$ref": "#/$defs/epoch" }
+            "event": {
+              "const": "refused"
+            },
+            "path": {
+              "$ref": "#/$defs/path"
+            },
+            "holder": {
+              "$ref": "#/$defs/holder"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "expires": {
+              "$ref": "#/$defs/epoch"
+            }
           },
           "additionalProperties": false
         },
         {
-          "required": ["event", "reason", "detail"],
+          "required": [
+            "event",
+            "reason",
+            "detail"
+          ],
           "properties": {
-            "event": { "const": "refused" },
-            "reason": { "const": "transaction" },
-            "detail": { "type": "string" }
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "transaction"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "job",
+            "parent",
+            "detail"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "parent"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "parent": {
+              "$ref": "#/$defs/job"
+            },
+            "detail": {
+              "enum": [
+                "missing",
+                "expired",
+                "holder"
+              ],
+              "description": "Why the parent cannot be used: no such lock, it has expired, or it belongs to another holder."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "path"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "duplicate"
+            },
+            "path": {
+              "$ref": "#/$defs/path"
+            }
           },
           "additionalProperties": false
         }
@@ -106,22 +333,48 @@
     },
     "release_line": {
       "type": "object",
-      "description": "The single stdout line of `git locks release`: what was released, or that there was nothing to release.",
+      "description": "One stdout line per --job of `git locks release`: what was released (with any descendants), or that there was nothing to release.",
       "oneOf": [
         {
-          "required": ["event", "job", "paths"],
+          "required": [
+            "event",
+            "job",
+            "paths"
+          ],
           "properties": {
-            "event": { "const": "released" },
-            "job": { "$ref": "#/$defs/job" },
-            "paths": { "type": "integer", "minimum": 0, "description": "How many path refs were deleted with the job ref." }
+            "event": {
+              "const": "released"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "paths": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many path refs were deleted, descendants included."
+            },
+            "cascaded": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/job"
+              },
+              "description": "Descendant jobs released in the same transaction, sorted; absent when there were none."
+            }
           },
           "additionalProperties": false
         },
         {
-          "required": ["event", "job"],
+          "required": [
+            "event",
+            "job"
+          ],
           "properties": {
-            "event": { "const": "nothing" },
-            "job": { "$ref": "#/$defs/job" }
+            "event": {
+              "const": "nothing"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            }
           },
           "additionalProperties": false
         }
@@ -132,21 +385,51 @@
       "description": "One stdout line per expired lock `git locks sweep` deleted; on stderr, one per lock it could not delete because it changed underneath.",
       "oneOf": [
         {
-          "required": ["event", "job", "holder", "expires"],
+          "required": [
+            "event",
+            "job",
+            "holder",
+            "expires"
+          ],
           "properties": {
-            "event": { "const": "swept" },
-            "job": { "$ref": "#/$defs/job" },
-            "holder": { "$ref": "#/$defs/holder" },
-            "expires": { "$ref": "#/$defs/epoch" }
+            "event": {
+              "const": "swept"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "holder": {
+              "$ref": "#/$defs/holder"
+            },
+            "expires": {
+              "$ref": "#/$defs/epoch"
+            },
+            "cascaded": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/job"
+              },
+              "description": "Descendant jobs swept with this expired parent, sorted; absent when there were none."
+            }
           },
           "additionalProperties": false
         },
         {
-          "required": ["event", "job", "reason"],
+          "required": [
+            "event",
+            "job",
+            "reason"
+          ],
           "properties": {
-            "event": { "const": "skipped" },
-            "job": { "$ref": "#/$defs/job" },
-            "reason": { "const": "changed underneath" }
+            "event": {
+              "const": "skipped"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "reason": {
+              "const": "changed underneath"
+            }
           },
           "additionalProperties": false
         }
@@ -155,17 +438,96 @@
     "store_line": {
       "type": "object",
       "description": "The single line of `git locks store`: the absolute path of the store this repository resolves to.",
-      "required": ["store"],
-      "properties": { "store": { "type": "string", "minLength": 1 } },
+      "required": [
+        "store"
+      ],
+      "properties": {
+        "store": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
       "additionalProperties": false
     },
     "version_line": {
       "type": "object",
       "description": "The single line of `git locks version`.",
-      "required": ["name", "version"],
+      "required": [
+        "name",
+        "version"
+      ],
       "properties": {
-        "name": { "const": "git-locks" },
-        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+        "name": {
+          "const": "git-locks"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "remaining": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seconds until the lock expires, 0 once it has."
+    },
+    "ttl_line": {
+      "type": "object",
+      "description": "The single line of `git locks ttl --job <id>`.",
+      "required": [
+        "job",
+        "expires",
+        "remaining"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "remaining": {
+          "$ref": "#/$defs/remaining"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extend_line": {
+      "type": "object",
+      "description": "The single line of `git locks extend --job <id> --ttl <seconds>`: the new expiry.",
+      "required": [
+        "event",
+        "job",
+        "expires"
+      ],
+      "properties": {
+        "event": {
+          "const": "extended"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        }
+      },
+      "additionalProperties": false
+    },
+    "missing_line": {
+      "type": "object",
+      "description": "On stderr, from show, ttl or extend, when no lock exists for the job (exit 1).",
+      "required": [
+        "event",
+        "job"
+      ],
+      "properties": {
+        "event": {
+          "const": "missing"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        }
       },
       "additionalProperties": false
     }
