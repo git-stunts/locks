@@ -4,6 +4,14 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-15
+
+### Added
+
+- Capacity semaphores: `sem create <name> --capacity <n>`, `sem acquire` (with `--ttl` and `--wait`; re-acquire refreshes the job's own slot), `sem release`, `sem show`, `sem list`, `sem delete`. A slot is a ref under `refs/locks/sem/<name>/slots/`; every transaction on a semaphore compare-and-swaps its `gen` ref, so racers beyond capacity fail and re-read; a lost swap is retried, a full semaphore is refused with `capacity` and `live`. Expired slots free their capacity and are evicted by the next transaction.
+- `with --sem <name>`: take a slot around a command, with or without paths; released on exit, failure, or a signal.
+- Schema: `sem_line`, `sem_event_line`, and the `capacity`, `exists` and `live` refusals. 238 checks.
+
 ## [0.1.0] - 2026-09-15
 
 ### Added

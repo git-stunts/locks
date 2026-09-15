@@ -10,6 +10,10 @@
 # winner among N racers on one machine; it does not model a networked remote.
 set -uo pipefail
 
+# A git hook exports GIT_DIR and friends; inherited here, every git call in a
+# temporary repository below would target the hook's repository instead.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_NAMESPACE
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="${HERE}/../bin:${PATH}"
 PASS=0
@@ -587,6 +591,103 @@ printf 'job: bad name\nholder: h\npaths:\nz.md\n' | git-locks batch >/dev/null 2
 check "a batch with a malformed record is a usage error, exit 2" "$?" "2"
 printf '' | git-locks batch >/dev/null 2>&1
 check "an empty batch is a usage error" "$?" "2"
+
+# ---------------------------------------------------------------- semaphores: capacity, not exclusivity
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(git-locks sem create gpu --capacity 2 2>&1)"
+check "sem create exits 0" "$?" "0"
+check "sem create is one JSON line" "${out}" '{"event":"created","semaphore":"gpu","capacity":2}'
+valid "sem create line" "${out}"
+git-locks sem create gpu --capacity 2 >/dev/null 2>&1
+check "creating a semaphore twice exits 1" "$?" "1"
+git-locks sem create bad --capacity 0 >/dev/null 2>&1
+check "capacity must be positive: exit 2" "$?" "2"
+git-locks sem acquire nope --job j --holder h >/dev/null 2>&1
+check "acquiring a missing semaphore exits 1" "$?" "1"
+
+out="$(git-locks sem acquire gpu --job a --holder ha 2>&1)"
+check "first acquire exits 0" "$?" "0"
+contains "acquire line names the slot taken" "${out}" '{"event":"acquired","semaphore":"gpu","job":"a","holder":"ha","claimed":1000000,"expires":1014400,"live":1,"capacity":2}'
+valid "acquire line" "${out}"
+git-locks sem acquire gpu --job b --holder hb >/dev/null 2>&1
+check "second acquire fills the semaphore" "$?" "0"
+err="$(git-locks sem acquire gpu --job c --holder hc 2>&1 >/dev/null)"
+check "a third acquire is refused with exit 1" "$?" "1"
+check "the refusal says capacity, with the numbers" "${err}" '{"event":"refused","reason":"capacity","semaphore":"gpu","capacity":2,"live":2}'
+valid "capacity refusal line" "${err}"
+out="$(git-locks sem acquire gpu --job a --holder ha 2>&1)"
+check "re-acquiring a slot the job already holds exits 0 and does not consume another" "$?" "0"
+contains "re-acquire reports live unchanged" "${out}" '"live":2,"capacity":2'
+
+out="$(git-locks sem show gpu 2>&1)"
+check "sem show exits 0" "$?" "0"
+contains "sem show carries capacity and live" "${out}" '{"semaphore":"gpu","capacity":2,"live":2,"slots":['
+contains "sem show lists each holder with remaining" "${out}" '{"job":"a","holder":"ha","claimed":1000000,"expires":1014400,"remaining":14400}'
+valid "sem show line" "${out}"
+out="$(git-locks --text sem show gpu 2>&1)"
+contains "--text sem show is readable" "${out}" "gpu: 2/2 slots live"
+out="$(git-locks sem list 2>&1)"
+contains "sem list streams one line per semaphore" "${out}" '{"semaphore":"gpu","capacity":2,"live":2'
+valid "sem list line" "${out}"
+
+out="$(git-locks sem release gpu --job a 2>&1)"
+check "sem release exits 0" "$?" "0"
+check "sem release is one JSON line" "${out}" '{"event":"released","semaphore":"gpu","job":"a","live":1,"capacity":2}'
+valid "sem release line" "${out}"
+git-locks sem acquire gpu --job c --holder hc >/dev/null 2>&1
+check "the freed slot can be taken" "$?" "0"
+out="$(git-locks sem release gpu --job zzz 2>&1)"
+check "releasing a slot the job does not hold exits 0" "$?" "0"
+contains "and says nothing was held" "${out}" '{"event":"nothing","semaphore":"gpu","job":"zzz"}'
+
+GIT_LOCKS_NOW=1000 git-locks sem create batch --capacity 1 >/dev/null 2>&1
+GIT_LOCKS_NOW=1000 git-locks sem acquire batch --job old --holder ho --ttl 10 >/dev/null 2>&1
+GIT_LOCKS_NOW=1005 git-locks sem acquire batch --job new --holder hn >/dev/null 2>&1
+check "a live slot blocks at capacity" "$?" "1"
+out="$(GIT_LOCKS_NOW=2000 git-locks sem acquire batch --job new --holder hn 2>&1)"
+check "an expired slot frees its capacity" "$?" "0"
+contains "the expired slot was evicted, live is 1 not 2" "${out}" '"live":1,"capacity":1'
+out="$(GIT_LOCKS_NOW=2000 git-locks sem show batch 2>&1)"
+contains "show no longer lists the evicted job" "${out}" '"slots":[{"job":"new"'
+
+GIT_LOCKS_NOW=2000 git-locks sem delete batch >/dev/null 2>&1
+check "deleting a semaphore with live slots exits 1" "$?" "1"
+GIT_LOCKS_NOW=2000 git-locks sem release batch --job new >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=2000 git-locks sem delete batch 2>&1)"
+check "deleting an empty semaphore exits 0" "$?" "0"
+check "sem delete is one JSON line" "${out}" '{"event":"deleted","semaphore":"batch"}'
+valid "sem delete line" "${out}"
+git-locks sem show batch >/dev/null 2>&1
+check "a deleted semaphore is gone" "$?" "1"
+
+# exactly K winners under contention
+git-locks sem create race --capacity 3 >/dev/null 2>&1
+wins=0
+pids=()
+for i in $(seq 1 20); do
+  (git-locks sem acquire race --job "r${i}" --holder "h${i}" >/dev/null 2>&1) &
+  pids+=($!)
+done
+for pid in "${pids[@]}"; do
+  if wait "${pid}"; then wins=$((wins + 1)); fi
+done
+check "twenty racers on capacity three: exactly three win" "${wins}" "3"
+out="$(git-locks sem show race 2>&1)"
+contains "and the semaphore agrees" "${out}" '"capacity":3,"live":3'
+
+# with --sem: take a slot, run, release
+git-locks sem create pool --capacity 1 >/dev/null 2>&1
+out="$(git-locks with --sem pool --job w --holder hw -- sh -c 'git-locks --text sem show pool | head -n 1; echo ran' 2>/dev/null)"
+check "with --sem exits with the command's status" "$?" "0"
+contains "the slot was held while the command ran" "${out}" 'pool: 1/1 slots live'
+contains "the command ran" "${out}" "ran"
+out="$(git-locks sem show pool 2>&1)"
+contains "with --sem released the slot afterwards" "${out}" '"live":0'
+git-locks sem acquire pool --job other --holder ho >/dev/null 2>&1
+git-locks with --sem pool --job w2 --holder hw -- echo never >/dev/null 2>&1
+check "with --sem at capacity exits 1 without --wait" "$?" "1"
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then

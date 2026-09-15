@@ -36,6 +36,12 @@
     },
     {
       "$ref": "#/$defs/missing_line"
+    },
+    {
+      "$ref": "#/$defs/sem_line"
+    },
+    {
+      "$ref": "#/$defs/sem_event_line"
     }
   ],
   "$defs": {
@@ -230,7 +236,7 @@
     },
     "refusal_line": {
       "type": "object",
-      "description": "On stderr, one line per problem when a claim or batch is refused (exit 1): a held path naming its holder; a parent that is missing, expired or another holder's; a path named by two records of one batch; or a transaction failure with git's message.",
+      "description": "On stderr, one line per problem when a claim or batch is refused (exit 1): a held path naming its holder; a parent that is missing, expired or another holder's; a path named by two records of one batch; or a transaction failure with git's message. For semaphores: capacity (full), exists (create), live (delete with live slots).",
       "oneOf": [
         {
           "required": [
@@ -325,6 +331,83 @@
             },
             "path": {
               "$ref": "#/$defs/path"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "semaphore",
+            "capacity",
+            "live"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "capacity"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            },
+            "capacity": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "live": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Slots held by unexpired jobs."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "semaphore"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "exists"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "semaphore",
+            "live"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "live"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            },
+            "live": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Slots held by unexpired jobs."
             }
           },
           "additionalProperties": false
@@ -530,6 +613,216 @@
         }
       },
       "additionalProperties": false
+    },
+    "sem_line": {
+      "type": "object",
+      "description": "One line per semaphore from `git locks sem list`, and the single line of `git locks sem show <name>`: capacity, live count, and the live slots.",
+      "required": [
+        "semaphore",
+        "capacity",
+        "live",
+        "slots"
+      ],
+      "properties": {
+        "semaphore": {
+          "$ref": "#/$defs/job",
+          "description": "The semaphore's name; same grammar as a job id."
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "live": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Slots held by unexpired jobs."
+        },
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "job",
+              "holder",
+              "claimed",
+              "expires",
+              "remaining"
+            ],
+            "properties": {
+              "job": {
+                "$ref": "#/$defs/job"
+              },
+              "holder": {
+                "$ref": "#/$defs/holder"
+              },
+              "claimed": {
+                "$ref": "#/$defs/epoch"
+              },
+              "expires": {
+                "$ref": "#/$defs/epoch"
+              },
+              "remaining": {
+                "$ref": "#/$defs/remaining"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "sem_event_line": {
+      "type": "object",
+      "description": "Semaphore lifecycle lines: created, acquired (with the live count after), released (likewise), nothing (the job held no slot), deleted.",
+      "oneOf": [
+        {
+          "required": [
+            "event",
+            "semaphore",
+            "capacity"
+          ],
+          "properties": {
+            "event": {
+              "const": "created"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            },
+            "capacity": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "semaphore",
+            "job",
+            "holder",
+            "claimed",
+            "expires",
+            "live",
+            "capacity"
+          ],
+          "properties": {
+            "event": {
+              "const": "acquired"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "holder": {
+              "$ref": "#/$defs/holder"
+            },
+            "claimed": {
+              "$ref": "#/$defs/epoch"
+            },
+            "expires": {
+              "$ref": "#/$defs/epoch"
+            },
+            "live": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Slots held by unexpired jobs."
+            },
+            "capacity": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "semaphore",
+            "job",
+            "live",
+            "capacity"
+          ],
+          "properties": {
+            "event": {
+              "const": "released"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "live": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Slots held by unexpired jobs."
+            },
+            "capacity": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "semaphore",
+            "job"
+          ],
+          "properties": {
+            "event": {
+              "const": "nothing"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "semaphore"
+          ],
+          "properties": {
+            "event": {
+              "const": "deleted"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "semaphore"
+          ],
+          "properties": {
+            "event": {
+              "const": "missing"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job",
+              "description": "The semaphore's name; same grammar as a job id."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   }
 }

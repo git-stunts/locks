@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Tests must pass locally before a push.
 set -euo pipefail
+# Git exports its own environment to hooks; the checks below must see the working tree as a user would.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
 top="$(git rev-parse --show-toplevel)"
 cd "${top}"
 make --no-print-directory test
