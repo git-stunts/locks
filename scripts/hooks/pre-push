@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Tests must pass locally before a push.
+set -euo pipefail
+top="$(git rev-parse --show-toplevel)"
+cd "${top}"
+make --no-print-directory test

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Lint must pass cleanly before a commit: shellcheck with every optional check, shfmt.
+set -euo pipefail
+top="$(git rev-parse --show-toplevel)"
+cd "${top}"
+make --no-print-directory lint

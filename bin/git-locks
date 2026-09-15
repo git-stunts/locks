@@ -1,0 +1,403 @@
+#!/usr/bin/env bash
+# git-locks — declare the paths you are about to write, as refs in the repo.
+#
+#   git locks claim   --job <id> --holder <name> [--ttl <seconds>] <path>...
+#   git locks release --job <id>
+#   git locks check   <path>...        exit 1 if any path is held
+#   git locks list
+#   git locks sweep                    delete expired locks
+#
+# A lock is one blob (a plain-text record: job, holder, claimed, expires, and
+# the paths) pointed at by refs/locks/jobs/<id> and by refs/locks/paths/<h>
+# for every path, where <h> is git's own hash of the path string. A claim is a
+# single `git update-ref --stdin` transaction, so it is atomic across all of
+# its paths and across racing claimants: `create` fails if another claimant
+# got there first, and every replacement carries the old value it expects.
+# Refs live outside the worktree, so nothing here ever shows as untracked.
+#
+# Exit codes: 0 done (or free), 1 refused / held, 2 usage or not a repository.
+# GIT_LOCKS_NOW=<epoch seconds> fixes the clock (tests). Pure bash + git.
+set -uo pipefail
+
+NS='refs/locks'
+DEFAULT_TTL=14400
+SCHEMA='git-locks/1'
+
+usage() {
+  cat >&2 <<'EOF'
+usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] <path>...
+       git locks release --job <id>
+       git locks check   <path>...
+       git locks list
+       git locks sweep
+EOF
+  exit 2
+}
+
+fail() { # message [code]
+  printf 'git-locks: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+now() {
+  if [[ -n "${GIT_LOCKS_NOW:-}" ]]; then
+    printf '%s' "${GIT_LOCKS_NOW}"
+  else
+    date +%s
+  fi
+}
+
+iso() { # epoch -> ISO-8601 UTC, portable across BSD and GNU date
+  date -u -r "$1" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d "@$1" '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+path_ref() {
+  local h
+  h="$(printf '%s' "$1" | git hash-object --stdin)" || return 1
+  printf '%s/paths/%s' "${NS}" "${h}"
+}
+
+job_ref() { printf '%s/jobs/%s' "${NS}" "$1"; }
+
+ref_oid() { git rev-parse -q --verify "$1^{blob}" 2>/dev/null || true; }
+
+field() { # oid key
+  git cat-file -p "$1" | sed -n "s/^$2: //p" | head -n 1
+}
+
+record_paths() { # oid -> paths, one per line
+  git cat-file -p "$1" | sed -n '/^paths:$/,$p' | sed '1d'
+}
+
+job_refs() { git for-each-ref --format='%(refname) %(objectname)' "${NS}/jobs/"; }
+
+valid_job() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
+
+normalize_path() { # -> prints the path, or returns 2 with the reason on stderr
+  local p="$1"
+  while [[ "${p}" == ./* ]]; do p="${p#./}"; done
+  [[ -z "${p}" ]] && {
+    printf 'git-locks: an empty path\n' >&2
+    return 2
+  }
+  [[ "${p}" == /* ]] && {
+    printf 'git-locks: %s: paths are repo-relative\n' "${p}" >&2
+    return 2
+  }
+  [[ "${p}" == *$'\n'* ]] && {
+    printf 'git-locks: a path with a newline is not supported\n' >&2
+    return 2
+  }
+  local IFS='/' part
+  for part in ${p}; do
+    [[ "${part}" == '..' ]] && {
+      printf 'git-locks: %s: no .. components\n' "${p}" >&2
+      return 2
+    }
+  done
+  printf '%s' "${p}"
+}
+
+require_repo() { git rev-parse --git-dir >/dev/null 2>&1 || fail 'not in a git repository' 2; }
+
+transact() { # plan lines on stdin -> git update-ref transaction; stderr captured by the caller
+  {
+    printf 'start\n'
+    cat
+    printf 'prepare\ncommit\n'
+  } | git update-ref --stdin
+}
+
+describe() { # oid -> "held by H (job J, until ISO)" pieces via globals D_HOLDER D_JOB D_UNTIL
+  D_HOLDER="$(field "$1" holder)"
+  D_JOB="$(field "$1" job)"
+  local exp
+  exp="$(field "$1" expires)"
+  D_EXPIRES="${exp:-0}"
+  D_UNTIL="$(iso "${D_EXPIRES}")"
+}
+
+in_list() { # needle list...
+  local needle="$1" item
+  shift
+  for item in "$@"; do [[ "${item}" == "${needle}" ]] && return 0; done
+  return 1
+}
+
+# ---------------------------------------------------------------- claim
+
+cmd_claim() {
+  local job='' holder='' ttl="${DEFAULT_TTL}" paths=() p
+  while (($# > 0)); do
+    case "$1" in
+      --job)
+        [[ $# -ge 2 ]] || usage
+        job="$2"
+        shift 2
+        ;;
+      --holder)
+        [[ $# -ge 2 ]] || usage
+        holder="$2"
+        shift 2
+        ;;
+      --ttl)
+        [[ $# -ge 2 ]] || usage
+        ttl="$2"
+        shift 2
+        ;;
+      --)
+        shift
+        paths+=("$@")
+        break
+        ;;
+      -*) usage ;;
+      *)
+        paths+=("$1")
+        shift
+        ;;
+    esac
+  done
+  [[ -n "${job}" && -n "${holder}" ]] || usage
+  valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  [[ "${ttl}" =~ ^[0-9]+$ && "${ttl}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
+  [[ "${holder}" == *$'\n'* ]] && fail 'holder must be one line' 2
+  ((${#paths[@]} > 0)) || usage
+
+  local norm=() n
+  for p in "${paths[@]}"; do
+    n="$(normalize_path "${p}")" || exit 2
+    norm+=("${n}")
+  done
+  local sorted wanted=()
+  sorted="$(printf '%s\n' "${norm[@]}" | sort -u)"
+  while IFS= read -r n; do [[ -n "${n}" ]] && wanted+=("${n}"); done <<<"${sorted}"
+
+  local at expires
+  at="$(now)"
+  expires=$((at + ttl))
+
+  # The record blob first: every planned ref points at it.
+  local record new_oid
+  record="$(
+    printf 'schema: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\npaths:\n' "${SCHEMA}" "${job}" "${holder}" "${at}" "${expires}"
+    printf '%s\n' "${wanted[@]}"
+  )"
+  new_oid="$(printf '%s\n' "${record}" | git hash-object -w --stdin)" || fail 'could not write the lock record'
+
+  local jref old_job_oid
+  jref="$(job_ref "${job}")"
+  old_job_oid="$(ref_oid "${jref}")"
+
+  local plan=() conflicts=() evict_jobs=() evict_oids=() planned_refs=()
+  local ref cur rjob rexp
+  for p in "${wanted[@]}"; do
+    ref="$(path_ref "${p}")"
+    cur="$(ref_oid "${ref}")"
+    if [[ -z "${cur}" ]]; then
+      plan+=("create ${ref} ${new_oid}")
+    else
+      rjob="$(field "${cur}" job)"
+      rexp="$(field "${cur}" expires)"
+      if [[ "${rjob}" == "${job}" ]]; then
+        plan+=("update ${ref} ${new_oid} ${cur}")
+      elif [[ -n "${rexp}" && "${rexp}" -le "${at}" ]]; then
+        plan+=("update ${ref} ${new_oid} ${cur}")
+        evict_jobs+=("${rjob}")
+        evict_oids+=("${cur}")
+      else
+        describe "${cur}"
+        conflicts+=("${p}: held by ${D_HOLDER} (job ${D_JOB}, until ${D_UNTIL})")
+      fi
+    fi
+    planned_refs+=("${ref}")
+  done
+  if ((${#conflicts[@]} > 0)); then
+    printf 'git-locks: refused — %s\n' "${conflicts[@]}" >&2
+    exit 1
+  fi
+
+  # Paths this job held before and no longer lists are released in the same transaction.
+  local old_paths have
+  if [[ -n "${old_job_oid}" ]]; then
+    plan+=("update ${jref} ${new_oid} ${old_job_oid}")
+    old_paths="$(record_paths "${old_job_oid}")"
+    while IFS= read -r p; do
+      [[ -z "${p}" ]] && continue
+      ref="$(path_ref "${p}")"
+      in_list "${ref}" "${planned_refs[@]}" && continue
+      have="$(ref_oid "${ref}")"
+      [[ "${have}" == "${old_job_oid}" ]] && plan+=("delete ${ref} ${old_job_oid}")
+    done <<<"${old_paths}"
+  else
+    plan+=("create ${jref} ${new_oid}")
+  fi
+
+  # An expired lock in the way is evicted whole: its job ref and its other path refs.
+  local i ej eo ejref
+  for i in "${!evict_jobs[@]}"; do
+    ej="${evict_jobs[${i}]}"
+    eo="${evict_oids[${i}]}"
+    ejref="$(job_ref "${ej}")"
+    have="$(ref_oid "${ejref}")"
+    [[ "${have}" == "${eo}" ]] && plan+=("delete ${ejref} ${eo}")
+    old_paths="$(record_paths "${eo}")"
+    while IFS= read -r p; do
+      [[ -z "${p}" ]] && continue
+      ref="$(path_ref "${p}")"
+      in_list "${ref}" "${planned_refs[@]}" && continue
+      have="$(ref_oid "${ref}")"
+      if [[ "${have}" == "${eo}" ]]; then
+        plan+=("delete ${ref} ${eo}")
+        planned_refs+=("${ref}")
+      fi
+    done <<<"${old_paths}"
+  done
+
+  local err
+  if ! err="$(printf '%s\n' "${plan[@]}" | transact 2>&1)"; then
+    # Lost a race between the read above and the transaction: say who won.
+    local lost=()
+    for p in "${wanted[@]}"; do
+      ref="$(path_ref "${p}")"
+      cur="$(ref_oid "${ref}")"
+      [[ -z "${cur}" || "${cur}" == "${new_oid}" ]] && continue
+      describe "${cur}"
+      [[ "${D_JOB}" == "${job}" ]] && continue
+      lost+=("${p}: held by ${D_HOLDER} (job ${D_JOB}, until ${D_UNTIL})")
+    done
+    if ((${#lost[@]} > 0)); then
+      printf 'git-locks: refused — %s\n' "${lost[@]}" >&2
+    else
+      printf 'git-locks: refused — transaction failed: %s\n' "${err}" >&2
+    fi
+    exit 1
+  fi
+
+  printf '%s\n' "${record}"
+}
+
+# ---------------------------------------------------------------- release
+
+cmd_release() {
+  local job=''
+  while (($# > 0)); do
+    case "$1" in
+      --job)
+        [[ $# -ge 2 ]] || usage
+        job="$2"
+        shift 2
+        ;;
+      *) usage ;;
+    esac
+  done
+  [[ -n "${job}" ]] || usage
+  valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  local jref oid
+  jref="$(job_ref "${job}")"
+  oid="$(ref_oid "${jref}")"
+  if [[ -z "${oid}" ]]; then
+    printf 'no lock to release for job %s\n' "${job}"
+    return 0
+  fi
+  local plan=("delete ${jref} ${oid}") p ref have paths
+  paths="$(record_paths "${oid}")"
+  while IFS= read -r p; do
+    [[ -z "${p}" ]] && continue
+    ref="$(path_ref "${p}")"
+    have="$(ref_oid "${ref}")"
+    [[ "${have}" == "${oid}" ]] && plan+=("delete ${ref} ${oid}")
+  done <<<"${paths}"
+  printf '%s\n' "${plan[@]}" | transact >/dev/null 2>&1 || fail "could not release job ${job} (changed underneath; re-run)"
+  printf 'released job %s (%d path(s))\n' "${job}" "$((${#plan[@]} - 1))"
+}
+
+# ---------------------------------------------------------------- check
+
+cmd_check() {
+  (($# > 0)) || usage
+  local at held=0 p n ref cur
+  at="$(now)"
+  for p in "$@"; do
+    n="$(normalize_path "${p}")" || exit 2
+    ref="$(path_ref "${n}")"
+    cur="$(ref_oid "${ref}")"
+    if [[ -z "${cur}" ]]; then
+      printf '%s: free\n' "${n}"
+      continue
+    fi
+    describe "${cur}"
+    if [[ "${D_EXPIRES}" -gt "${at}" ]]; then
+      printf '%s: held by %s (job %s, until %s)\n' "${n}" "${D_HOLDER}" "${D_JOB}" "${D_UNTIL}"
+      held=1
+    else
+      printf '%s: free (expired lock by %s, job %s, expired at %s)\n' "${n}" "${D_HOLDER}" "${D_JOB}" "${D_UNTIL}"
+    fi
+  done
+  return "${held}"
+}
+
+# ---------------------------------------------------------------- list
+
+cmd_list() {
+  (($# == 0)) || usage
+  local at any=0 line ref oid state rows paths
+  at="$(now)"
+  rows="$(job_refs)"
+  while IFS=' ' read -r ref oid; do
+    [[ -z "${ref}" ]] && continue
+    any=1
+    describe "${oid}"
+    if [[ "${D_EXPIRES}" -gt "${at}" ]]; then state='live'; else state='expired'; fi
+    printf '%-7s %s  job %s  until %s\n' "${state}" "${D_HOLDER}" "${D_JOB}" "${D_UNTIL}"
+    paths="$(record_paths "${oid}")"
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] && printf '        %s\n' "${line}"
+    done <<<"${paths}"
+  done <<<"${rows}"
+  ((any)) || printf 'no locks\n'
+  return 0
+}
+
+# ---------------------------------------------------------------- sweep
+
+cmd_sweep() {
+  (($# == 0)) || usage
+  local at ref oid p pref plan rows paths have
+  at="$(now)"
+  rows="$(job_refs)"
+  while IFS=' ' read -r ref oid; do
+    [[ -z "${ref}" ]] && continue
+    describe "${oid}"
+    [[ "${D_EXPIRES}" -gt "${at}" ]] && continue
+    plan=("delete ${ref} ${oid}")
+    paths="$(record_paths "${oid}")"
+    while IFS= read -r p; do
+      [[ -z "${p}" ]] && continue
+      pref="$(path_ref "${p}")"
+      have="$(ref_oid "${pref}")"
+      [[ "${have}" == "${oid}" ]] && plan+=("delete ${pref} ${oid}")
+    done <<<"${paths}"
+    if printf '%s\n' "${plan[@]}" | transact >/dev/null 2>&1; then
+      printf 'swept job %s (holder %s, expired at %s)\n' "${D_JOB}" "${D_HOLDER}" "${D_UNTIL}"
+    else
+      printf 'skipped job %s: changed underneath\n' "${D_JOB}" >&2
+    fi
+  done <<<"${rows}"
+  return 0
+}
+
+# ---------------------------------------------------------------- main
+
+main() {
+  (($# > 0)) || usage
+  local cmd="$1"
+  shift
+  case "${cmd}" in
+    claim | release | check | list | sweep) ;;
+    *) usage ;;
+  esac
+  require_repo
+  "cmd_${cmd}" "$@"
+}
+
+main "$@"
