@@ -1,7 +1,26 @@
+# macOS
 .DS_Store
 ._*
 .Spotlight-V100
 .Trashes
+.AppleDouble
+.LSOverride
+Icon?
+
+# editors and agents
 .obsidian/
 .claude/
 .codex/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# bash / shell tooling
+*.log
+*.tmp
+.bash_history
+.shellcheckrc.local
+coverage/
+.kcov/

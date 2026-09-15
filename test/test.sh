@@ -15,6 +15,7 @@ export PATH="${HERE}/../bin:${PATH}"
 PASS=0
 FAIL=0
 FAILED=()
+n=0 # line counts, set by lines()
 
 check() { # label got want
   if [[ "$2" == "$3" ]]; then
@@ -45,9 +46,30 @@ mkrepo() {
   printf '%s' "${d}"
 }
 
+lines() { # VAR TEXT: set VAR to the number of lines in TEXT
+  local count
+  count="$(printf '%s\n' "$2" | wc -l)"
+  printf -v "$1" '%s' "${count//[[:space:]]/}"
+}
+
+SCHEMA_FILE="${HERE}/../schema/git-locks.schema.json"
+valid() { # label TEXT: every non-empty line of TEXT validates against the public schema (python3 + jsonschema)
+  local rc
+  python3 -c '
+import json, sys
+import jsonschema
+schema = json.load(open(sys.argv[1]))
+for line in sys.argv[2].splitlines():
+    if line.strip():
+        jsonschema.validate(json.loads(line), schema)
+' "${SCHEMA_FILE}" "$2" >/dev/null 2>&1
+  rc=$?
+  check "$1 validates against schema/git-locks.schema.json" "${rc}" "0"
+}
+
 refs() { # subject-repo [prefix] -> refs in whatever store resolves for it
   local store
-  store="$(cd "$1" && git-locks store)" || return 1
+  store="$(cd "$1" && git-locks --text store)" || return 1
   git --git-dir="${store}" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | sort
 }
 
@@ -63,7 +85,7 @@ cd "${R}" || exit 2
 out="$(git-locks claim --job j1 --holder luma-63 notes/x.md 'briefs/2026-09-15/y z.md' 2>&1)"
 rc=$?
 check "claim exits 0" "${rc}" "0"
-contains "claim prints the holder" "${out}" "holder: luma-63"
+contains "claim prints the holder" "${out}" '"holder":"luma-63"'
 got="$(refs "${R}" | wc -l | tr -d ' ')"
 check "claim writes one job ref and one ref per path" "${got}" "3"
 got="$(refs "${R}" jobs/)"
@@ -78,7 +100,7 @@ contains "check names the job" "${out}" "j1"
 out="$(git-locks check notes/free.md 2>&1)"
 rc=$?
 check "check on a free path exits 0" "${rc}" "0"
-contains "check says free" "${out}" "free"
+contains "check says free" "${out}" '"state":"free"'
 
 out="$(git-locks check 'briefs/2026-09-15/y z.md' 2>&1)"
 check "a path with a space is held" "$?" "1"
@@ -126,7 +148,7 @@ check "release removes the job ref and its path refs" "${got}" "refs/locks/jobs/
 refs/locks/paths/${h}"
 out="$(git-locks release --job j1 2>&1)"
 check "release of a missing lock exits 0" "$?" "0"
-contains "release of a missing lock says so" "${out}" "no lock"
+contains "release of a missing lock says so" "${out}" '"event":"nothing"'
 
 # ---------------------------------------------------------------- expiry
 
@@ -138,10 +160,10 @@ check "before expiry the path is held" "$?" "1"
 out="$(GIT_LOCKS_NOW=1200 git-locks check notes/e.md 2>&1)"
 rc=$?
 check "after expiry the path is free" "${rc}" "0"
-contains "after expiry check still names the expired holder" "${out}" "expired"
+contains "after expiry check still names the expired holder" "${out}" '"state":"expired"'
 contains "after expiry check names who held it" "${out}" "luma-aa"
 out="$(GIT_LOCKS_NOW=1200 git-locks list 2>&1)"
-contains "list marks the lock expired" "${out}" "expired"
+contains "list marks the lock expired" "${out}" '"state":"expired"'
 out="$(GIT_LOCKS_NOW=1200 git-locks claim --job new --holder luma-63 notes/e.md 2>&1)"
 check "a claim over an expired lock succeeds" "$?" "0"
 got="$(refs "${R}" jobs/)"
@@ -152,7 +174,7 @@ check "the new lock is held again" "$?" "1"
 GIT_LOCKS_NOW=1000 git-locks claim --job sweepme --holder luma-aa --ttl 10 notes/s.md >/dev/null 2>&1
 out="$(GIT_LOCKS_NOW=5000 git-locks sweep 2>&1)"
 check "sweep exits 0" "$?" "0"
-contains "sweep names what it removed" "${out}" "sweepme"
+contains "sweep names what it removed" "${out}" '"event":"swept","job":"sweepme"'
 got="$(refs "${R}" jobs/)"
 check "sweep removes only expired locks" "${got}" "refs/locks/jobs/new"
 
@@ -214,7 +236,7 @@ check "and the free path in that claim was not taken" "$?" "0"
 R="$(mkrepo)"
 cd "${R}" || exit 2
 top="$(git rev-parse --show-toplevel)"
-got="$(git-locks store)"
+got="$(git-locks --text store)"
 check "the default store is under HOME/.git-stunts/locks mirroring the subject's absolute path" "${got}" "${HOME}/.git-stunts/locks${top}"
 git-locks claim --job d --holder h a.md >/dev/null 2>&1
 got="$(git -C "${R}" for-each-ref refs/locks/)"
@@ -234,7 +256,7 @@ check "a linked worktree shares its main repo's store" "$?" "1"
 
 cd "${R}" || exit 2
 common="$(git rev-parse --path-format=absolute --git-common-dir)"
-got="$(GIT_LOCKS_STORE=self git-locks store)"
+got="$(GIT_LOCKS_STORE=self git-locks --text store)"
 check "GIT_LOCKS_STORE=self resolves to the subject's own git dir" "${got}" "${common}"
 GIT_LOCKS_STORE=self git-locks claim --job s --holder h self.md >/dev/null 2>&1
 got="$(git -C "${R}" for-each-ref --format='%(refname)' refs/locks/jobs/)"
@@ -244,18 +266,120 @@ check "self mode does not see the default store's locks" "$?" "0"
 
 custom="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-store.XXXXXX")/store"
 git config locks.store "${custom}"
-got="$(git-locks store)"
+got="$(git-locks --text store)"
 check "git config locks.store picks a custom store path" "${got}" "${custom}"
 git-locks claim --job c --holder h custom.md >/dev/null 2>&1
 bare="$(git --git-dir="${custom}" rev-parse --is-bare-repository)"
 check "the custom store is created bare on first use" "${bare}" "true"
-got="$(GIT_LOCKS_STORE=self git-locks store)"
+got="$(GIT_LOCKS_STORE=self git-locks --text store)"
 check "the environment overrides the config" "${got}" "${common}"
 git config --unset locks.store
-got="$(GIT_LOCKS_HOME=/tmp/elsewhere git-locks store)"
+got="$(GIT_LOCKS_HOME=/tmp/elsewhere git-locks --text store)"
 check "GIT_LOCKS_HOME relocates the default store root" "${got}" "/tmp/elsewhere/locks${top}"
 git-locks store extra >/dev/null 2>&1
 check "store takes no arguments" "$?" "2"
+
+# ---------------------------------------------------------------- the CLI surface: JSONL by default, --text for humans
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(git-locks --help 2>&1)"
+check "--help exits 0" "$?" "0"
+contains "--help prints the usage" "${out}" "git locks [--text] claim"
+out="$(git-locks help 2>&1)"
+check "help exits 0" "$?" "0"
+git-locks >/dev/null 2>&1
+check "no arguments is still a usage error, exit 2" "$?" "2"
+out="$(git-locks version 2>&1)"
+check "version exits 0" "$?" "0"
+contains "version is JSON by default" "${out}" '{"name":"git-locks","version":"'
+out="$(git-locks --text version 2>&1)"
+rc=1
+[[ "${out}" =~ ^git-locks\ [0-9]+\.[0-9]+\.[0-9]+$ ]] && rc=0
+check "--text version is 'git-locks <semver>'" "${rc}" "0"
+out="$(git-locks claim --help 2>&1)"
+check "claim --help exits 0" "$?" "0"
+contains "claim --help shows claim's own usage" "${out}" "--holder"
+
+jsonl_ok() { python3 -c 'import json,sys; [json.loads(l) for l in sys.stdin if l.strip()]'; }
+
+out="$(git-locks claim --job jj --holder hh 'a b.md' c.md 2>&1)"
+lines n "${out}"
+check "claim is one JSON line" "${n}" "1"
+contains "claim line carries the event" "${out}" '"event":"claimed"'
+contains "claim line carries the paths as an array" "${out}" '"paths":["a b.md","c.md"]'
+jsonl_ok <<<"${out}" >/dev/null 2>&1
+check "claim line parses as JSON" "$?" "0"
+valid "claim line" "${out}"
+
+out="$(git-locks check 'a b.md' free.md c.md 2>/dev/null)"
+check "check still exits 1 when a path is held" "$?" "1"
+lines n "${out}"
+check "check streams one line per path" "${n}" "3"
+contains "check line carries the path with its space" "${out}" '"path":"a b.md","state":"held","holder":"hh","job":"jj","expires":'
+contains "check reports the free path as free" "${out}" '{"path":"free.md","state":"free"}'
+jsonl_ok <<<"${out}" >/dev/null 2>&1
+check "check lines parse as JSON" "$?" "0"
+valid "check lines (held and free)" "${out}"
+out="$(git-locks --text check 'a b.md' free.md 2>&1)"
+contains "--text check is the human line" "${out}" "a b.md: held by hh (job jj, until "
+
+err="$(git-locks claim --job other --holder oo 'a b.md' c.md 2>&1 >/dev/null)"
+lines n "${err}"
+check "a refused claim streams one refusal line per held path on stderr" "${n}" "2"
+contains "refusal line names the holder" "${err}" '"event":"refused","path":"a b.md","holder":"hh","job":"jj"'
+jsonl_ok <<<"${err}" >/dev/null 2>&1
+check "refusal lines parse as JSON" "$?" "0"
+valid "refusal lines" "${err}"
+err="$(git-locks --text claim --job other --holder oo 'a b.md' 2>&1 >/dev/null)"
+contains "--text refusal is the human line" "${err}" "refused — a b.md: held by hh (job jj"
+
+out="$(git-locks list 2>&1)"
+lines n "${out}"
+check "list streams one line per lock" "${n}" "1"
+contains "list line carries job, holder, state" "${out}" '{"job":"jj","holder":"hh","state":"live","claimed":'
+contains "list line carries the paths as an array" "${out}" '"paths":["a b.md","c.md"]'
+jsonl_ok <<<"${out}" >/dev/null 2>&1
+check "list line parses as JSON" "$?" "0"
+valid "list line" "${out}"
+out="$(git-locks --text list 2>&1)"
+contains "--text list is the table" "${out}" "live    hh  job jj  until "
+
+out="$(git-locks release --job jj 2>&1)"
+contains "release is one JSON line" "${out}" '{"event":"released","job":"jj","paths":2}'
+valid "release line" "${out}"
+out="$(git-locks release --job jj 2>&1)"
+valid "release-nothing line" "${out}"
+out="$(git-locks list 2>&1)"
+check "list with no locks streams nothing" "${out}" ""
+out="$(git-locks --text list 2>&1)"
+check "--text list with no locks says so" "${out}" "no locks"
+out="$(git-locks store 2>&1)"
+contains "store is one JSON line" "${out}" '{"store":"'
+valid "store line" "${out}"
+out="$(git-locks version 2>&1)"
+valid "version line" "${out}"
+GIT_LOCKS_NOW=1000 git-locks claim --job exp --holder h --ttl 1 gone.md >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=2000 git-locks check gone.md 2>&1)"
+valid "check line for an expired lock" "${out}"
+out="$(GIT_LOCKS_NOW=2000 git-locks list 2>&1)"
+valid "list line for an expired lock" "${out}"
+out="$(GIT_LOCKS_NOW=2000 git-locks sweep 2>&1)"
+valid "sweep line" "${out}"
+
+out="$(git-locks schema 2>&1)"
+check "schema exits 0" "$?" "0"
+got="$(diff <(printf '%s\n' "${out}") "${SCHEMA_FILE}" && printf identical)"
+check "schema output is byte-identical to schema/git-locks.schema.json" "${got}" "identical"
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "${SCHEMA_FILE}" >/dev/null 2>&1
+check "the schema file is valid JSON" "$?" "0"
+
+# Streaming: the first line arrives before the last path is examined.
+first="$( (
+  git-locks check one.md two.md three.md 2>/dev/null
+  true
+) | head -n 1)"
+contains "the first check line is a complete object on its own" "${first}" '{"path":"one.md","state":"free"}'
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then

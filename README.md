@@ -10,10 +10,25 @@ git locks release --job 2026-09-15-report
 git locks sweep                            # drop expired locks
 ```
 
-A claim that overlaps a live lock is refused and names the holder:
+Output is JSON Lines by default, one object per result, written as each result is known:
 
 ```text
-git-locks: refused — notes/report.md: held by alice (job 2026-09-15-report, until 2026-09-15T21:41:29Z)
+$ git locks check notes/report.md data/other.csv
+{"path":"notes/report.md","state":"held","holder":"alice","job":"2026-09-15-report","expires":1757986889}
+{"path":"data/other.csv","state":"free"}
+```
+
+A claim that overlaps a live lock is refused with exit 1, one line per held path on stderr, naming the holder:
+
+```text
+{"event":"refused","path":"notes/report.md","holder":"alice","job":"2026-09-15-report","expires":1757986889}
+```
+
+`--text` before the subcommand switches every command to human-readable lines:
+
+```text
+$ git locks --text check notes/report.md
+notes/report.md: held by alice (job 2026-09-15-report, until 2026-09-15T21:41:29Z)
 ```
 
 ## Why
@@ -54,18 +69,27 @@ Expiry is a timestamp in the record, four hours by default (`--ttl` in seconds).
 
 ## Commands
 
-| Command | Does | Exit |
-|---|---|---|
-| `claim --job <id> --holder <name> [--ttl <s>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its path set | 0 claimed, 1 refused (names the holder), 2 usage |
-| `release --job <id>` | drop the job's lock and every path ref that still points at it | 0 |
-| `check <path>...` | who holds each path | 0 all free, 1 any held |
-| `list` | every lock, live or expired, with its paths | 0 |
-| `sweep` | delete expired locks | 0 |
-| `store` | print the resolved store path | 0 |
+Every command takes `--text` first for the human form. Default output is JSON Lines.
+
+| Command | Does | Stdout line(s) | Exit |
+|---|---|---|---|
+| `claim --job <id> --holder <name> [--ttl <s>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its path set | one `claimed` object; refusals on stderr | 0 claimed, 1 refused, 2 usage |
+| `release --job <id>` | drop the job's lock and every path ref that still points at it | one `released` or `nothing` object | 0 |
+| `check <path>...` | who holds each path, in argument order | one object per path as it is examined | 0 all free, 1 any held |
+| `list` | every lock, live or expired, with its paths | one object per lock; nothing when empty | 0 |
+| `sweep` | delete expired locks | one `swept` object per lock, as it goes | 0 |
+| `store` | the resolved store path | one `store` object | 0 |
+| `version` | tool name and version | one object | 0 |
+| `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
+| `help`, `--help`, `<cmd> --help` | usage | text | 0 |
+
+## Output schema
+
+Every JSON line git-locks writes, on stdout or stderr, matches exactly one definition in [`schema/git-locks.schema.json`](schema/git-locks.schema.json) (JSON Schema 2020-12). `git locks schema` prints that document byte-for-byte, and the test suite validates every line it provokes against it, so the contract cannot drift from the code. Consumers can pin the `$id` URL or the file at a tagged commit.
 
 Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`.
 
-`GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests.
+`GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests. Timestamps in JSON are epoch seconds; the `--text` form prints ISO-8601 UTC.
 
 ## Install
 
@@ -78,7 +102,7 @@ git locks list          # git dispatches `git locks` to git-locks on PATH
 
 ```sh
 make lint               # shellcheck with every optional check on, shfmt
-make test               # test/test.sh, pure bash, temporary repositories
+make test               # test/test.sh, pure bash, temporary repositories; needs python3 with jsonschema for the schema checks
 git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push tests
 ```
 
