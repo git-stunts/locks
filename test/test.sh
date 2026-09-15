@@ -10,6 +10,10 @@
 # winner among N racers on one machine; it does not model a networked remote.
 set -uo pipefail
 
+# A git hook exports GIT_DIR and friends; inherited here, every git call in a
+# temporary repository below would target the hook's repository instead.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_NAMESPACE
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="${HERE}/../bin:${PATH}"
 PASS=0
