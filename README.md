@@ -21,6 +21,11 @@ git locks claim --job build-docs --parent build --holder alice docs/
 # several locks in ONE transaction, all or nothing; several releases likewise
 git locks batch < locks.txt
 git locks release --job build --job other
+
+# capacity, not exclusivity: up to 3 jobs hold "gpu" at once; the 4th is refused, or waits
+git locks sem create gpu --capacity 3
+git locks sem acquire gpu --job train-7 --holder alice --wait 600
+git locks with --sem gpu --job train-8 --holder bob -- python train.py
 ```
 
 Works inside a git repository or in any plain directory.
@@ -82,6 +87,8 @@ In the store it is pointed at by `refs/locks/jobs/<job>` and by `refs/locks/path
 
 Expiry is a timestamp in the record, four hours by default (`--ttl` in seconds). An expired lock is reported as expired, is free to claim over, and is evicted whole when that happens. `sweep` removes expired locks on demand.
 
+A semaphore is three kinds of ref under `refs/locks/sem/<name>/`: `meta` (capacity), `gen` (a generation token rewritten by every transaction on that semaphore), and `slots/<job>` (one record per holder, with expiry). Acquire reads the live slots, evicts expired ones, creates the new slot, and `update`s `gen` with the generation it read, all in one transaction. Two racers that both read "2 of 3 live" both try to move the same generation; git lets exactly one through, the other re-reads and finds the semaphore full. Twenty racers on capacity three is a test.
+
 A child lock records `parent: <job>`. Its claim carries a `verify` on the parent's ref inside the same transaction, so the parent cannot vanish between the check and the commit. Releasing or sweeping a lock takes every descendant with it, in one transaction: a child never outlives its parent, and a parent's expiry is the family's. Expiry itself is not inherited; `extend` a parent to keep a family alive.
 
 ## Commands
@@ -104,6 +111,12 @@ Every command takes `--text` first for the human form. Default output is JSON Li
 | `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] <path>... -- <cmd>...` | claim, run the command, release; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
+| `sem create <name> --capacity <n>` | a semaphore with n slots | one `created` object | 0, 1 if it exists |
+| `sem acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]` | take a slot; re-acquiring refreshes the job's own slot; `--wait` retries once a second | one `acquired` object with `live` and `capacity` | 0, 1 when full |
+| `sem release <name> --job <id>` | give the slot back | one `released` or `nothing` object | 0 |
+| `sem show <name>`, `sem list` | capacity, live count, live slots with `remaining` | one object per semaphore | 0, 1 if missing |
+| `sem delete <name>` | remove an empty semaphore | one `deleted` object | 0, 1 while slots are live |
+| `with --sem <name> …` | take a slot around the command, with or without paths | as `with` | as `with` |
 | `help`, `--help`, `<cmd> --help` | usage | text | 0 |
 
 ## Output schema
