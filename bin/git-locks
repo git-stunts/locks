@@ -6,8 +6,15 @@
 #   git locks [--text] check   <path>...        exit 1 if any path is held
 #   git locks [--text] list
 #   git locks [--text] sweep                    delete expired locks
-#   git locks [--text] store                    print the store this repository resolves to
+#   git locks [--text] store                    print the store this directory resolves to
+#   git locks [--text] show    --job <id>       one lock in full, with the seconds it has left
+#   git locks [--text] ttl     --job <id>       just the seconds left
+#   git locks [--text] extend  --job <id> --ttl <seconds>
+#   git locks [--text] with    --job <id> --holder <name> [--ttl <s>] [--wait <s>] <path>... -- <command>...
 #   git locks help | schema | version
+#
+# Works inside or outside a git repository: the default store is keyed on the
+# repository's main git dir when there is one, else on the directory itself.
 #
 # Output is JSON Lines by default: one object per result on stdout, written as
 # each result is known, refusals as objects on stderr; every line conforms to
@@ -42,21 +49,36 @@ TEXT=0 # 1 after --text: human lines instead of JSONL
 
 usage_text() {
   cat <<'EOF'
-usage: git locks [--text] claim   --job <id> --holder <name> [--ttl <seconds>] <path>...
-       git locks [--text] release --job <id>
+usage: git locks [--text] claim   --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] <path>...
+       git locks [--text] batch   < records        several claims in ONE transaction, all or nothing
+       git locks [--text] release --job <id> [--job <id>...]
        git locks [--text] check   <path>...
        git locks [--text] list
        git locks [--text] sweep
        git locks [--text] store
+       git locks [--text] show    --job <id>
+       git locks [--text] ttl     --job <id>
+       git locks [--text] extend  --job <id> --ttl <seconds>
+       git locks [--text] with    --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] <path>... -- <command>...
        git locks [--text] version
        git locks help | schema
 
-claim    lock the paths for the job, atomically; re-claiming with the same job replaces its path set
-release  drop the job's lock and every path ref that still points at it
-check    who holds each path; exit 1 if any is held
-list     every lock, live or expired, with its paths
+claim    lock the paths for the job, atomically; re-claiming with the same job replaces its path set;
+         --parent makes it a child: the parent must be live and held by the same holder, and the
+         child is released or swept with it
+batch    read lock records on stdin (blank-line separated: job:, holder:, ttl:, parent:, paths: then
+         one path per line) and claim them all in one transaction, or none
+release  drop the named jobs' locks and all their descendants, in one transaction
+check    who holds each path, with the seconds left; exit 1 if any is held
+list     every lock, live or expired, with its paths and the seconds left
 sweep    delete expired locks
-store    print the store this repository resolves to
+store    print the store this directory resolves to
+show     one lock in full; exit 1 if there is none
+ttl      the seconds a lock has left; exit 1 if there is none
+extend   move a lock's expiry to now + ttl, keeping its paths
+with     claim, run the command, release (also on failure or a signal), exit with the command's status;
+         --wait retries once a second until the paths are free or the wait runs out. The command's stdout
+         is its own; git-locks reports its claim and release on stderr.
 schema   print the JSON Schema every output line conforms to
 
 output:  JSON Lines on stdout by default, one object per result, written as
@@ -76,12 +98,17 @@ usage() {
 
 sub_usage() { # subcommand -> its one-line usage on stdout
   case "$1" in
-    claim) printf 'usage: git locks [--text] claim --job <id> --holder <name> [--ttl <seconds>] <path>...\n' ;;
-    release) printf 'usage: git locks [--text] release --job <id>\n' ;;
+    claim) printf 'usage: git locks [--text] claim --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] <path>...\n' ;;
+    batch) printf 'usage: git locks [--text] batch < records\n' ;;
+    release) printf 'usage: git locks [--text] release --job <id> [--job <id>...]\n' ;;
     check) printf 'usage: git locks [--text] check <path>...\n' ;;
     list) printf 'usage: git locks [--text] list\n' ;;
     sweep) printf 'usage: git locks [--text] sweep\n' ;;
     store) printf 'usage: git locks [--text] store\n' ;;
+    show) printf 'usage: git locks [--text] show --job <id>\n' ;;
+    ttl) printf 'usage: git locks [--text] ttl --job <id>\n' ;;
+    extend) printf 'usage: git locks [--text] extend --job <id> --ttl <seconds>\n' ;;
+    with) printf 'usage: git locks [--text] with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] <path>... -- <command>...\n' ;;
     *) usage_text ;;
   esac
 }
@@ -105,6 +132,17 @@ json_paths() { # VAR: set VAR to a JSON array of the lines on stdin
   done
   IFS=','
   printf -v "$1" '[%s]' "${items[*]}"
+}
+
+parent_json() { # VAR oid -> ',"parent":"<id>"' or '' when the record has no parent
+  local p one
+  p="$(field "$2" parent)"
+  if [[ -n "${p}" ]]; then
+    json_str one "${p}"
+    printf -v "$1" ',"parent":%s' "${one}"
+  else
+    printf -v "$1" ''
+  fi
 }
 
 fail() { # message [code]
@@ -171,20 +209,24 @@ normalize_path() { # -> prints the path, or returns 2 with the reason on stderr
   printf '%s' "${p}"
 }
 
-require_repo() { git rev-parse --git-dir >/dev/null 2>&1 || fail 'not in a git repository' 2; }
-
 STORE=''
 
 resolve_store() { # sets STORE; creates the default or a custom store on first use
-  local common sel
-  common="$(git rev-parse --path-format=absolute --git-common-dir)" || fail 'cannot resolve the git dir' 2
+  local common='' sel key
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    common="$(git rev-parse --path-format=absolute --git-common-dir)" || fail 'cannot resolve the git dir' 2
+  fi
   sel="${GIT_LOCKS_STORE:-}"
   if [[ -z "${sel}" ]]; then
     sel="$(git config --get locks.store 2>/dev/null)" || sel=''
   fi
+  if [[ -n "${common}" ]]; then key="${common%/.git}"; else key="${PWD}"; fi # main repo when there is one, else the directory
   case "${sel}" in
-    '') STORE="${GIT_LOCKS_HOME:-${HOME}/.git-stunts}/locks${common%/.git}" ;; # keyed on the main repo, so worktrees share
-    self) STORE="${common}" ;;
+    '') STORE="${GIT_LOCKS_HOME:-${HOME}/.git-stunts}/locks${key}" ;;
+    self)
+      [[ -n "${common}" ]] || fail 'GIT_LOCKS_STORE=self needs a git repository; this directory is not in one' 2
+      STORE="${common}"
+      ;;
     /*) STORE="${sel}" ;;
     *) STORE="${PWD}/${sel}" ;;
   esac
@@ -211,6 +253,11 @@ describe() { # oid -> "held by H (job J, until ISO)" pieces via globals D_HOLDER
   exp="$(field "$1" expires)"
   D_EXPIRES="${exp:-0}"
   D_UNTIL="$(iso "${D_EXPIRES}")"
+  local at
+  at="$(now)"
+  D_REMAINING=$((D_EXPIRES - at))
+  ((D_REMAINING < 0)) && D_REMAINING=0
+  if ((D_EXPIRES > at)); then D_STATE='live'; else D_STATE='expired'; fi
 }
 
 in_list() { # needle list...
@@ -222,9 +269,219 @@ in_list() { # needle list...
 
 # ---------------------------------------------------------------- claim
 
+# Planning state shared by claim and batch: one transaction is built across
+# every lock in the call, then committed once.
+PLAN=()
+PLANNED_REFS=()
+BATCH_JOBS=()
+CONFLICTS=0
+
+parent_refusal() { # child parent detail
+  local _j1 _j2
+  if ((TEXT)); then
+    printf 'git-locks: refused — %s: parent %s is %s\n' "$1" "$2" "$3" >&2
+  else
+    json_str _j1 "$1"
+    json_str _j2 "$2"
+    printf '{"event":"refused","reason":"parent","job":%s,"parent":%s,"detail":"%s"}\n' "${_j1}" "${_j2}" "$3" >&2
+  fi
+}
+
+plan_claim() { # job holder ttl parent path... -> appends to PLAN; sets CLAIM_LINE; CONFLICTS=1 on refusal
+  local job="$1" holder="$2" ttl="$3" parent="$4"
+  shift 4
+  local paths=("$@") p n norm=() sorted wanted=()
+  for p in "${paths[@]}"; do
+    n="$(normalize_path "${p}")" || exit 2
+    norm+=("${n}")
+  done
+  sorted="$(printf '%s\n' "${norm[@]}" | sort -u)"
+  while IFS= read -r n; do [[ -n "${n}" ]] && wanted+=("${n}"); done <<<"${sorted}"
+
+  local at expires
+  at="$(now)"
+  expires=$((at + ttl))
+
+  # The parent, if any: live, same holder, or claimed earlier in this same batch.
+  local pref poid
+  if [[ -n "${parent}" ]]; then
+    valid_job "${parent}" || fail "parent id '${parent}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+    if ! in_list "${parent}" "${BATCH_JOBS[@]}"; then
+      pref="$(job_ref "${parent}")"
+      poid="$(ref_oid "${pref}")"
+      if [[ -z "${poid}" ]]; then
+        parent_refusal "${job}" "${parent}" missing
+        CONFLICTS=1
+        return 0
+      fi
+      describe "${poid}"
+      if [[ "${D_STATE}" != live ]]; then
+        parent_refusal "${job}" "${parent}" expired
+        CONFLICTS=1
+        return 0
+      fi
+      if [[ "${D_HOLDER}" != "${holder}" ]]; then
+        parent_refusal "${job}" "${parent}" holder
+        CONFLICTS=1
+        return 0
+      fi
+      PLAN+=("verify ${pref} ${poid}") # the parent must still be exactly this at commit time
+    fi
+  fi
+
+  local record new_oid
+  record="$(
+    printf 'schema: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\n' "${SCHEMA}" "${job}" "${holder}" "${at}" "${expires}"
+    [[ -n "${parent}" ]] && printf 'parent: %s\n' "${parent}"
+    printf 'paths:\n'
+    printf '%s\n' "${wanted[@]}"
+  )"
+  new_oid="$(printf '%s\n' "${record}" | g hash-object -w --stdin)" || fail 'could not write the lock record'
+
+  local jref old_job_oid
+  jref="$(job_ref "${job}")"
+  old_job_oid="$(ref_oid "${jref}")"
+
+  local evict_jobs=() evict_oids=() mine=()
+  local ref cur rjob rexp
+  for p in "${wanted[@]}"; do
+    ref="$(path_ref "${p}")"
+    cur="$(ref_oid "${ref}")"
+    if [[ -z "${cur}" ]]; then
+      if in_list "${ref}" "${PLANNED_REFS[@]}"; then
+        # another lock in this same batch already takes it
+        describe_batch_conflict "${p}"
+        CONFLICTS=1
+      else
+        PLAN+=("create ${ref} ${new_oid}")
+      fi
+    else
+      rjob="$(field "${cur}" job)"
+      rexp="$(field "${cur}" expires)"
+      if [[ "${rjob}" == "${job}" ]]; then
+        PLAN+=("update ${ref} ${new_oid} ${cur}")
+      elif [[ -n "${rexp}" && "${rexp}" -le "${at}" ]]; then
+        PLAN+=("update ${ref} ${new_oid} ${cur}")
+        evict_jobs+=("${rjob}")
+        evict_oids+=("${cur}")
+      else
+        describe "${cur}"
+        refusal "${p}"
+        CONFLICTS=1
+      fi
+    fi
+    mine+=("${ref}")
+    PLANNED_REFS+=("${ref}")
+  done
+
+  # Paths this job held before and no longer lists are released in the same transaction.
+  local old_paths have
+  if [[ -n "${old_job_oid}" ]]; then
+    PLAN+=("update ${jref} ${new_oid} ${old_job_oid}")
+    old_paths="$(record_paths "${old_job_oid}")"
+    while IFS= read -r p; do
+      [[ -z "${p}" ]] && continue
+      ref="$(path_ref "${p}")"
+      in_list "${ref}" "${mine[@]}" && continue
+      have="$(ref_oid "${ref}")"
+      [[ "${have}" == "${old_job_oid}" ]] && PLAN+=("delete ${ref} ${old_job_oid}")
+    done <<<"${old_paths}"
+  else
+    PLAN+=("create ${jref} ${new_oid}")
+  fi
+
+  # An expired lock in the way is evicted whole: its job ref and its other path refs.
+  local i ej eo ejref
+  for i in "${!evict_jobs[@]}"; do
+    ej="${evict_jobs[${i}]}"
+    eo="${evict_oids[${i}]}"
+    ejref="$(job_ref "${ej}")"
+    have="$(ref_oid "${ejref}")"
+    [[ "${have}" == "${eo}" ]] && PLAN+=("delete ${ejref} ${eo}")
+    old_paths="$(record_paths "${eo}")"
+    while IFS= read -r p; do
+      [[ -z "${p}" ]] && continue
+      ref="$(path_ref "${p}")"
+      in_list "${ref}" "${PLANNED_REFS[@]}" && continue
+      have="$(ref_oid "${ref}")"
+      if [[ "${have}" == "${eo}" ]]; then
+        PLAN+=("delete ${ref} ${eo}")
+        PLANNED_REFS+=("${ref}")
+      fi
+    done <<<"${old_paths}"
+  done
+
+  BATCH_JOBS+=("${job}")
+  if ((TEXT)); then
+    CLAIM_LINE="${record}"
+  else
+    local jpaths _j1 _j2 pj=''
+    json_paths jpaths < <(printf '%s\n' "${wanted[@]}")
+    json_str _j1 "${job}"
+    json_str _j2 "${holder}"
+    if [[ -n "${parent}" ]]; then
+      json_str pj "${parent}"
+      pj=",\"parent\":${pj}"
+    fi
+    CLAIM_LINE="{\"event\":\"claimed\",\"job\":${_j1},\"holder\":${_j2},\"claimed\":${at},\"expires\":${expires}${pj},\"paths\":${jpaths}}"
+  fi
+  return 0
+}
+
+describe_batch_conflict() { # path taken twice within one batch
+  local _j1
+  if ((TEXT)); then
+    printf 'git-locks: refused — %s: named by two locks in the same batch\n' "$1" >&2
+  else
+    json_str _j1 "$1"
+    printf '{"event":"refused","reason":"duplicate","path":%s}\n' "${_j1}" >&2
+  fi
+}
+
+commit_plan() { # -> 0 committed; 1 lost a race (refusals printed); exits on transaction error
+  local err
+  if err="$(printf '%s\n' "${PLAN[@]}" | transact 2>&1)"; then
+    return 0
+  fi
+  local lost=0 ref cur p
+  for ref in "${PLANNED_REFS[@]}"; do
+    cur="$(ref_oid "${ref}")"
+    [[ -z "${cur}" ]] && continue
+    p="$(ref_path "${cur}" "${ref}")"
+    [[ -z "${p}" ]] && continue
+    describe "${cur}"
+    in_list "${D_JOB}" "${BATCH_JOBS[@]}" && continue
+    refusal "${p}"
+    lost=1
+  done
+  if ((lost == 0)); then
+    local _j1
+    if ((TEXT)); then
+      printf 'git-locks: refused — transaction failed: %s\n' "${err}" >&2
+    else
+      json_str _j1 "${err}"
+      printf '{"event":"refused","reason":"transaction","detail":%s}\n' "${_j1}" >&2
+    fi
+  fi
+  return 1
+}
+
+ref_path() { # oid ref -> which of the record's paths hashes to this ref (for naming a lost race)
+  local p pr paths
+  paths="$(record_paths "$1")"
+  while IFS= read -r p; do
+    [[ -z "${p}" ]] && continue
+    pr="$(path_ref "${p}")"
+    if [[ "${pr}" == "$2" ]]; then
+      printf '%s' "${p}"
+      return 0
+    fi
+  done <<<"${paths}"
+  return 0
+}
+
 cmd_claim() {
-  local _j1 _j2 _j3
-  local job='' holder='' ttl="${DEFAULT_TTL}" paths=() p
+  local job='' holder='' ttl="${DEFAULT_TTL}" parent='' paths=()
   while (($# > 0)); do
     case "$1" in
       --job)
@@ -240,6 +497,11 @@ cmd_claim() {
       --ttl)
         [[ $# -ge 2 ]] || usage
         ttl="$2"
+        shift 2
+        ;;
+      --parent)
+        [[ $# -ge 2 ]] || usage
+        parent="$2"
         shift 2
         ;;
       --)
@@ -259,129 +521,54 @@ cmd_claim() {
   [[ "${ttl}" =~ ^[0-9]+$ && "${ttl}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
   [[ "${holder}" == *$'\n'* ]] && fail 'holder must be one line' 2
   ((${#paths[@]} > 0)) || usage
+  plan_claim "${job}" "${holder}" "${ttl}" "${parent}" "${paths[@]}"
+  ((CONFLICTS)) && exit 1
+  commit_plan || exit 1
+  printf '%s\n' "${CLAIM_LINE}"
+}
 
-  local norm=() n
-  for p in "${paths[@]}"; do
-    n="$(normalize_path "${p}")" || exit 2
-    norm+=("${n}")
-  done
-  local sorted wanted=()
-  sorted="$(printf '%s\n' "${norm[@]}" | sort -u)"
-  while IFS= read -r n; do [[ -n "${n}" ]] && wanted+=("${n}"); done <<<"${sorted}"
+# ---------------------------------------------------------------- batch
 
-  local at expires
-  at="$(now)"
-  expires=$((at + ttl))
-
-  # The record blob first: every planned ref points at it.
-  local record new_oid
-  record="$(
-    printf 'schema: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\npaths:\n' "${SCHEMA}" "${job}" "${holder}" "${at}" "${expires}"
-    printf '%s\n' "${wanted[@]}"
-  )"
-  new_oid="$(printf '%s\n' "${record}" | g hash-object -w --stdin)" || fail 'could not write the lock record'
-
-  local jref old_job_oid
-  jref="$(job_ref "${job}")"
-  old_job_oid="$(ref_oid "${jref}")"
-
-  local plan=() conflicts=() evict_jobs=() evict_oids=() planned_refs=()
-  local ref cur rjob rexp
-  for p in "${wanted[@]}"; do
-    ref="$(path_ref "${p}")"
-    cur="$(ref_oid "${ref}")"
-    if [[ -z "${cur}" ]]; then
-      plan+=("create ${ref} ${new_oid}")
-    else
-      rjob="$(field "${cur}" job)"
-      rexp="$(field "${cur}" expires)"
-      if [[ "${rjob}" == "${job}" ]]; then
-        plan+=("update ${ref} ${new_oid} ${cur}")
-      elif [[ -n "${rexp}" && "${rexp}" -le "${at}" ]]; then
-        plan+=("update ${ref} ${new_oid} ${cur}")
-        evict_jobs+=("${rjob}")
-        evict_oids+=("${cur}")
-      else
-        describe "${cur}"
-        refusal "${p}"
-        conflicts+=("${p}")
-      fi
+cmd_batch() {
+  (($# == 0)) || usage
+  local line key val job='' holder='' ttl='' parent='' paths=() in_paths=0 count=0 lines_out=()
+  finish_record() {
+    if [[ -z "${job}" && -z "${holder}" && ${#paths[@]} -eq 0 ]]; then return 0; fi
+    [[ -n "${job}" && -n "${holder}" && ${#paths[@]} -gt 0 ]] || fail 'batch: every record needs job:, holder: and at least one path under paths:' 2
+    valid_job "${job}" || fail "batch: job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+    [[ -z "${ttl}" ]] && ttl="${DEFAULT_TTL}"
+    [[ "${ttl}" =~ ^[0-9]+$ && "${ttl}" -gt 0 ]] || fail 'batch: ttl is a positive number of seconds' 2
+    plan_claim "${job}" "${holder}" "${ttl}" "${parent}" "${paths[@]}"
+    lines_out+=("${CLAIM_LINE}")
+    count=$((count + 1))
+    job='' holder='' ttl='' parent='' paths=() in_paths=0
+  }
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    if [[ -z "${line}" ]]; then
+      finish_record
+      continue
     fi
-    planned_refs+=("${ref}")
-  done
-  ((${#conflicts[@]} > 0)) && exit 1
-
-  # Paths this job held before and no longer lists are released in the same transaction.
-  local old_paths have
-  if [[ -n "${old_job_oid}" ]]; then
-    plan+=("update ${jref} ${new_oid} ${old_job_oid}")
-    old_paths="$(record_paths "${old_job_oid}")"
-    while IFS= read -r p; do
-      [[ -z "${p}" ]] && continue
-      ref="$(path_ref "${p}")"
-      in_list "${ref}" "${planned_refs[@]}" && continue
-      have="$(ref_oid "${ref}")"
-      [[ "${have}" == "${old_job_oid}" ]] && plan+=("delete ${ref} ${old_job_oid}")
-    done <<<"${old_paths}"
-  else
-    plan+=("create ${jref} ${new_oid}")
-  fi
-
-  # An expired lock in the way is evicted whole: its job ref and its other path refs.
-  local i ej eo ejref
-  for i in "${!evict_jobs[@]}"; do
-    ej="${evict_jobs[${i}]}"
-    eo="${evict_oids[${i}]}"
-    ejref="$(job_ref "${ej}")"
-    have="$(ref_oid "${ejref}")"
-    [[ "${have}" == "${eo}" ]] && plan+=("delete ${ejref} ${eo}")
-    old_paths="$(record_paths "${eo}")"
-    while IFS= read -r p; do
-      [[ -z "${p}" ]] && continue
-      ref="$(path_ref "${p}")"
-      in_list "${ref}" "${planned_refs[@]}" && continue
-      have="$(ref_oid "${ref}")"
-      if [[ "${have}" == "${eo}" ]]; then
-        plan+=("delete ${ref} ${eo}")
-        planned_refs+=("${ref}")
-      fi
-    done <<<"${old_paths}"
-  done
-
-  local err
-  if ! err="$(printf '%s\n' "${plan[@]}" | transact 2>&1)"; then
-    # Lost a race between the read above and the transaction: say who won.
-    local lost=0
-    for p in "${wanted[@]}"; do
-      ref="$(path_ref "${p}")"
-      cur="$(ref_oid "${ref}")"
-      [[ -z "${cur}" || "${cur}" == "${new_oid}" ]] && continue
-      describe "${cur}"
-      [[ "${D_JOB}" == "${job}" ]] && continue
-      refusal "${p}"
-      lost=1
-    done
-    if ((lost == 0)); then
-      if ((TEXT)); then
-        printf 'git-locks: refused — transaction failed: %s\n' "${err}" >&2
-      else
-        json_str _j1 "${err}"
-        printf '{"event":"refused","reason":"transaction","detail":%s}\n' "${_j1}" >&2
-      fi
+    if ((in_paths)); then
+      paths+=("${line}")
+      continue
     fi
-    exit 1
-  fi
-
-  if ((TEXT)); then
-    printf '%s\n' "${record}"
-  else
-    local jpaths
-    json_paths jpaths < <(printf '%s\n' "${wanted[@]}")
-    json_str _j1 "${job}"
-    json_str _j2 "${holder}"
-    printf '{"event":"claimed","job":%s,"holder":%s,"claimed":%s,"expires":%s,"paths":%s}\n' \
-      "${_j1}" "${_j2}" "${at}" "${expires}" "${jpaths}"
-  fi
+    key="${line%%:*}"
+    val="${line#*:}"
+    val="${val# }"
+    case "${key}" in
+      job) job="${val}" ;;
+      holder) holder="${val}" ;;
+      ttl) ttl="${val}" ;;
+      parent) parent="${val}" ;;
+      paths) in_paths=1 ;;
+      *) fail "batch: unknown line '${line}'" 2 ;;
+    esac
+  done
+  finish_record
+  ((count > 0)) || fail 'batch: no records on stdin' 2
+  ((CONFLICTS)) && exit 1
+  commit_plan || exit 1
+  printf '%s\n' "${lines_out[@]}"
 }
 
 refusal() { # path, after describe(): one refusal line on stderr
@@ -399,48 +586,138 @@ refusal() { # path, after describe(): one refusal line on stderr
 
 # ---------------------------------------------------------------- release
 
-cmd_release() {
-  local _j1 _j2 _j3
-  local job=''
-  while (($# > 0)); do
-    case "$1" in
-      --job)
-        [[ $# -ge 2 ]] || usage
-        job="$2"
-        shift 2
-        ;;
-      *) usage ;;
-    esac
+descendants() { # job... -> DESC: every job whose parent chain reaches one of them (transitively), sorted
+  DESC=()
+  local rows ref oid rjob rparent changed=1 seeds=("$@") j
+  rows="$(job_refs)"
+  local all_jobs=() all_parents=()
+  while IFS=' ' read -r ref oid; do
+    [[ -z "${ref}" ]] && continue
+    rjob="$(field "${oid}" job)"
+    rparent="$(field "${oid}" parent)"
+    all_jobs+=("${rjob}")
+    all_parents+=("${rparent}")
+  done <<<"${rows}"
+  local family=("${seeds[@]}") i
+  while ((changed)); do
+    changed=0
+    for i in "${!all_jobs[@]}"; do
+      [[ -z "${all_parents[${i}]}" ]] && continue
+      in_list "${all_jobs[${i}]}" "${family[@]}" && continue
+      if in_list "${all_parents[${i}]}" "${family[@]}"; then
+        family+=("${all_jobs[${i}]}")
+        changed=1
+      fi
+    done
   done
-  [[ -n "${job}" ]] || usage
-  valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-  local jref oid
-  jref="$(job_ref "${job}")"
-  oid="$(ref_oid "${jref}")"
-  if [[ -z "${oid}" ]]; then
-    if ((TEXT)); then
-      printf 'no lock to release for job %s\n' "${job}"
-    else
-      json_str _j1 "${job}"
-      printf '{"event":"nothing","job":%s}\n' "${_j1}"
-    fi
-    return 0
+  for j in "${family[@]}"; do
+    in_list "${j}" "${seeds[@]}" || DESC+=("${j}")
+  done
+  if ((${#DESC[@]} > 0)); then
+    local sorted
+    sorted="$(printf '%s\n' "${DESC[@]}" | sort)"
+    DESC=()
+    while IFS= read -r j; do [[ -n "${j}" ]] && DESC+=("${j}"); done <<<"${sorted}"
   fi
-  local plan=("delete ${jref} ${oid}") p ref have paths
+}
+
+plan_delete_job() { # job -> appends delete lines for its job ref and the path refs still pointing at it; DELETED_PATHS = how many
+  local jref oid p ref have paths count=0
+  DELETED_PATHS=0
+  jref="$(job_ref "$1")"
+  oid="$(ref_oid "${jref}")"
+  [[ -n "${oid}" ]] || return 0
+  PLAN+=("delete ${jref} ${oid}")
   paths="$(record_paths "${oid}")"
   while IFS= read -r p; do
     [[ -z "${p}" ]] && continue
     ref="$(path_ref "${p}")"
     have="$(ref_oid "${ref}")"
-    [[ "${have}" == "${oid}" ]] && plan+=("delete ${ref} ${oid}")
+    if [[ "${have}" == "${oid}" ]]; then
+      PLAN+=("delete ${ref} ${oid}")
+      count=$((count + 1))
+    fi
   done <<<"${paths}"
-  printf '%s\n' "${plan[@]}" | transact >/dev/null 2>&1 || fail "could not release job ${job} (changed underneath; re-run)"
-  if ((TEXT)); then
-    printf 'released job %s (%d path(s))\n' "${job}" "$((${#plan[@]} - 1))"
-  else
-    json_str _j1 "${job}"
-    printf '{"event":"released","job":%s,"paths":%d}\n' "${_j1}" "$((${#plan[@]} - 1))"
+  DELETED_PATHS="${count}"
+}
+
+json_jobs() { # VAR job... -> JSON array of job ids
+  local var="$1" one items=() IFS
+  shift
+  local j
+  for j in "$@"; do
+    json_str one "${j}"
+    items+=("${one}")
+  done
+  IFS=','
+  printf -v "${var}" '[%s]' "${items[*]}"
+}
+
+cmd_release() {
+  local jobs=() _j1 _j2
+  while (($# > 0)); do
+    case "$1" in
+      --job)
+        [[ $# -ge 2 ]] || usage
+        jobs+=("$2")
+        shift 2
+        ;;
+      *) usage ;;
+    esac
+  done
+  ((${#jobs[@]} > 0)) || usage
+  local j
+  for j in "${jobs[@]}"; do
+    valid_job "${j}" || fail "job id '${j}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  done
+  PLAN=()
+  local present=() absent=() counts=() cascades=() jref oid n
+  for j in "${jobs[@]}"; do
+    jref="$(job_ref "${j}")"
+    oid="$(ref_oid "${jref}")"
+    if [[ -z "${oid}" ]]; then
+      absent+=("${j}")
+      continue
+    fi
+    descendants "${j}"
+    plan_delete_job "${j}"
+    n="${DELETED_PATHS}"
+    local d
+    for d in "${DESC[@]}"; do
+      in_list "${d}" "${jobs[@]}" && continue
+      plan_delete_job "${d}"
+      n=$((n + DELETED_PATHS))
+    done
+    present+=("${j}")
+    counts+=("${n}")
+    json_jobs _j2 "${DESC[@]}"
+    cascades+=("${_j2}")
+  done
+  if ((${#PLAN[@]} > 0)); then
+    printf '%s\n' "${PLAN[@]}" | transact >/dev/null 2>&1 || fail "could not release (changed underneath; re-run)"
   fi
+  local i
+  for i in "${!present[@]}"; do
+    if ((TEXT)); then
+      printf 'released job %s (%d path(s))\n' "${present[${i}]}" "${counts[${i}]}"
+    else
+      json_str _j1 "${present[${i}]}"
+      if [[ "${cascades[${i}]}" == '[]' ]]; then
+        printf '{"event":"released","job":%s,"paths":%d}\n' "${_j1}" "${counts[${i}]}"
+      else
+        printf '{"event":"released","job":%s,"paths":%d,"cascaded":%s}\n' "${_j1}" "${counts[${i}]}" "${cascades[${i}]}"
+      fi
+    fi
+  done
+  for j in "${absent[@]}"; do
+    if ((TEXT)); then
+      printf 'no lock to release for job %s\n' "${j}"
+    else
+      json_str _j1 "${j}"
+      printf '{"event":"nothing","job":%s}\n' "${_j1}"
+    fi
+  done
+  return 0
 }
 
 # ---------------------------------------------------------------- check
@@ -467,7 +744,7 @@ cmd_check() {
       else
         json_str _j1 "${D_HOLDER}"
         json_str _j2 "${D_JOB}"
-        printf '{"path":%s,"state":"held","holder":%s,"job":%s,"expires":%s}\n' "${jp}" "${_j1}" "${_j2}" "${D_EXPIRES}"
+        printf '{"path":%s,"state":"held","holder":%s,"job":%s,"expires":%s,"remaining":%s}\n' "${jp}" "${_j1}" "${_j2}" "${D_EXPIRES}" "${D_REMAINING}"
       fi
       held=1
     else
@@ -476,7 +753,7 @@ cmd_check() {
       else
         json_str _j1 "${D_HOLDER}"
         json_str _j2 "${D_JOB}"
-        printf '{"path":%s,"state":"expired","holder":%s,"job":%s,"expires":%s}\n' "${jp}" "${_j1}" "${_j2}" "${D_EXPIRES}"
+        printf '{"path":%s,"state":"expired","holder":%s,"job":%s,"expires":%s,"remaining":0}\n' "${jp}" "${_j1}" "${_j2}" "${D_EXPIRES}"
       fi
     fi
   done
@@ -488,7 +765,7 @@ cmd_check() {
 cmd_list() {
   local _j1 _j2 _j3
   (($# == 0)) || usage
-  local at any=0 line ref oid state rows paths
+  local at any=0 line ref oid state rows paths pj
   at="$(now)"
   rows="$(job_refs)"
   while IFS=' ' read -r ref oid; do
@@ -508,8 +785,9 @@ cmd_list() {
       json_paths jpaths <<<"${paths}"
       json_str _j1 "${D_JOB}"
       json_str _j2 "${D_HOLDER}"
-      printf '{"job":%s,"holder":%s,"state":"%s","claimed":%s,"expires":%s,"paths":%s}\n' \
-        "${_j1}" "${_j2}" "${state}" "${claimed:-0}" "${D_EXPIRES}" "${jpaths}"
+      parent_json pj "${oid}"
+      printf '{"job":%s,"holder":%s,"state":"%s","claimed":%s,"expires":%s,"remaining":%s%s,"paths":%s}\n' \
+        "${_j1}" "${_j2}" "${state}" "${claimed:-0}" "${D_EXPIRES}" "${D_REMAINING}" "${pj}" "${jpaths}"
     fi
   done <<<"${rows}"
   ((any || TEXT == 0)) || printf 'no locks\n'
@@ -521,34 +799,41 @@ cmd_list() {
 cmd_sweep() {
   local _j1 _j2 _j3
   (($# == 0)) || usage
-  local at ref oid p pref plan rows paths have
+  local at ref oid rows rjob rholder rexpires runtil cascaded d still
   at="$(now)"
   rows="$(job_refs)"
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
     describe "${oid}"
     [[ "${D_EXPIRES}" -gt "${at}" ]] && continue
-    plan=("delete ${ref} ${oid}")
-    paths="$(record_paths "${oid}")"
-    while IFS= read -r p; do
-      [[ -z "${p}" ]] && continue
-      pref="$(path_ref "${p}")"
-      have="$(ref_oid "${pref}")"
-      [[ "${have}" == "${oid}" ]] && plan+=("delete ${pref} ${oid}")
-    done <<<"${paths}"
-    if printf '%s\n' "${plan[@]}" | transact >/dev/null 2>&1; then
+    rjob="${D_JOB}"
+    rholder="${D_HOLDER}"
+    rexpires="${D_EXPIRES}"
+    runtil="${D_UNTIL}"
+    still="$(ref_oid "${ref}")"
+    [[ -n "${still}" ]] || continue # already swept as someone's descendant
+    PLAN=()
+    descendants "${rjob}"
+    plan_delete_job "${rjob}"
+    for d in "${DESC[@]}"; do plan_delete_job "${d}"; done
+    json_jobs cascaded "${DESC[@]}"
+    if printf '%s\n' "${PLAN[@]}" | transact >/dev/null 2>&1; then
       if ((TEXT)); then
-        printf 'swept job %s (holder %s, expired at %s)\n' "${D_JOB}" "${D_HOLDER}" "${D_UNTIL}"
+        printf 'swept job %s (holder %s, expired at %s)\n' "${rjob}" "${rholder}" "${runtil}"
       else
-        json_str _j1 "${D_JOB}"
-        json_str _j2 "${D_HOLDER}"
-        printf '{"event":"swept","job":%s,"holder":%s,"expires":%s}\n' "${_j1}" "${_j2}" "${D_EXPIRES}"
+        json_str _j1 "${rjob}"
+        json_str _j2 "${rholder}"
+        if [[ "${cascaded}" == '[]' ]]; then
+          printf '{"event":"swept","job":%s,"holder":%s,"expires":%s}\n' "${_j1}" "${_j2}" "${rexpires}"
+        else
+          printf '{"event":"swept","job":%s,"holder":%s,"expires":%s,"cascaded":%s}\n' "${_j1}" "${_j2}" "${rexpires}" "${cascaded}"
+        fi
       fi
     else
       if ((TEXT)); then
-        printf 'skipped job %s: changed underneath\n' "${D_JOB}" >&2
+        printf 'skipped job %s: changed underneath\n' "${rjob}" >&2
       else
-        json_str _j1 "${D_JOB}"
+        json_str _j1 "${rjob}"
         printf '{"event":"skipped","job":%s,"reason":"changed underneath"}\n' "${_j1}" >&2
       fi
     fi
@@ -558,6 +843,204 @@ cmd_sweep() {
 
 # ---------------------------------------------------------------- store
 
+job_arg() { # --job <id> [--ttl <n>] -> JOB_ARG TTL_ARG, or usage
+  JOB_ARG=''
+  TTL_ARG=''
+  while (($# > 0)); do
+    case "$1" in
+      --job)
+        [[ $# -ge 2 ]] || usage
+        JOB_ARG="$2"
+        shift 2
+        ;;
+      --ttl)
+        [[ $# -ge 2 ]] || usage
+        TTL_ARG="$2"
+        shift 2
+        ;;
+      *) usage ;;
+    esac
+  done
+  [[ -n "${JOB_ARG}" ]] || usage
+  valid_job "${JOB_ARG}" || fail "job id '${JOB_ARG}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+}
+
+missing() { # job -> one line on stderr, exit 1
+  local _j1
+  if ((TEXT)); then
+    printf 'git-locks: no lock for job %s\n' "$1" >&2
+  else
+    json_str _j1 "$1"
+    printf '{"event":"missing","job":%s}\n' "${_j1}" >&2
+  fi
+  exit 1
+}
+
+cmd_show() {
+  local _j1 _j2 jref oid paths line jpaths claimed claimed_iso pj parent
+  job_arg "$@"
+  jref="$(job_ref "${JOB_ARG}")"
+  oid="$(ref_oid "${jref}")"
+  [[ -n "${oid}" ]] || missing "${JOB_ARG}"
+  describe "${oid}"
+  claimed="$(field "${oid}" claimed)"
+  paths="$(record_paths "${oid}")"
+  if ((TEXT)); then
+    claimed_iso="$(iso "${claimed:-0}")"
+    parent="$(field "${oid}" parent)"
+    printf '%-10s %s\n' 'job:' "${D_JOB}" 'holder:' "${D_HOLDER}" 'state:' "${D_STATE}" 'claimed:' "${claimed_iso}" 'expires:' "${D_UNTIL}" 'remaining:' "${D_REMAINING}s"
+    [[ -n "${parent}" ]] && printf '%-10s %s\n' 'parent:' "${parent}"
+    printf 'paths:\n'
+    while IFS= read -r line; do
+      [[ -n "${line}" ]] && printf '  %s\n' "${line}"
+    done <<<"${paths}"
+  else
+    json_paths jpaths <<<"${paths}"
+    json_str _j1 "${D_JOB}"
+    json_str _j2 "${D_HOLDER}"
+    parent_json pj "${oid}"
+    printf '{"job":%s,"holder":%s,"state":"%s","claimed":%s,"expires":%s,"remaining":%s%s,"paths":%s}\n' \
+      "${_j1}" "${_j2}" "${D_STATE}" "${claimed:-0}" "${D_EXPIRES}" "${D_REMAINING}" "${pj}" "${jpaths}"
+  fi
+}
+
+cmd_ttl() {
+  local _j1 jref oid
+  job_arg "$@"
+  jref="$(job_ref "${JOB_ARG}")"
+  oid="$(ref_oid "${jref}")"
+  [[ -n "${oid}" ]] || missing "${JOB_ARG}"
+  describe "${oid}"
+  if ((TEXT)); then
+    printf '%s\n' "${D_REMAINING}"
+  else
+    json_str _j1 "${D_JOB}"
+    printf '{"job":%s,"expires":%s,"remaining":%s}\n' "${_j1}" "${D_EXPIRES}" "${D_REMAINING}"
+  fi
+}
+
+cmd_extend() {
+  local _j1 oid jref at expires record new_oid paths p ref have plan claimed until_iso
+  job_arg "$@"
+  [[ "${TTL_ARG}" =~ ^[0-9]+$ && "${TTL_ARG}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
+  jref="$(job_ref "${JOB_ARG}")"
+  oid="$(ref_oid "${jref}")"
+  [[ -n "${oid}" ]] || missing "${JOB_ARG}"
+  describe "${oid}"
+  at="$(now)"
+  expires=$((at + TTL_ARG))
+  paths="$(record_paths "${oid}")"
+  claimed="$(field "${oid}" claimed)"
+  local parent
+  parent="$(field "${oid}" parent)"
+  record="$(
+    printf 'schema: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\n' "${SCHEMA}" "${D_JOB}" "${D_HOLDER}" "${claimed}" "${expires}"
+    [[ -n "${parent}" ]] && printf 'parent: %s\n' "${parent}"
+    printf 'paths:\n'
+    printf '%s\n' "${paths}"
+  )"
+  new_oid="$(printf '%s\n' "${record}" | g hash-object -w --stdin)" || fail 'could not write the lock record'
+  plan=("update ${jref} ${new_oid} ${oid}")
+  while IFS= read -r p; do
+    [[ -z "${p}" ]] && continue
+    ref="$(path_ref "${p}")"
+    have="$(ref_oid "${ref}")"
+    [[ "${have}" == "${oid}" ]] && plan+=("update ${ref} ${new_oid} ${oid}")
+  done <<<"${paths}"
+  printf '%s\n' "${plan[@]}" | transact >/dev/null 2>&1 || fail "could not extend job ${JOB_ARG} (changed underneath; re-run)"
+  if ((TEXT)); then
+    until_iso="$(iso "${expires}")"
+    printf 'extended job %s until %s\n' "${JOB_ARG}" "${until_iso}"
+  else
+    json_str _j1 "${JOB_ARG}"
+    printf '{"event":"extended","job":%s,"expires":%s}\n' "${_j1}" "${expires}"
+  fi
+}
+
+cmd_with() {
+  local job='' holder='' ttl="${DEFAULT_TTL}" wait=0 parent='' paths=() command=() seen_dashdash=0 a
+  while (($# > 0)); do
+    a="$1"
+    if ((seen_dashdash)); then
+      command+=("${a}")
+      shift
+      continue
+    fi
+    case "${a}" in
+      --job)
+        [[ $# -ge 2 ]] || usage
+        job="$2"
+        shift 2
+        ;;
+      --holder)
+        [[ $# -ge 2 ]] || usage
+        holder="$2"
+        shift 2
+        ;;
+      --ttl)
+        [[ $# -ge 2 ]] || usage
+        ttl="$2"
+        shift 2
+        ;;
+      --wait)
+        [[ $# -ge 2 ]] || usage
+        wait="$2"
+        shift 2
+        ;;
+      --parent)
+        [[ $# -ge 2 ]] || usage
+        parent="$2"
+        shift 2
+        ;;
+      --)
+        seen_dashdash=1
+        shift
+        ;;
+      -*) usage ;;
+      *)
+        paths+=("${a}")
+        shift
+        ;;
+    esac
+  done
+  [[ -n "${job}" && -n "${holder}" ]] || usage
+  ((${#paths[@]} > 0 && ${#command[@]} > 0)) || usage
+  [[ "${wait}" =~ ^[0-9]+$ ]] || fail '--wait is a number of seconds' 2
+
+  # Claim, retrying once a second while the paths are held and the wait allows.
+  local errfile out rc deadline clock
+  errfile="$(mktemp "${TMPDIR:-/tmp}/git-locks-with.XXXXXX")" || fail 'cannot create a temporary file'
+  clock="$(date +%s)" # the wait window is wall-clock time, whatever GIT_LOCKS_NOW says about lock expiry
+  deadline=$((clock + wait))
+  while :; do
+    if [[ -n "${parent}" ]]; then
+      out="$( (cmd_claim --job "${job}" --holder "${holder}" --ttl "${ttl}" --parent "${parent}" -- "${paths[@]}") 2>"${errfile}")"
+    else
+      out="$( (cmd_claim --job "${job}" --holder "${holder}" --ttl "${ttl}" -- "${paths[@]}") 2>"${errfile}")"
+    fi
+    rc=$?
+    ((rc == 0)) && break
+    clock="$(date +%s)"
+    if ((rc != 1 || clock >= deadline)); then
+      cat "${errfile}" >&2
+      rm -f "${errfile}"
+      exit "${rc}"
+    fi
+    sleep 1
+  done
+  rm -f "${errfile}"
+  printf '%s\n' "${out}" >&2
+
+  local status=0
+  with_release() { (cmd_release --job "${job}") >&2; }
+  trap 'with_release; exit 130' INT
+  trap 'with_release; exit 143' TERM
+  "${command[@]}" || status=$?
+  trap - INT TERM
+  with_release
+  return "${status}"
+}
+
 cmd_schema() { # the public output schema, byte-identical to schema/git-locks.schema.json in the repository
   (($# == 0)) || usage
   cat <<'EOF'
@@ -565,16 +1048,41 @@ cmd_schema() { # the public output schema, byte-identical to schema/git-locks.sc
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/git-stunts/locks/main/schema/git-locks.schema.json",
   "title": "git-locks output",
-  "description": "Every line git-locks writes to stdout or stderr in its default mode is one JSON object matching exactly one of the definitions below. Lines are emitted as each result is known (JSON Lines); nothing is buffered into an array. `git locks schema` prints this document.",
+  "description": "Every line git-locks writes to stdout or stderr in its default mode is one JSON object matching exactly one of the definitions below. Lines are emitted as each result is known (JSON Lines); nothing is buffered into an array. `with` writes its claim, release and refusal lines to stderr so the wrapped command owns stdout. `git locks schema` prints this document.",
   "oneOf": [
-    { "$ref": "#/$defs/check_line" },
-    { "$ref": "#/$defs/list_line" },
-    { "$ref": "#/$defs/claim_line" },
-    { "$ref": "#/$defs/refusal_line" },
-    { "$ref": "#/$defs/release_line" },
-    { "$ref": "#/$defs/sweep_line" },
-    { "$ref": "#/$defs/store_line" },
-    { "$ref": "#/$defs/version_line" }
+    {
+      "$ref": "#/$defs/check_line"
+    },
+    {
+      "$ref": "#/$defs/list_line"
+    },
+    {
+      "$ref": "#/$defs/claim_line"
+    },
+    {
+      "$ref": "#/$defs/refusal_line"
+    },
+    {
+      "$ref": "#/$defs/release_line"
+    },
+    {
+      "$ref": "#/$defs/sweep_line"
+    },
+    {
+      "$ref": "#/$defs/store_line"
+    },
+    {
+      "$ref": "#/$defs/version_line"
+    },
+    {
+      "$ref": "#/$defs/ttl_line"
+    },
+    {
+      "$ref": "#/$defs/extend_line"
+    },
+    {
+      "$ref": "#/$defs/missing_line"
+    }
   ],
   "$defs": {
     "job": {
@@ -600,68 +1108,270 @@ cmd_schema() { # the public output schema, byte-identical to schema/git-locks.sc
     "check_line": {
       "type": "object",
       "description": "One line per path from `git locks check`, in argument order, as each is examined.",
-      "required": ["path", "state"],
+      "required": [
+        "path",
+        "state"
+      ],
       "properties": {
-        "path": { "$ref": "#/$defs/path" },
-        "state": { "enum": ["free", "held", "expired"] },
-        "holder": { "$ref": "#/$defs/holder" },
-        "job": { "$ref": "#/$defs/job" },
-        "expires": { "$ref": "#/$defs/epoch" }
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "state": {
+          "enum": [
+            "free",
+            "held",
+            "expired"
+          ]
+        },
+        "holder": {
+          "$ref": "#/$defs/holder"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "remaining": {
+          "$ref": "#/$defs/remaining"
+        }
       },
       "additionalProperties": false,
-      "if": { "properties": { "state": { "const": "free" } } },
-      "then": { "required": ["path", "state"], "not": { "anyOf": [{ "required": ["holder"] }, { "required": ["job"] }, { "required": ["expires"] }] } },
-      "else": { "required": ["path", "state", "holder", "job", "expires"] }
+      "if": {
+        "properties": {
+          "state": {
+            "const": "free"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "path",
+          "state"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "holder"
+              ]
+            },
+            {
+              "required": [
+                "job"
+              ]
+            },
+            {
+              "required": [
+                "expires"
+              ]
+            },
+            {
+              "required": [
+                "remaining"
+              ]
+            }
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "path",
+          "state",
+          "holder",
+          "job",
+          "expires",
+          "remaining"
+        ]
+      }
     },
     "list_line": {
       "type": "object",
-      "description": "One line per lock from `git locks list`, live or expired, in ref order.",
-      "required": ["job", "holder", "state", "claimed", "expires", "paths"],
+      "description": "One line per lock from `git locks list`, live or expired, in ref order; also the single line of `git locks show --job <id>`.",
+      "required": [
+        "job",
+        "holder",
+        "state",
+        "claimed",
+        "expires",
+        "remaining",
+        "paths"
+      ],
       "properties": {
-        "job": { "$ref": "#/$defs/job" },
-        "holder": { "$ref": "#/$defs/holder" },
-        "state": { "enum": ["live", "expired"] },
-        "claimed": { "$ref": "#/$defs/epoch" },
-        "expires": { "$ref": "#/$defs/epoch" },
-        "paths": { "type": "array", "items": { "$ref": "#/$defs/path" }, "uniqueItems": true }
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "holder": {
+          "$ref": "#/$defs/holder"
+        },
+        "state": {
+          "enum": [
+            "live",
+            "expired"
+          ]
+        },
+        "claimed": {
+          "$ref": "#/$defs/epoch"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "uniqueItems": true
+        },
+        "remaining": {
+          "$ref": "#/$defs/remaining"
+        },
+        "parent": {
+          "$ref": "#/$defs/job",
+          "description": "Present when the lock is a child: it is released or swept with this job."
+        }
       },
       "additionalProperties": false
     },
     "claim_line": {
       "type": "object",
-      "description": "The single stdout line of a successful `git locks claim`.",
-      "required": ["event", "job", "holder", "claimed", "expires", "paths"],
+      "description": "The single stdout line of a successful `git locks claim`; one per record for `git locks batch`.",
+      "required": [
+        "event",
+        "job",
+        "holder",
+        "claimed",
+        "expires",
+        "paths"
+      ],
       "properties": {
-        "event": { "const": "claimed" },
-        "job": { "$ref": "#/$defs/job" },
-        "holder": { "$ref": "#/$defs/holder" },
-        "claimed": { "$ref": "#/$defs/epoch" },
-        "expires": { "$ref": "#/$defs/epoch" },
-        "paths": { "type": "array", "items": { "$ref": "#/$defs/path" }, "minItems": 1, "uniqueItems": true }
+        "event": {
+          "const": "claimed"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "holder": {
+          "$ref": "#/$defs/holder"
+        },
+        "claimed": {
+          "$ref": "#/$defs/epoch"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/path"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "parent": {
+          "$ref": "#/$defs/job"
+        }
       },
       "additionalProperties": false
     },
     "refusal_line": {
       "type": "object",
-      "description": "On stderr, one line per held path when a claim is refused (exit 1); or a single transaction failure with git's message.",
+      "description": "On stderr, one line per problem when a claim or batch is refused (exit 1): a held path naming its holder; a parent that is missing, expired or another holder's; a path named by two records of one batch; or a transaction failure with git's message.",
       "oneOf": [
         {
-          "required": ["event", "path", "holder", "job", "expires"],
+          "required": [
+            "event",
+            "path",
+            "holder",
+            "job",
+            "expires"
+          ],
           "properties": {
-            "event": { "const": "refused" },
-            "path": { "$ref": "#/$defs/path" },
-            "holder": { "$ref": "#/$defs/holder" },
-            "job": { "$ref": "#/$defs/job" },
-            "expires": { "$ref": "#/$defs/epoch" }
+            "event": {
+              "const": "refused"
+            },
+            "path": {
+              "$ref": "#/$defs/path"
+            },
+            "holder": {
+              "$ref": "#/$defs/holder"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "expires": {
+              "$ref": "#/$defs/epoch"
+            }
           },
           "additionalProperties": false
         },
         {
-          "required": ["event", "reason", "detail"],
+          "required": [
+            "event",
+            "reason",
+            "detail"
+          ],
           "properties": {
-            "event": { "const": "refused" },
-            "reason": { "const": "transaction" },
-            "detail": { "type": "string" }
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "transaction"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "job",
+            "parent",
+            "detail"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "parent"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "parent": {
+              "$ref": "#/$defs/job"
+            },
+            "detail": {
+              "enum": [
+                "missing",
+                "expired",
+                "holder"
+              ],
+              "description": "Why the parent cannot be used: no such lock, it has expired, or it belongs to another holder."
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "path"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "duplicate"
+            },
+            "path": {
+              "$ref": "#/$defs/path"
+            }
           },
           "additionalProperties": false
         }
@@ -669,22 +1379,48 @@ cmd_schema() { # the public output schema, byte-identical to schema/git-locks.sc
     },
     "release_line": {
       "type": "object",
-      "description": "The single stdout line of `git locks release`: what was released, or that there was nothing to release.",
+      "description": "One stdout line per --job of `git locks release`: what was released (with any descendants), or that there was nothing to release.",
       "oneOf": [
         {
-          "required": ["event", "job", "paths"],
+          "required": [
+            "event",
+            "job",
+            "paths"
+          ],
           "properties": {
-            "event": { "const": "released" },
-            "job": { "$ref": "#/$defs/job" },
-            "paths": { "type": "integer", "minimum": 0, "description": "How many path refs were deleted with the job ref." }
+            "event": {
+              "const": "released"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "paths": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many path refs were deleted, descendants included."
+            },
+            "cascaded": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/job"
+              },
+              "description": "Descendant jobs released in the same transaction, sorted; absent when there were none."
+            }
           },
           "additionalProperties": false
         },
         {
-          "required": ["event", "job"],
+          "required": [
+            "event",
+            "job"
+          ],
           "properties": {
-            "event": { "const": "nothing" },
-            "job": { "$ref": "#/$defs/job" }
+            "event": {
+              "const": "nothing"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            }
           },
           "additionalProperties": false
         }
@@ -695,21 +1431,51 @@ cmd_schema() { # the public output schema, byte-identical to schema/git-locks.sc
       "description": "One stdout line per expired lock `git locks sweep` deleted; on stderr, one per lock it could not delete because it changed underneath.",
       "oneOf": [
         {
-          "required": ["event", "job", "holder", "expires"],
+          "required": [
+            "event",
+            "job",
+            "holder",
+            "expires"
+          ],
           "properties": {
-            "event": { "const": "swept" },
-            "job": { "$ref": "#/$defs/job" },
-            "holder": { "$ref": "#/$defs/holder" },
-            "expires": { "$ref": "#/$defs/epoch" }
+            "event": {
+              "const": "swept"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "holder": {
+              "$ref": "#/$defs/holder"
+            },
+            "expires": {
+              "$ref": "#/$defs/epoch"
+            },
+            "cascaded": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/job"
+              },
+              "description": "Descendant jobs swept with this expired parent, sorted; absent when there were none."
+            }
           },
           "additionalProperties": false
         },
         {
-          "required": ["event", "job", "reason"],
+          "required": [
+            "event",
+            "job",
+            "reason"
+          ],
           "properties": {
-            "event": { "const": "skipped" },
-            "job": { "$ref": "#/$defs/job" },
-            "reason": { "const": "changed underneath" }
+            "event": {
+              "const": "skipped"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "reason": {
+              "const": "changed underneath"
+            }
           },
           "additionalProperties": false
         }
@@ -718,17 +1484,96 @@ cmd_schema() { # the public output schema, byte-identical to schema/git-locks.sc
     "store_line": {
       "type": "object",
       "description": "The single line of `git locks store`: the absolute path of the store this repository resolves to.",
-      "required": ["store"],
-      "properties": { "store": { "type": "string", "minLength": 1 } },
+      "required": [
+        "store"
+      ],
+      "properties": {
+        "store": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
       "additionalProperties": false
     },
     "version_line": {
       "type": "object",
       "description": "The single line of `git locks version`.",
-      "required": ["name", "version"],
+      "required": [
+        "name",
+        "version"
+      ],
       "properties": {
-        "name": { "const": "git-locks" },
-        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+        "name": {
+          "const": "git-locks"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "remaining": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seconds until the lock expires, 0 once it has."
+    },
+    "ttl_line": {
+      "type": "object",
+      "description": "The single line of `git locks ttl --job <id>`.",
+      "required": [
+        "job",
+        "expires",
+        "remaining"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        },
+        "remaining": {
+          "$ref": "#/$defs/remaining"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extend_line": {
+      "type": "object",
+      "description": "The single line of `git locks extend --job <id> --ttl <seconds>`: the new expiry.",
+      "required": [
+        "event",
+        "job",
+        "expires"
+      ],
+      "properties": {
+        "event": {
+          "const": "extended"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "expires": {
+          "$ref": "#/$defs/epoch"
+        }
+      },
+      "additionalProperties": false
+    },
+    "missing_line": {
+      "type": "object",
+      "description": "On stderr, from show, ttl or extend, when no lock exists for the job (exit 1).",
+      "required": [
+        "event",
+        "job"
+      ],
+      "properties": {
+        "event": {
+          "const": "missing"
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        }
       },
       "additionalProperties": false
     }
@@ -767,16 +1612,16 @@ main() {
       if ((TEXT)); then printf 'git-locks %s\n' "${VERSION}"; else printf '{"name":"git-locks","version":"%s"}\n' "${VERSION}"; fi
       exit 0
       ;;
-    claim | release | check | list | sweep | store) ;;
+    claim | batch | release | check | list | sweep | store | show | ttl | extend | with) ;;
     *) usage ;;
   esac
   for a in "$@"; do
+    [[ "${a}" == '--' ]] && break # what follows belongs to the wrapped command
     if [[ "${a}" == '--help' || "${a}" == '-h' ]]; then
       sub_usage "${cmd}"
       exit 0
     fi
   done
-  require_repo
   resolve_store
   "cmd_${cmd}" "$@"
 }

@@ -198,9 +198,6 @@ git-locks bogus >/dev/null 2>&1
 check "an unknown subcommand exits 2" "$?" "2"
 got="$(refs "${R}")"
 check "usage refusals leave no refs" "${got}" ""
-cd /
-git-locks list >/dev/null 2>&1
-check "outside a repository exits 2" "$?" "2"
 
 # ---------------------------------------------------------------- one winner under contention
 
@@ -380,6 +377,216 @@ first="$( (
   true
 ) | head -n 1)"
 contains "the first check line is a complete object on its own" "${first}" '{"path":"one.md","state":"free"}'
+
+# ---------------------------------------------------------------- see everything: show, ttl, extend, remaining
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+GIT_LOCKS_NOW=1000 git-locks claim --job s1 --holder hs --ttl 500 one.md two.md >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=1100 git-locks show --job s1 2>&1)"
+check "show exits 0 for a live lock" "$?" "0"
+contains "show carries the state and remaining seconds" "${out}" '"job":"s1","holder":"hs","state":"live","claimed":1000,"expires":1500,"remaining":400,"paths":["one.md","two.md"]'
+valid "show line" "${out}"
+out="$(GIT_LOCKS_NOW=1100 git-locks --text show --job s1 2>&1)"
+contains "--text show names the job" "${out}" "job:       s1"
+contains "--text show names the remaining time" "${out}" "remaining: 400s"
+contains "--text show lists the paths" "${out}" "one.md"
+out="$(GIT_LOCKS_NOW=2000 git-locks show --job s1 2>&1)"
+check "show exits 0 for an expired lock too" "$?" "0"
+contains "show reports expired with remaining 0" "${out}" '"state":"expired","claimed":1000,"expires":1500,"remaining":0'
+err="$(git-locks show --job nope 2>&1 >/dev/null)"
+check "show exits 1 for a missing lock" "$?" "1"
+contains "show missing is a JSON line on stderr" "${err}" '{"event":"missing","job":"nope"}'
+valid "missing line" "${err}"
+
+out="$(GIT_LOCKS_NOW=1100 git-locks ttl --job s1 2>&1)"
+check "ttl exits 0" "$?" "0"
+check "ttl is one JSON line with the remaining seconds" "${out}" '{"job":"s1","expires":1500,"remaining":400}'
+valid "ttl line" "${out}"
+out="$(GIT_LOCKS_NOW=1100 git-locks --text ttl --job s1 2>&1)"
+check "--text ttl is just the number" "${out}" "400"
+git-locks ttl --job nope >/dev/null 2>&1
+check "ttl exits 1 for a missing lock" "$?" "1"
+
+out="$(GIT_LOCKS_NOW=1100 git-locks extend --job s1 --ttl 1000 2>&1)"
+check "extend exits 0" "$?" "0"
+contains "extend reports the new expiry" "${out}" '{"event":"extended","job":"s1","expires":2100}'
+valid "extend line" "${out}"
+out="$(GIT_LOCKS_NOW=1100 git-locks ttl --job s1 2>&1)"
+contains "extend moved the expiry" "${out}" '"remaining":1000'
+GIT_LOCKS_NOW=1100 git-locks check one.md >/dev/null 2>&1
+check "extend keeps every path held" "$?" "1"
+git-locks extend --job nope --ttl 5 >/dev/null 2>&1
+check "extend exits 1 for a missing lock" "$?" "1"
+
+out="$(GIT_LOCKS_NOW=1100 git-locks list 2>&1)"
+contains "list lines carry remaining seconds" "${out}" '"remaining":1000'
+valid "list line with remaining" "${out}"
+out="$(GIT_LOCKS_NOW=1100 git-locks check one.md 2>&1)"
+contains "check lines carry remaining seconds" "${out}" '"remaining":1000'
+valid "check line with remaining" "${out}"
+
+# ---------------------------------------------------------------- with: claim, run, release
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(git-locks with --job w1 --holder hw a.md -- sh -c 'git-locks --text check a.md | head -n 1; echo ran' 2>/dev/null)"
+rc=$?
+check "with exits with the command's status (0)" "${rc}" "0"
+contains "the command ran while the path was held" "${out}" "a.md: held by hw (job w1"
+contains "the command's stdout passes through untouched" "${out}" "ran"
+git-locks check a.md >/dev/null 2>&1
+check "with released the lock afterwards" "$?" "0"
+err="$(git-locks with --job w1 --holder hw a.md -- true 2>&1 >/dev/null)"
+contains "with reports its own claim on stderr, not stdout" "${err}" '"event":"claimed","job":"w1"'
+contains "with reports its release on stderr" "${err}" '"event":"released","job":"w1"'
+valid "with lifecycle lines" "${err}"
+git-locks with --job w2 --holder hw b.md -- sh -c 'exit 7' >/dev/null 2>&1
+check "with propagates a non-zero exit status" "$?" "7"
+git-locks check b.md >/dev/null 2>&1
+check "with releases even when the command fails" "$?" "0"
+git-locks claim --job holder --holder other c.md >/dev/null 2>&1
+err="$(git-locks with --job w3 --holder hw c.md -- echo never 2>&1 >/dev/null)"
+check "with exits 1 when the path is held and no --wait is given" "$?" "1"
+contains "with refusal names the holder" "${err}" '"event":"refused","path":"c.md","holder":"other","job":"holder"'
+out="$(git-locks with --job w3 --holder hw c.md -- echo never 2>/dev/null)"
+check "the command never ran" "${out}" ""
+# --wait: the holder releases after one second; with polls and then runs.
+(
+  sleep 1
+  git-locks release --job holder >/dev/null 2>&1
+) &
+out="$(git-locks with --job w4 --holder hw --wait 10 c.md -- echo finally 2>/dev/null)"
+check "with --wait acquires once the holder releases and runs the command" "${out}" "finally"
+wait
+git-locks claim --job holder2 --holder other d.md >/dev/null 2>&1
+git-locks with --job w5 --holder hw --wait 1 d.md -- echo never >/dev/null 2>&1
+check "with --wait gives up with exit 1 after the wait" "$?" "1"
+git-locks with --job w6 --holder hw e.md >/dev/null 2>&1
+check "with without -- and a command is a usage error" "$?" "2"
+git-locks with --job w6 --holder hw -- echo x >/dev/null 2>&1
+check "with without a path is a usage error" "$?" "2"
+got="$(refs "${R}" jobs/w6)"
+check "a usage error in with leaves no lock" "${got}" ""
+
+# ---------------------------------------------------------------- outside a git repository
+
+D="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-plain.XXXXXX")"
+cd "${D}" || exit 2
+here="$(pwd)"
+got="$(git-locks --text store 2>&1)"
+check "outside a repository the store is keyed on the directory" "${got}" "${HOME}/.git-stunts/locks${here}"
+git-locks claim --job p1 --holder hp file.txt >/dev/null 2>&1
+check "claim works outside a git repository" "$?" "0"
+git-locks check file.txt >/dev/null 2>&1
+check "check sees it" "$?" "1"
+git-locks release --job p1 >/dev/null 2>&1
+check "release works outside a git repository" "$?" "0"
+GIT_LOCKS_STORE=self git-locks list >/dev/null 2>&1
+check "self store outside a repository is refused with 2" "$?" "2"
+
+# ---------------------------------------------------------------- parent/child: a child lives and dies with its parent
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks claim --job parent --holder hp p.md >/dev/null 2>&1
+out="$(git-locks claim --job kid --parent parent --holder hp k.md 2>&1)"
+check "a child claim under a live parent by the same holder exits 0" "$?" "0"
+contains "the claim line carries the parent" "${out}" '"parent":"parent"'
+valid "claim line with parent" "${out}"
+out="$(git-locks show --job kid 2>&1)"
+contains "show carries the parent" "${out}" '"parent":"parent"'
+valid "show line with parent" "${out}"
+out="$(git-locks list 2>&1)"
+valid "list lines with and without parent" "${out}"
+err="$(git-locks claim --job orphan --parent nope --holder hp o.md 2>&1 >/dev/null)"
+check "a child claim under a missing parent exits 1" "$?" "1"
+contains "the refusal names the missing parent" "${err}" '"event":"refused","reason":"parent","job":"orphan","parent":"nope","detail":"missing"'
+valid "parent refusal line" "${err}"
+err="$(git-locks claim --job stranger --parent parent --holder other s.md 2>&1 >/dev/null)"
+check "a child claim under another holder's parent exits 1" "$?" "1"
+contains "the refusal says the holder differs" "${err}" '"detail":"holder"'
+got="$(refs "${R}" jobs/)"
+check "refused children leave no refs" "${got}" "refs/locks/jobs/kid
+refs/locks/jobs/parent"
+git-locks release --job kid >/dev/null 2>&1
+git-locks show --job parent >/dev/null 2>&1
+check "releasing the child leaves the parent" "$?" "0"
+git-locks claim --job kid --parent parent --holder hp k.md >/dev/null 2>&1
+git-locks claim --job grandkid --parent kid --holder hp g.md >/dev/null 2>&1
+out="$(git-locks release --job parent 2>&1)"
+check "releasing the parent exits 0" "$?" "0"
+contains "the release line counts the family" "${out}" '"event":"released","job":"parent","paths":3,"cascaded":["grandkid","kid"]'
+valid "cascading release line" "${out}"
+got="$(refs "${R}")"
+check "releasing the parent removed every descendant, atomically" "${got}" ""
+
+GIT_LOCKS_NOW=1000 git-locks claim --job oldp --holder hp --ttl 10 op.md >/dev/null 2>&1
+GIT_LOCKS_NOW=1000 git-locks claim --job livekid --parent oldp --holder hp --ttl 100000 lk.md >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=2000 git-locks sweep 2>&1)"
+contains "sweep of an expired parent names the child it took with it" "${out}" '"event":"swept","job":"oldp","holder":"hp","expires":1010,"cascaded":["livekid"]'
+valid "cascading sweep line" "${out}"
+got="$(refs "${R}" jobs/)"
+check "a live child does not outlive its swept parent" "${got}" ""
+
+# ---------------------------------------------------------------- several locks at once, or none at all
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks claim --job a --holder h a.md >/dev/null 2>&1
+git-locks claim --job b --holder h b.md >/dev/null 2>&1
+git-locks claim --job c --holder h c.md >/dev/null 2>&1
+out="$(git-locks release --job a --job b 2>&1)"
+check "release with several --job exits 0" "$?" "0"
+lines n "${out}"
+check "release with several --job emits one line per job" "${n}" "2"
+got="$(refs "${R}" jobs/)"
+check "both were released in one transaction and the third remains" "${got}" "refs/locks/jobs/c"
+
+spec='job: x
+holder: hx
+ttl: 100
+paths:
+x1.md
+x2.md
+
+job: y
+holder: hy
+parent: x
+paths:
+y1.md
+'
+out="$(printf '%s' "${spec}" | git-locks batch 2>&1)"
+check "batch claims every lock in the spec, exit 0" "$?" "0"
+lines n "${out}"
+check "batch emits one claimed line per lock" "${n}" "2"
+contains "batch honoured the per-lock ttl" "${out}" '"job":"x","holder":"hx","claimed":1000000,"expires":1000100'
+contains "batch let a child name a parent claimed in the same batch" "${out}" '"job":"y","holder":"hy"'
+valid "batch claim lines" "${out}"
+got="$(refs "${R}" jobs/)"
+check "batch created both job refs" "${got}" "refs/locks/jobs/c
+refs/locks/jobs/x
+refs/locks/jobs/y"
+
+spec2='job: m
+holder: hm
+paths:
+m.md
+
+job: n
+holder: hn
+paths:
+c.md
+'
+err="$(printf '%s' "${spec2}" | git-locks batch 2>&1 >/dev/null)"
+check "a batch with one held path is refused, exit 1" "$?" "1"
+contains "the batch refusal names the holder of the held path" "${err}" '"event":"refused","path":"c.md","holder":"h","job":"c"'
+git-locks check m.md >/dev/null 2>&1
+check "and the free path in that batch was not taken: none at all" "$?" "0"
+printf 'job: bad name\nholder: h\npaths:\nz.md\n' | git-locks batch >/dev/null 2>&1
+check "a batch with a malformed record is a usage error, exit 2" "$?" "2"
+printf '' | git-locks batch >/dev/null 2>&1
+check "an empty batch is a usage error" "$?" "2"
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
