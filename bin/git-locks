@@ -6,6 +6,15 @@
 #   git locks check   <path>...        exit 1 if any path is held
 #   git locks list
 #   git locks sweep                    delete expired locks
+#   git locks store                    print the store this repository resolves to
+#
+# Where the locks live: NOT in the working repository by default. The store is
+# a bare repository at $GIT_LOCKS_HOME/locks/<absolute path of the subject's main repo>
+# ($GIT_LOCKS_HOME defaults to ~/.git-stunts), created on first use, so a
+# project's own refs stay clean. Override with GIT_LOCKS_STORE=<path> or
+# GIT_LOCKS_STORE=self (the subject's own common git dir, shared by its
+# worktrees), or persistently with `git config locks.store <path|self>`.
+# Precedence: environment, then config, then the default.
 #
 # A lock is one blob (a plain-text record: job, holder, claimed, expires, and
 # the paths) pointed at by refs/locks/jobs/<id> and by refs/locks/paths/<h>
@@ -30,6 +39,8 @@ usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] <path>...
        git locks check   <path>...
        git locks list
        git locks sweep
+       git locks store
+store: GIT_LOCKS_STORE=<path|self>, else `git config locks.store`, else ${GIT_LOCKS_HOME:-~/.git-stunts}/locks/<toplevel>
 EOF
   exit 2
 }
@@ -53,23 +64,23 @@ iso() { # epoch -> ISO-8601 UTC, portable across BSD and GNU date
 
 path_ref() {
   local h
-  h="$(printf '%s' "$1" | git hash-object --stdin)" || return 1
+  h="$(printf '%s' "$1" | g hash-object --stdin)" || return 1
   printf '%s/paths/%s' "${NS}" "${h}"
 }
 
 job_ref() { printf '%s/jobs/%s' "${NS}" "$1"; }
 
-ref_oid() { git rev-parse -q --verify "$1^{blob}" 2>/dev/null || true; }
+ref_oid() { g rev-parse -q --verify "$1^{blob}" 2>/dev/null || true; }
 
 field() { # oid key
-  git cat-file -p "$1" | sed -n "s/^$2: //p" | head -n 1
+  g cat-file -p "$1" | sed -n "s/^$2: //p" | head -n 1
 }
 
 record_paths() { # oid -> paths, one per line
-  git cat-file -p "$1" | sed -n '/^paths:$/,$p' | sed '1d'
+  g cat-file -p "$1" | sed -n '/^paths:$/,$p' | sed '1d'
 }
 
-job_refs() { git for-each-ref --format='%(refname) %(objectname)' "${NS}/jobs/"; }
+job_refs() { g for-each-ref --format='%(refname) %(objectname)' "${NS}/jobs/"; }
 
 valid_job() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
@@ -100,12 +111,35 @@ normalize_path() { # -> prints the path, or returns 2 with the reason on stderr
 
 require_repo() { git rev-parse --git-dir >/dev/null 2>&1 || fail 'not in a git repository' 2; }
 
+STORE=''
+
+resolve_store() { # sets STORE; creates the default or a custom store on first use
+  local common sel
+  common="$(git rev-parse --path-format=absolute --git-common-dir)" || fail 'cannot resolve the git dir' 2
+  sel="${GIT_LOCKS_STORE:-}"
+  if [[ -z "${sel}" ]]; then
+    sel="$(git config --get locks.store 2>/dev/null)" || sel=''
+  fi
+  case "${sel}" in
+    '') STORE="${GIT_LOCKS_HOME:-${HOME}/.git-stunts}/locks${common%/.git}" ;; # keyed on the main repo, so worktrees share
+    self) STORE="${common}" ;;
+    /*) STORE="${sel}" ;;
+    *) STORE="${PWD}/${sel}" ;;
+  esac
+  if [[ "${STORE}" != "${common}" ]] && ! git --git-dir="${STORE}" rev-parse --git-dir >/dev/null 2>&1; then
+    mkdir -p "${STORE}" || fail "cannot create the lock store at ${STORE}" 2
+    git init -q --bare "${STORE}" || fail "cannot initialise the lock store at ${STORE}" 2
+  fi
+}
+
+g() { git --git-dir="${STORE}" "$@"; }
+
 transact() { # plan lines on stdin -> git update-ref transaction; stderr captured by the caller
   {
     printf 'start\n'
     cat
     printf 'prepare\ncommit\n'
-  } | git update-ref --stdin
+  } | g update-ref --stdin
 }
 
 describe() { # oid -> "held by H (job J, until ISO)" pieces via globals D_HOLDER D_JOB D_UNTIL
@@ -182,7 +216,7 @@ cmd_claim() {
     printf 'schema: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\npaths:\n' "${SCHEMA}" "${job}" "${holder}" "${at}" "${expires}"
     printf '%s\n' "${wanted[@]}"
   )"
-  new_oid="$(printf '%s\n' "${record}" | git hash-object -w --stdin)" || fail 'could not write the lock record'
+  new_oid="$(printf '%s\n' "${record}" | g hash-object -w --stdin)" || fail 'could not write the lock record'
 
   local jref old_job_oid
   jref="$(job_ref "${job}")"
@@ -386,6 +420,13 @@ cmd_sweep() {
   return 0
 }
 
+# ---------------------------------------------------------------- store
+
+cmd_store() {
+  (($# == 0)) || usage
+  printf '%s\n' "${STORE}"
+}
+
 # ---------------------------------------------------------------- main
 
 main() {
@@ -393,10 +434,11 @@ main() {
   local cmd="$1"
   shift
   case "${cmd}" in
-    claim | release | check | list | sweep) ;;
+    claim | release | check | list | sweep | store) ;;
     *) usage ;;
   esac
   require_repo
+  resolve_store
   "cmd_${cmd}" "$@"
 }
 

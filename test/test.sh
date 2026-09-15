@@ -45,9 +45,16 @@ mkrepo() {
   printf '%s' "${d}"
 }
 
-refs() { git -C "$1" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | sort; }
+refs() { # subject-repo [prefix] -> refs in whatever store resolves for it
+  local store
+  store="$(cd "$1" && git-locks store)" || return 1
+  git --git-dir="${store}" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | sort
+}
 
 export GIT_LOCKS_NOW=1000000
+HOME="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-home.XXXXXX")"
+export HOME
+unset GIT_LOCKS_STORE GIT_LOCKS_HOME
 
 # ---------------------------------------------------------------- claim / check / list
 
@@ -114,7 +121,7 @@ check "the re-claimed path is held against another job" "$?" "1"
 out="$(git-locks release --job j1 2>&1)"
 check "release exits 0" "$?" "0"
 got="$(refs "${R}")"
-h="$(printf '%s' notes/other.md | git hash-object --stdin)"
+h="$(printf '%s' notes/other.md | git hash-object --stdin)" # content hash: identical in any store
 check "release removes the job ref and its path refs" "${got}" "refs/locks/jobs/j2
 refs/locks/paths/${h}"
 out="$(git-locks release --job j1 2>&1)"
@@ -201,6 +208,54 @@ git-locks claim --job b --holder hb mine.md shared.md >/dev/null 2>&1
 check "a claim with one held path among several is refused" "$?" "1"
 git-locks check mine.md >/dev/null 2>&1
 check "and the free path in that claim was not taken" "$?" "0"
+
+# ---------------------------------------------------------------- where the store lives
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+top="$(git rev-parse --show-toplevel)"
+got="$(git-locks store)"
+check "the default store is under HOME/.git-stunts/locks mirroring the subject's absolute path" "${got}" "${HOME}/.git-stunts/locks${top}"
+git-locks claim --job d --holder h a.md >/dev/null 2>&1
+got="$(git -C "${R}" for-each-ref refs/locks/)"
+check "by default the subject repo gets no refs at all" "${got}" ""
+bare="$(git --git-dir="${HOME}/.git-stunts/locks${top}" rev-parse --is-bare-repository)"
+check "the default store is a bare repository" "${bare}" "true"
+R2="$(mkrepo)"
+cd "${R2}" || exit 2
+git-locks check a.md >/dev/null 2>&1
+check "a second subject repo has its own store, so the same path is free there" "$?" "0"
+
+cd "${R}" || exit 2
+git worktree add -q "${R}-wt" -b wt >/dev/null 2>&1
+cd "${R}-wt" || exit 2
+git-locks check a.md >/dev/null 2>&1
+check "a linked worktree shares its main repo's store" "$?" "1"
+
+cd "${R}" || exit 2
+common="$(git rev-parse --path-format=absolute --git-common-dir)"
+got="$(GIT_LOCKS_STORE=self git-locks store)"
+check "GIT_LOCKS_STORE=self resolves to the subject's own git dir" "${got}" "${common}"
+GIT_LOCKS_STORE=self git-locks claim --job s --holder h self.md >/dev/null 2>&1
+got="$(git -C "${R}" for-each-ref --format='%(refname)' refs/locks/jobs/)"
+check "self mode writes refs into the subject repo" "${got}" "refs/locks/jobs/s"
+GIT_LOCKS_STORE=self git-locks check a.md >/dev/null 2>&1
+check "self mode does not see the default store's locks" "$?" "0"
+
+custom="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-store.XXXXXX")/store"
+git config locks.store "${custom}"
+got="$(git-locks store)"
+check "git config locks.store picks a custom store path" "${got}" "${custom}"
+git-locks claim --job c --holder h custom.md >/dev/null 2>&1
+bare="$(git --git-dir="${custom}" rev-parse --is-bare-repository)"
+check "the custom store is created bare on first use" "${bare}" "true"
+got="$(GIT_LOCKS_STORE=self git-locks store)"
+check "the environment overrides the config" "${got}" "${common}"
+git config --unset locks.store
+got="$(GIT_LOCKS_HOME=/tmp/elsewhere git-locks store)"
+check "GIT_LOCKS_HOME relocates the default store root" "${got}" "/tmp/elsewhere/locks${top}"
+git-locks store extra >/dev/null 2>&1
+check "store takes no arguments" "$?" "2"
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
