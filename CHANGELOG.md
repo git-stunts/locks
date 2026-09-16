@@ -4,6 +4,12 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-15
+
+### Changed
+
+- `make install` copies `bin/git-locks` into `$(PREFIX)/bin` instead of symlinking it. The symlink made the development checkout live for every consumer on the machine: while the v0.2.1 refactor was in progress on a branch, a downstream project's pre-commit hook ran the half-fixed script and its lock step failed once. An installed binary is now a snapshot of the checkout it was installed from; upgrade by re-running `make install`.
+
 ## [0.2.1] - 2026-09-15
 
 ### Changed

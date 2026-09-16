@@ -50,7 +50,7 @@ export LC_ALL=C # string offsets below are byte offsets: cat-file --batch sizes 
 NS='refs/locks'
 DEFAULT_TTL=14400
 SCHEMA='git-locks/1'
-VERSION='0.2.1'
+VERSION='0.2.2'
 TEXT=0 # 1 after --text: human lines instead of JSONL
 
 usage_text() {

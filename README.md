@@ -403,9 +403,11 @@ Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths 
 ## Install
 
 ```sh
-make install            # symlinks bin/git-locks into ~/.local/bin
+make install            # copies bin/git-locks into ~/.local/bin (a snapshot of this checkout, on purpose)
 git locks list          # git dispatches `git locks` to git-locks on PATH
 ```
+
+`make install` copies rather than symlinks. A symlink into a development checkout makes every uncommitted edit live for every consumer on the machine at once; on 2026-09-15 that turned a half-finished refactor into a transient lock failure in another project's pre-commit hook. Install from a tagged checkout and re-run `make install` when you mean to upgrade.
 
 ## Develop
 
