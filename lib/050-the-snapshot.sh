@@ -98,16 +98,16 @@ ref_oid() { # ref -> oid or empty
 field_v() { # VAR oid key: set VAR to the value of `key:` in the record's header (before paths:), empty when absent; no fork, so the parse memoises in this shell
   ensure_snapshot
   parse_record "$2"
-  local fields="${R_FIELDS[$2]:-}" rest
-  if [[ "${fields}" == "$3"$'\x1f'* ]]; then
-    rest="${fields#"$3"$'\x1f'}"
-  elif [[ "${fields}" == *$'\x1e'"$3"$'\x1f'* ]]; then
-    rest="${fields#*$'\x1e'"$3"$'\x1f'}"
+  local _fv_fields="${R_FIELDS[$2]:-}" _fv_rest # underscored: a local named like the caller's VAR would swallow the printf -v
+  if [[ "${_fv_fields}" == "$3"$'\x1f'* ]]; then
+    _fv_rest="${_fv_fields#"$3"$'\x1f'}"
+  elif [[ "${_fv_fields}" == *$'\x1e'"$3"$'\x1f'* ]]; then
+    _fv_rest="${_fv_fields#*$'\x1e'"$3"$'\x1f'}"
   else
     printf -v "$1" ''
     return 0
   fi
-  printf -v "$1" '%s' "${rest%%$'\x1e'*}"
+  printf -v "$1" '%s' "${_fv_rest%%$'\x1e'*}"
 }
 
 field() { # oid key -> the value on stdout; inside $(…) the parse happens in the subshell, so hot paths use field_v

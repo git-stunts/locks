@@ -1052,6 +1052,175 @@ GIT_LOCKS_TRACE="${TRACE5}" git-locks list >/dev/null 2>&1
 parses="$(grep -c '^parse' "${TRACE5}")"
 check "each record is parsed exactly once for a list (one parse line per blob in the trace)" "${parses}" "200"
 
+# ---------------------------------------------------------------- #19: doctor, a read-only invariant check
+
+findings() { # VAR TEXT CHECK: the number of finding lines for that check (the local is not named n: printf -v would fill it instead of the caller's)
+  local _c
+  _c="$(printf '%s\n' "$2" | grep -c "\"event\":\"finding\",\"check\":\"$3\"")"
+  printf -v "$1" '%s' "${_c}"
+}
+aref='' r='' xr='' yr='' # filled by pref, which shellcheck cannot see through
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+line="$(git-locks store)"
+S=''
+jstr S "${line}" store
+gs() { git --git-dir="${S}" "$@"; }
+blob() { gs hash-object -w --stdin; } # stdin -> oid, written into the store (tests corrupt the store directly)
+pref() {                              # VAR path: the path ref for a path
+  local h
+  h="$(printf '%s' "$2" | gs hash-object --stdin)"
+  printf -v "$1" 'refs/locks/paths/%s' "${h}"
+}
+
+out="$(git-locks doctor 2>&1)"
+check "doctor on an empty store exits 0" "$?" "0"
+jfields "and says so on one line with its basis" "${out}" 'event="doctor"' 'findings=0' 'healthy=true'
+valid "doctor line" "${out}"
+lines n "${out}"
+check "an empty store has no finding lines" "${n}" "1"
+
+git-locks claim --job a --holder alice a.md b.md >/dev/null 2>&1
+git-locks claim --job c --holder alice --parent a c.md >/dev/null 2>&1
+git-locks sem create s --capacity 2 >/dev/null 2>&1
+git-locks sem acquire s --job s1 --holder bob >/dev/null 2>&1
+out="$(git-locks doctor 2>&1)"
+check "doctor on a store the tool built exits 0" "$?" "0"
+jfields "and reports it healthy against the refs it read" "${out}" 'findings=0' 'healthy=true'
+valid "doctor line on a populated store" "${out}"
+lines n "${out}"
+check "a healthy store has no finding lines" "${n}" "1"
+
+git_count git-locks doctor
+before="${n}"
+for i in $(seq 1 30); do git-locks claim --job "d${i}" --holder alice "d${i}.md" "e${i}.md" >/dev/null 2>&1; done
+git_count git-locks doctor
+after="${n}"
+check "doctor spawns the same number of git processes for 3 locks as for 33 (paths are hashed in one process)" "${after}" "${before}"
+
+# A path ref hijacked to another job's record: job a lists a.md but its path ref points at job d1's record.
+d1="$(gs rev-parse refs/locks/jobs/d1)"
+pref aref a.md
+gs update-ref "${aref}" "${d1}"
+out="$(git-locks doctor 2>&1)"
+check "a hijacked path ref makes doctor exit 1" "$?" "1"
+findings n "${out}" path-ref-elsewhere
+check "and is reported once as path-ref-elsewhere, against job a" "${n}" "1"
+findings n "${out}" path-ref-stray
+check "and once as path-ref-stray, against the ref: d1's record lists no a.md" "${n}" "1"
+contains "the elsewhere finding names the path and the record it points at" "${out}" "\"subject\":\"a\""
+valid "finding lines" "${out}"
+aoid="$(gs rev-parse refs/locks/jobs/a)"
+gs update-ref "${aref}" "${aoid}"
+git-locks doctor >/dev/null 2>&1
+check "restoring the ref restores health" "$?" "0"
+
+# A path ref with no job: delete job d2's job ref and leave its path refs behind.
+gs update-ref -d refs/locks/jobs/d2
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" path-ref-orphan
+check "two orphan path refs are two path-ref-orphan findings" "${n}" "2"
+last="$(printf '%s\n' "${out}" | tail -1)"
+jfields "the summary counts them and is not healthy" "${last}" 'findings=2' 'healthy=false'
+pref r d2.md
+gs update-ref -d "${r}"
+pref r e2.md
+gs update-ref -d "${r}"
+
+# A job whose path ref is missing.
+pref r e3.md
+gs update-ref -d "${r}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" path-ref-missing
+check "a job listing a path with no path ref is one path-ref-missing finding" "${n}" "1"
+contains "naming the job" "${out}" "\"subject\":\"d3\""
+d3="$(gs rev-parse refs/locks/jobs/d3)"
+gs update-ref "${r}" "${d3}"
+
+# A child whose parent is gone, and a parent held by someone else.
+gs update-ref -d refs/locks/jobs/a
+gs update-ref -d "${aref}"
+pref r b.md
+gs update-ref -d "${r}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" parent-missing
+check "a child whose parent has no job ref is one parent-missing finding" "${n}" "1"
+git-locks release --job c >/dev/null 2>&1
+git-locks claim --job p --holder alice p.md >/dev/null 2>&1
+git-locks claim --job q --holder alice --parent p q.md >/dev/null 2>&1
+poid="$(gs rev-parse refs/locks/jobs/p)"
+rewritten="$(gs cat-file -p "${poid}" | sed 's/^holder: alice$/holder: mallory/' | blob)"
+gs update-ref refs/locks/jobs/p "${rewritten}"
+pref r p.md
+gs update-ref "${r}" "${rewritten}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" parent-holder
+check "a parent held by someone else is one parent-holder finding" "${n}" "1"
+git-locks release --job p >/dev/null 2>&1
+
+# A cycle, written by hand: x's parent is y and y's parent is x.
+xrec="$(printf 'schema: git-locks/1\njob: x\nholder: alice\nclaimed: 1000000\nexpires: 2000000\nparent: y\nfamily: 0\nacquisition: t-1\npaths:\nx.md' | blob)"
+yrec="$(printf 'schema: git-locks/1\njob: y\nholder: alice\nclaimed: 1000000\nexpires: 2000000\nparent: x\nfamily: 0\nacquisition: t-2\npaths:\ny.md' | blob)"
+gs update-ref refs/locks/jobs/x "${xrec}"
+gs update-ref refs/locks/jobs/y "${yrec}"
+pref xr x.md
+pref yr y.md
+gs update-ref "${xr}" "${xrec}"
+gs update-ref "${yr}" "${yrec}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" family-cycle
+check "a two-job cycle is reported for each job in it" "${n}" "2"
+gs update-ref -d refs/locks/jobs/x
+gs update-ref -d refs/locks/jobs/y
+gs update-ref -d "${xr}"
+gs update-ref -d "${yr}"
+
+# A record that does not decode.
+bad="$(printf 'not a record' | blob)"
+gs update-ref refs/locks/jobs/z "${bad}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" record-decodes
+check "a job ref at a blob that is not a record is one record-decodes finding" "${n}" "1"
+gs update-ref -d refs/locks/jobs/z
+
+# A job ref at another job's record.
+d5="$(gs rev-parse refs/locks/jobs/d5)"
+gs update-ref refs/locks/jobs/w "${d5}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" job-ref-name
+check "a job ref pointing at a record for a different job is one job-ref-name finding" "${n}" "1"
+gs update-ref -d refs/locks/jobs/w
+
+# Semaphores: a slot over capacity, then a missing gen.
+git-locks sem create one --capacity 1 >/dev/null 2>&1
+git-locks sem acquire one --job o1 --holder bob >/dev/null 2>&1
+o2="$(printf 'schema: git-locks-slot/1\nsemaphore: one\njob: o2\nholder: bob\nclaimed: 1000000\nexpires: 2000000\nacquisition: t-3' | blob)"
+gs update-ref refs/locks/sem/one/slots/o2 "${o2}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" sem-capacity
+check "two live slots on a capacity of one is one sem-capacity finding" "${n}" "1"
+contains "naming the semaphore and the numbers" "${out}" '"subject":"one","detail":"2 live slots over a capacity of 1"'
+gs update-ref -d refs/locks/sem/one/slots/o2
+gs update-ref -d refs/locks/sem/one/gen
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" sem-gen
+check "a semaphore without its gen ref is one sem-gen finding" "${n}" "1"
+valid "semaphore finding lines" "${out}"
+
+# An unreadable store is an error, never healthy.
+err="$(PATH="${BROKEN}:${PATH}" git-locks doctor 2>&1 >/dev/null)"
+rc="$?"
+out="$(PATH="${BROKEN}:${PATH}" git-locks doctor 2>/dev/null)"
+check "doctor on an unreadable store exits 2" "${rc}" "2"
+check "and prints no doctor line" "${out}" ""
+jfields "and the error is a store-read error" "${err}" 'event="error"' 'reason="store-read"'
+
+out="$(git-locks doctor extra 2>&1)"
+check "doctor takes no arguments" "$?" "2"
+out="$(git-locks doctor --help 2>&1)"
+jfields "doctor --help is a usage object" "${out}" 'event="usage"'
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"

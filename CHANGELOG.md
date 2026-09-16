@@ -4,6 +4,12 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-16
+
+### Added
+
+- `git locks doctor`: a read-only invariant check of the store (#19). One `finding` line per broken invariant as it is found, then one `doctor` line with the store, the reading basis (refs and records in the one snapshot it read, and the clock), the checks run, the count and the verdict. The invariants: every job record decodes and names its own job; every path a record lists has a path ref pointing at that record; every path ref points at a record some job ref points at, and that record lists the path; every child's parent exists, is live and has the same holder, and no parent chain cycles; every semaphore has meta and gen, its records decode, and its live slots fit its capacity. Exit 0 healthy, 1 with findings, 2 when the store cannot be read, which is never reported healthy. Paths are hashed in one `hash-object` process, so the process count does not grow with the store. Nothing is repaired: diagnosis is the whole command.
+
 ## [0.4.0] - 2026-09-16
 
 ### Changed

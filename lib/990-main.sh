@@ -25,7 +25,7 @@ main() {
       printf '{"name":"git-locks","version":"%s"}\n' "${VERSION}"
       exit 0
       ;;
-    claim | batch | release | check | list | sweep | store | show | ttl | extend | with | sem) ;;
+    claim | batch | release | check | list | sweep | store | show | ttl | extend | with | sem | doctor) ;;
     *) usage ;;
   esac
   for a in "$@"; do
