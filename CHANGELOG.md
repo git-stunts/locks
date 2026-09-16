@@ -4,6 +4,31 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-15
+
+The correctness release. An outside review of 0.2.1 found five defects under the guarantees and asked three questions; each defect was reproduced as a failing test before it was fixed, and README's "The contract" section carries the answers.
+
+### Changed (breaking)
+
+- JSON Lines everywhere: `--text` is gone. `help` and `<cmd> --help` print a `usage` object (also on a usage error, to stderr); `schema` prints the schema as one line; every error is `{"event":"error","reason":…,"detail":…}`.
+- `claim`, `list`, `show` and `sem acquire`/`sem show` lines carry `record`, the object id of the acquisition. `release --record <oid>` and `sem release --record <oid>` release only that acquisition, else `nothing` with `reason: superseded`. `with` releases by record.
+- A child admission rewrites the parent's record (a `family` generation) and moves the parent's refs to it, so a release or sweep planned against the old parent fails and re-plans when a child arrived meanwhile. A batch child under a same-batch parent with a different holder is refused; it used to be accepted.
+- Claim-time eviction of an expired lock terminates its whole family, the same operation release and sweep use.
+- Path normalisation removes empty and `.` segments and a trailing `/`, so `dir//file`, `dir/./file` and `dir/file/` are one key.
+
+### Fixed
+
+- A failed store read (`for-each-ref`, `cat-file --batch`, a missing or malformed object) is `{"event":"error","reason":"store-read"}` with exit 2; it was reported as free.
+- Every write is compiled into one transition per ref; transactions no longer contradict themselves (two-path eviction of one expired job, two children of one parent in a batch, re-acquiring an expired slot under the same job id all failed with "multiple updates for ref").
+- `sem acquire --wait` refreshes its read on every attempt; it could time out after another process released.
+- JSON escaping covers every control character and git's multi-line diagnostics (#13).
+- `with` releases the acquisition it made, never whatever wears the job name.
+
+### Added
+
+- `GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file>`: a test-only gate on every transaction, used to force the child-under-release interleaving deterministically.
+- The test suite refuses to run with `HOME` or `GIT_LOCKS_HOME` under the real home; `make test-docker` runs it in the official bash image.
+
 ## [0.2.2] - 2026-09-15
 
 ### Changed

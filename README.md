@@ -55,14 +55,14 @@ A lock is made of exactly three things, and once you can name them the rest of t
 The store is not your project's repository. By default it is a bare repository at `~/.git-stunts/locks/<absolute path of your repository>`, created the first time you claim, so `refs/locks/` never appears in your project and linked worktrees of one repository share one store. `git locks store` tells you where it resolved:
 
 ```text
-$ git locks --text store
-~/.git-stunts/locks/Users/alice/work/reports
+$ git locks store
+{"store":"/Users/alice/.git-stunts/locks/Users/alice/work/reports"}
 ```
 
 Inside that store, alice's claim wrote one blob and two refs. Plain git can show them, which is the point of building on git:
 
 ```text
-$ git --git-dir "$(git locks --text store)" for-each-ref
+$ git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" for-each-ref
 75f0c1fb62f9e0b728caf81652be9b5c0693dc04 blob	refs/locks/jobs/alice-report
 75f0c1fb62f9e0b728caf81652be9b5c0693dc04 blob	refs/locks/paths/57982dcddc1bb1c76ac1e00f4ff74d76706eecad
 ```
@@ -70,7 +70,7 @@ $ git --git-dir "$(git locks --text store)" for-each-ref
 Both refs point at the same object, `75f0c1f`. The first is named after the job. The second is named after the path, hashed: `57982dc…` is `git hash-object` of the string `notes/report.md`, so a path with spaces or slashes becomes a valid ref name without any escaping. The object they point at is the record:
 
 ```text
-$ git --git-dir "$(git locks --text store)" cat-file -p refs/locks/jobs/alice-report
+$ git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" cat-file -p refs/locks/jobs/alice-report
 schema: git-locks/1
 job: alice-report
 holder: alice
@@ -278,7 +278,7 @@ $ git locks sem acquire gpu --job train-3 --holder carol
 And the store afterwards, again in plain git:
 
 ```text
-$ git --git-dir "$(git locks --text store)" for-each-ref refs/locks/sem/
+$ git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" for-each-ref refs/locks/sem/
 5cd95224… blob	refs/locks/sem/gpu/gen
 cc04fb6d… blob	refs/locks/sem/gpu/meta
 60ebcc0f… blob	refs/locks/sem/gpu/slots/train-1
@@ -319,8 +319,8 @@ Most callers want the lock only for the duration of one command, and forgetting 
 `git locks with --job <id> --holder <name> [--wait <s>] [--sem <name>] <path>... -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
 
 ```text
-$ git locks with --job build --holder alice dist/ -- sh -c 'echo building'
-{"event":"claimed","job":"build","holder":"alice","claimed":1757980800,"expires":1757995200,"paths":["dist/"]}   (stderr)
+$ git locks with --job build --holder alice dist/bundle.js -- sh -c 'echo building'
+{"event":"claimed","job":"build","holder":"alice","claimed":1757980800,"expires":1757995200,"paths":["dist/bundle.js"],"record":"3f1c…"}   (stderr)
 building                                                                                                          (stdout)
 {"event":"released","job":"build","paths":1}                                                                     (stderr)
 ```
@@ -329,44 +329,62 @@ building                                                                        
 
 In summary, `with` is the shape most scripts should use: the lock's lifetime is the command's lifetime, by construction.
 
-## Output: JSON Lines, and a schema that cannot drift
+## Output: JSON Lines, always
 
-Every example above showed one JSON object per line, and this section states the contract behind that so a consumer can rely on it. Default output is JSON Lines, written as each result is known; `--text` before any subcommand gives the human form instead.
+Every example above showed one JSON object per line, and this section states the contract behind that so a consumer can rely on it. There is no plain-text mode. Stdout carries one object per result, written as each result is known; stderr carries refusals and errors as objects; `git locks help` is a `usage` object; `git locks schema` prints the schema as one line. The single exception is a command wrapped by `with`, which owns stdout while git-locks reports around it on stderr.
 
-Each line matches exactly one definition in [`schema/git-locks.schema.json`](schema/git-locks.schema.json), JSON Schema 2020-12. The schema is embedded in the script, `git locks schema` prints it byte-for-byte, and the test suite diffs that output against the file and validates every line it provokes against it. Refusals are lines on stderr with `"event":"refused"` and a `reason` or a `path`; exit codes are 0 for done or free, 1 for refused or held, 2 for usage.
+Each line matches exactly one definition in [`schema/git-locks.schema.json`](schema/git-locks.schema.json), JSON Schema 2020-12. The pretty file is for people; the test suite parses `git locks schema` and asserts it is the same document, and validates every line it provokes against it. Strings are escaped completely: a control character in a holder or a git diagnostic inside a refusal cannot break the consumer's parser, and that is a test. Exit codes: 0 for done or free, 1 for refused or held, 2 for usage or a store that could not be read.
 
 In summary, the output is the API, the schema is its contract, and the tests are what keep the two the same.
 
-## How it was built, including the misstep worth keeping
+## The contract, in the terms a reviewer asked for
 
-The design was tested before it was written, and one failure on the way is worth recording because it says something true about hooks. The tests are pure bash, in `test/test.sh`, and every feature above began as a red case there.
+An outside review of 0.2.1 found the guarantees running ahead of the implementation in five places and asked three questions. The fixes shipped in 0.3.0; the answers are the contract.
 
-The race is the case that matters most: twenty background claims on one path, then a count of how many exited 0, asserting exactly one. It was red against an allow-everything stub before the script existed, and it is what proves the transaction story rather than asserting it. The semaphore version is twenty racers on capacity three, asserting three.
+**What a successful acquisition authorises, and how it is identified.** A claim admits one *acquisition*: a record blob whose object id the claim line returns as `record`. The job id is a label a person or an orchestrator chooses; it can be reused, and a later claim under the same job replaces the record. `release --job X --record <oid>` releases that acquisition and only that one: if the job now holds a different record, the answer is `{"event":"nothing","reason":"superseded"}` and nothing moves. `with` remembers the record it acquired and releases by it, so an invocation that outlives a re-claim of its job name cannot release someone else's lock. The same holds for semaphore slots.
 
-The misstep: the first push of the semaphore branch came from a linked git worktree, and git exports `GIT_DIR` to hooks. The pre-push hook ran the test suite, the suite inherited `GIT_DIR`, and every `git init` inside its temporary repositories re-initialised the real repository instead, once as bare. Nothing was lost, since every commit was already on the remote, but the tests and both hooks now unset `GIT_DIR` and its relatives first, and the fix was proven by running the suite with `GIT_DIR` deliberately set.
+**What binds the membership you observed to the decision you commit.** Every write is compiled into one transition per ref with the old value it expects, and sent as one transaction; a stale expectation fails the whole transaction and the command re-reads and re-plans a bounded number of times. Family membership is bound through the parent's own record: admitting a child rewrites the parent's blob with a bumped `family` generation and moves the parent's refs to it, so a release or sweep that planned against the old parent fails when a child was admitted meanwhile, and re-plans with the child in view. Semaphore capacity is bound through the semaphore's generation ref the same way. A snapshot is a cached read taken under one `for-each-ref`; it is never treated as a consistent cut, which is why every write carries expectations.
 
-In summary, the tests are the spec, the race tests are the proof, and the one time the tooling turned on its own repository is now a guard in the tooling.
+**What `parent` means.** Ownership plus lifetime, not dependency ordering. A child is admitted only under a live parent held by the same holder, checked at planning and, through the generation bump, at commit. The child is released or swept whenever the parent is, by any command, including a claim that evicts an expired parent. Expiry is not inherited: a child keeps its own `expires`, and a parent's expiry ends the family. Renewing a parent (`extend`) keeps its family. Recreating a job name after its release makes a new record with a fresh family, unrelated to the old one.
+
+**What a path identifies.** The lexical form after normalisation: leading `./`, empty segments, `.` segments and a trailing `/` are removed; absolute paths and `..` are refused. `dir//file`, `dir/./file` and `dir/file/` are one key. Case, symlinks and hard links are not resolved, and `dir/` does not cover `dir/file` (#6). That is a policy, stated, not an omission.
+
+**What a lock does not do.** It is a cooperative, time-bounded reservation. `with` claims once, runs, and releases; it does not renew, so the reservation can expire under a long command and another claimant may take the path. Give `--ttl` the command's worst case, or renew with `extend` from inside it. A `check` that says free is an observation, not an admission; the protected write needs a claim.
+
+**What a failed read is.** An error, never a free path. If `for-each-ref` or `cat-file` fails, or an object does not parse, the command exits 2 with `{"event":"error","reason":"store-read"}` and reports nothing as free or held.
+
+**What the tests are.** A contract with bounded conformance evidence, not a proof. The race tests show one winner among twenty racers and three among twenty on capacity three, in those runs. The interleaving that let a child survive its parent's release is forced deterministically with `GIT_LOCKS_PAUSE_BEFORE_COMMIT`, a test-only gate that makes a transaction wait for a file before committing, and the invariant is asserted on the resulting store.
+
+## How it was built, including the missteps worth keeping
+
+The design was tested before it was written, and the failures on the way are recorded because each says something true. The tests are pure bash, in `test/test.sh`, and every feature above began as a red case there.
+
+The race is the case that matters most: twenty background claims on one path, then a count of how many exited 0, asserting exactly one. It was red against an allow-everything stub before the script existed. The semaphore version is twenty racers on capacity three, asserting three.
+
+Two missteps. The first push of the semaphore branch came from a linked git worktree, and git exports `GIT_DIR` to hooks; the pre-push hook ran the suite, the suite inherited it, and every `git init` inside its temporary repositories re-initialised the real repository, once as bare. Nothing was lost, and the tests and both hooks now unset `GIT_DIR` and its relatives first. The second was the 0.2.1 performance work: the first cut made `list` cost 604 processes instead of 305, because `$(…)` runs in a subshell and every field read loaded its own snapshot and threw it away. Snapshots are now loaded once in the parent, and helpers write into named variables so their memoisation survives.
+
+An outside review of 0.2.1 then found five defects under the guarantees: a failed read reported as free, transactions that contradicted themselves, family membership outside the conflict boundary, release by job name instead of by acquisition, and JSON that a git diagnostic could break. Each was reproduced as a failing test before it was fixed; the section above is the contract that came out of it.
 
 ## What done looks like
 
 For a consumer, done is a checklist you can run:
 
-- `git locks claim` on a free path exits 0 and prints one `claimed` line; on a held path it exits 1 and the stderr line names the holder.
-- `git locks check <path>` exits 1 exactly while the path is held by an unexpired lock.
-- `git --git-dir "$(git locks --text store)" for-each-ref` shows every lock, and your project's `git for-each-ref refs/locks/` shows nothing.
-- `git locks with … -- cmd` exits with `cmd`'s status and leaves no lock behind, even after Ctrl-C.
+- `git locks claim` on a free path exits 0 and prints one `claimed` line with a `record`; on a held path it exits 1 and the stderr line names the holder.
+- `git locks check <path>` exits 1 exactly while the path is held by an unexpired lock, and exits 2, saying so, when the store cannot be read.
+- `git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" for-each-ref` shows every lock, and your project's `git for-each-ref refs/locks/` shows nothing.
+- `git locks with … -- cmd` exits with `cmd`'s status and releases the acquisition it made, even after Ctrl-C, even if its job name was re-claimed meanwhile.
 - `git locks sem show <name>` never reports `live` above `capacity`, under any number of racers.
-- `git locks schema` is byte-identical to `schema/git-locks.schema.json`, and every line you receive validates against it.
+- Every line you receive, on either stream, parses as JSON and validates against `git locks schema`.
 
 The reference sections below are the map; the story above is why the map looks the way it does.
 
 ## Commands
 
-Every command takes `--text` first for the human form. Default output is JSON Lines.
+Output is JSON Lines on every command; there is no text mode.
 
 | Command | Does | Stdout line(s) | Exit |
 |---|---|---|---|
-| `claim --job <id> --holder <name> [--ttl <s>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its path set | one `claimed` object; refusals on stderr | 0 claimed, 1 refused, 2 usage |
+| `claim --job <id> --holder <name> [--ttl <s>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its record | one `claimed` object with `record`; refusals on stderr | 0 claimed, 1 refused, 2 usage |
 | `check <path>...` | who holds each path, in argument order | one object per path as it is examined | 0 all free, 1 any held |
 | `list` | every lock, live or expired, with its paths | one object per lock; nothing when empty | 0 |
 | `sweep` | delete expired locks | one `swept` object per lock, as it goes | 0 |
@@ -376,7 +394,7 @@ Every command takes `--text` first for the human form. Default output is JSON Li
 | `extend --job <id> --ttl <s>` | move the expiry to now + ttl, paths unchanged, atomically | one `extended` object | 0, 1 if no such lock |
 | `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder (verified inside the transaction); the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
 | `batch < records` | claim several locks in one transaction, or none; records are blank-line separated `job:`, `holder:`, `ttl:`, `parent:`, then `paths:` with one path per line | one `claimed` object per record | 0, 1 if any is refused, 2 on a malformed record |
-| `release --job <id> [--job <id>...]` | release several jobs and all their descendants in one transaction | one object per job, `cascaded` lists the descendants | 0 |
+| `release --job <id> [--record <oid>] [--job <id>...]` | release the jobs and all their descendants in one transaction; `--record` releases only that acquisition | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
 | `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] <path>... -- <cmd>...` | claim, run the command, release; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
@@ -386,7 +404,7 @@ Every command takes `--text` first for the human form. Default output is JSON Li
 | `sem show <name>`, `sem list` | capacity, live count, live slots with `remaining` | one object per semaphore | 0, 1 if missing |
 | `sem delete <name>` | remove an empty semaphore | one `deleted` object | 0, 1 while slots are live |
 | `with --sem <name> …` | take a slot around the command, with or without paths | as `with` | as `with` |
-| `help`, `--help`, `<cmd> --help` | usage | text | 0 |
+| `help`, `--help`, `<cmd> --help` | usage | one `usage` object | 0 |
 
 ## Output schema
 
@@ -394,7 +412,7 @@ Every JSON line git-locks writes, on stdout or stderr, matches exactly one defin
 
 Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`.
 
-`GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests. Timestamps in JSON are epoch seconds; the `--text` form prints ISO-8601 UTC.
+`GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests; `GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file>` makes every transaction wait for that file, so tests can force interleavings. Timestamps are epoch seconds.
 
 ## Versioning and releases
 
@@ -419,12 +437,13 @@ git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push t
 
 ## Limits, stated
 
-- The lock is advisory. Nothing stops a writer that never claimed. The consumer that lands writes (a commit script, a CI step) is where refusal belongs; `check` exits 1 for exactly that use.
+- The lock is advisory and time-bounded. Nothing stops a writer that never claimed, and nothing renews a reservation under a long command. The consumer that lands writes (a commit script, a CI step) is where refusal belongs; `check` exits 1 for exactly that use, and a `check` is an observation, not an admission.
 - One machine. The store is local; a shared remote would need a fetch before every claim and is out of scope.
 - `git rev-parse --path-format=absolute` and `update-ref --stdin` transactions need git 2.31 or newer.
 - bash 4 or newer: the store snapshot uses associative arrays. macOS's `/bin/bash` is 3.2; the script's shebang finds a newer bash on `PATH` (Homebrew's, for instance).
 - Each command reads the store once (`for-each-ref` plus one `cat-file --batch`) and every transaction invalidates that snapshot, so an invocation is a handful of git processes however many locks exist; the test suite pins the counts with a shim that counts spawns.
-- The claim reads current refs, then runs the transaction. A racer can win in between; the transaction then fails and the loser is told who won. That is the designed outcome, not a gap.
+- Every command reads the store once, plans, then commits with expectations. A racer can win in between; the transaction then fails and the command re-plans or reports who won. That is the designed outcome, not a gap.
+- The tests are bounded conformance evidence. Twenty racers and one forced interleaving are what the suite shows; they are not a proof over every schedule.
 
 ## License
 
