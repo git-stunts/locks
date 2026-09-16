@@ -41,11 +41,16 @@
 # Exit codes: 0 done (or free), 1 refused / held, 2 usage or not a repository.
 # GIT_LOCKS_NOW=<epoch seconds> fixes the clock (tests). Pure bash + git.
 set -uo pipefail
+if ((BASH_VERSINFO[0] < 4)); then
+  printf 'git-locks: needs bash 4 or newer (associative arrays); this is %s\n' "${BASH_VERSION}" >&2
+  exit 2
+fi
+export LC_ALL=C # string offsets below are byte offsets: cat-file --batch sizes are bytes
 
 NS='refs/locks'
 DEFAULT_TTL=14400
 SCHEMA='git-locks/1'
-VERSION='0.2.0'
+VERSION='0.2.1'
 TEXT=0 # 1 after --text: human lines instead of JSONL
 
 usage_text() {
@@ -177,17 +182,86 @@ path_ref() {
 
 job_ref() { printf '%s/jobs/%s' "${NS}" "$1"; }
 
-ref_oid() { g rev-parse -q --verify "$1^{blob}" 2>/dev/null || true; }
+# ---------------------------------------------------------------- the store snapshot
+#
+# Every read in one invocation comes from two git processes: `for-each-ref`
+# over refs/locks/ and one `cat-file --batch` for every blob those refs name
+# (issue #12; the pattern is @git-stunts/plumbing's cat-file session, one
+# process per protocol rather than per object). A transaction invalidates the
+# snapshot; the next read takes a fresh one.
 
-field() { # oid key
-  g cat-file -p "$1" | sed -n "s/^$2: //p" | head -n 1
+declare -A REF_OID=() # ref -> oid
+declare -A BLOB=()    # oid -> record text
+SNAP_LOADED=0
+
+snapshot() {
+  REF_OID=()
+  BLOB=()
+  SNAP_LOADED=1
+  local rows ref oid oids=()
+  rows="$(g for-each-ref --format='%(refname) %(objectname)' "${NS}/")"
+  while IFS=' ' read -r ref oid; do
+    [[ -z "${ref}" ]] && continue
+    REF_OID["${ref}"]="${oid}"
+    oids+=("${oid}")
+  done <<<"${rows}"
+  ((${#oids[@]} > 0)) || return 0
+  local out
+  out="$(printf '%s\n' "${oids[@]}" | sort -u | g cat-file --batch && printf x)" # the x keeps trailing newlines
+  out="${out%x}"
+  local pos=0 len="${#out}" header size
+  while ((pos < len)); do
+    header="${out:pos}"
+    header="${header%%$'\n'*}"
+    pos=$((pos + ${#header} + 1))
+    [[ "${header}" == *' missing' ]] && continue
+    oid="${header%% *}"
+    size="${header##* }"
+    BLOB["${oid}"]="${out:pos:size}"
+    pos=$((pos + size + 1))
+  done
+}
+
+ensure_snapshot() { ((SNAP_LOADED)) || snapshot; }
+
+ref_oid() { # ref -> oid or empty
+  ensure_snapshot
+  printf '%s' "${REF_OID[$1]:-}"
+}
+
+field() { # oid key -> the value of `key:` in the record's header (before paths:)
+  ensure_snapshot
+  local line
+  while IFS= read -r line; do
+    [[ "${line}" == 'paths:' ]] && return 0
+    if [[ "${line}" == "$2: "* ]]; then
+      printf '%s' "${line#"$2": }"
+      return 0
+    fi
+  done <<<"${BLOB[$1]:-}"
 }
 
 record_paths() { # oid -> paths, one per line
-  g cat-file -p "$1" | sed -n '/^paths:$/,$p' | sed '1d'
+  ensure_snapshot
+  local line in_paths=0
+  while IFS= read -r line; do
+    if ((in_paths)); then
+      printf '%s\n' "${line}"
+    elif [[ "${line}" == 'paths:' ]]; then
+      in_paths=1
+    fi
+  done <<<"${BLOB[$1]:-}"
 }
 
-job_refs() { g for-each-ref --format='%(refname) %(objectname)' "${NS}/jobs/"; }
+refs_under() { # prefix -> "ref oid" lines, sorted by ref, from the snapshot
+  ensure_snapshot
+  local ref
+  for ref in "${!REF_OID[@]}"; do
+    [[ "${ref}" == "$1"* ]] && printf '%s %s\n' "${ref}" "${REF_OID[${ref}]}"
+  done | sort
+}
+
+job_refs() { refs_under "${NS}/jobs/"; }
 
 valid_job() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
@@ -220,9 +294,7 @@ STORE=''
 
 resolve_store() { # sets STORE; creates the default or a custom store on first use
   local common='' sel key
-  if git rev-parse --git-dir >/dev/null 2>&1; then
-    common="$(git rev-parse --path-format=absolute --git-common-dir)" || fail 'cannot resolve the git dir' 2
-  fi
+  common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || common='' # empty outside a repository
   sel="${GIT_LOCKS_STORE:-}"
   if [[ -z "${sel}" ]]; then
     sel="$(git config --get locks.store 2>/dev/null)" || sel=''
@@ -237,7 +309,7 @@ resolve_store() { # sets STORE; creates the default or a custom store on first u
     /*) STORE="${sel}" ;;
     *) STORE="${PWD}/${sel}" ;;
   esac
-  if [[ "${STORE}" != "${common}" ]] && ! git --git-dir="${STORE}" rev-parse --git-dir >/dev/null 2>&1; then
+  if [[ "${STORE}" != "${common}" && ! -f "${STORE}/HEAD" ]]; then # a repository, bare or not, has a HEAD
     mkdir -p "${STORE}" || fail "cannot create the lock store at ${STORE}" 2
     git init -q --bare "${STORE}" || fail "cannot initialise the lock store at ${STORE}" 2
   fi
@@ -245,12 +317,24 @@ resolve_store() { # sets STORE; creates the default or a custom store on first u
 
 g() { git --git-dir="${STORE}" "$@"; }
 
-transact() { # plan lines on stdin -> git update-ref transaction; stderr captured by the caller
+transact() { # plan lines as arguments -> one git update-ref transaction; stderr passes through
+  local rc
   {
     printf 'start\n'
-    cat
+    printf '%s\n' "$@"
     printf 'prepare\ncommit\n'
   } | g update-ref --stdin
+  rc=$?
+  SNAP_LOADED=0 # whatever happened, the refs may have moved; this runs in the caller's shell, not a pipeline's
+  return "${rc}"
+}
+
+write_blob() {  # VAR CONTENT: write CONTENT as a blob, seed the snapshot with it, set VAR to its oid
+  local written # not `oid`: printf -v writes to the caller's variable of that name, which a local would shadow
+  written="$(printf '%s\n' "$2" | g hash-object -w --stdin)" || return 1
+  ensure_snapshot
+  BLOB["${written}"]="$2"$'\n'
+  printf -v "$1" '%s' "${written}"
 }
 
 describe() { # oid -> "held by H (job J, until ISO)" pieces via globals D_HOLDER D_JOB D_UNTIL
@@ -343,7 +427,7 @@ plan_claim() { # job holder ttl parent path... -> appends to PLAN; sets CLAIM_LI
     printf 'paths:\n'
     printf '%s\n' "${wanted[@]}"
   )"
-  new_oid="$(printf '%s\n' "${record}" | g hash-object -w --stdin)" || fail 'could not write the lock record'
+  write_blob new_oid "${record}" || fail 'could not write the lock record'
 
   local jref old_job_oid
   jref="$(job_ref "${job}")"
@@ -447,7 +531,10 @@ describe_batch_conflict() { # path taken twice within one batch
 
 commit_plan() { # -> 0 committed; 1 lost a race (refusals printed); exits on transaction error
   local err
-  if err="$(printf '%s\n' "${PLAN[@]}" | transact 2>&1)"; then
+  err="$(transact "${PLAN[@]}" 2>&1)"
+  local trc=$?
+  SNAP_LOADED=0 # the $(…) above ran transact in a subshell, so its own invalidation did not reach us
+  if ((trc == 0)); then
     return 0
   fi
   local lost=0 ref cur p
@@ -701,7 +788,7 @@ cmd_release() {
     cascades+=("${_j2}")
   done
   if ((${#PLAN[@]} > 0)); then
-    printf '%s\n' "${PLAN[@]}" | transact >/dev/null 2>&1 || fail "could not release (changed underneath; re-run)"
+    transact "${PLAN[@]}" >/dev/null 2>&1 || fail "could not release (changed underneath; re-run)"
   fi
   local i
   for i in "${!present[@]}"; do
@@ -824,7 +911,7 @@ cmd_sweep() {
     plan_delete_job "${rjob}"
     for d in "${DESC[@]}"; do plan_delete_job "${d}"; done
     json_jobs cascaded "${DESC[@]}"
-    if printf '%s\n' "${PLAN[@]}" | transact >/dev/null 2>&1; then
+    if transact "${PLAN[@]}" >/dev/null 2>&1; then
       if ((TEXT)); then
         printf 'swept job %s (holder %s, expired at %s)\n' "${rjob}" "${rholder}" "${runtil}"
       else
@@ -946,7 +1033,7 @@ cmd_extend() {
     printf 'paths:\n'
     printf '%s\n' "${paths}"
   )"
-  new_oid="$(printf '%s\n' "${record}" | g hash-object -w --stdin)" || fail 'could not write the lock record'
+  write_blob new_oid "${record}" || fail 'could not write the lock record'
   plan=("update ${jref} ${new_oid} ${oid}")
   while IFS= read -r p; do
     [[ -z "${p}" ]] && continue
@@ -954,7 +1041,7 @@ cmd_extend() {
     have="$(ref_oid "${ref}")"
     [[ "${have}" == "${oid}" ]] && plan+=("update ${ref} ${new_oid} ${oid}")
   done <<<"${paths}"
-  printf '%s\n' "${plan[@]}" | transact >/dev/null 2>&1 || fail "could not extend job ${JOB_ARG} (changed underneath; re-run)"
+  transact "${plan[@]}" >/dev/null 2>&1 || fail "could not extend job ${JOB_ARG} (changed underneath; re-run)"
   if ((TEXT)); then
     until_iso="$(iso "${expires}")"
     printf 'extended job %s until %s\n' "${JOB_ARG}" "${until_iso}"
@@ -1027,6 +1114,7 @@ cmd_with() {
   deadline=$((clock + wait))
   if [[ -n "${sem}" ]]; then
     while :; do
+      SNAP_LOADED=0
       out="$( (sem_acquire_once "${sem}" "${job}" "${holder}" "${ttl}") 2>"${errfile}")"
       rc=$?
       ((rc == 0)) && break
@@ -1044,7 +1132,10 @@ cmd_with() {
   if ((${#paths[@]} == 0)); then
     rm -f "${errfile}"
     local status=0
-    with_release_sem() { (sem_release_once "${sem}" "${job}") >&2; }
+    with_release_sem() {
+      SNAP_LOADED=0
+      (sem_release_once "${sem}" "${job}") >&2
+    }
     trap 'with_release_sem; exit 130' INT
     trap 'with_release_sem; exit 143' TERM
     "${command[@]}" || status=$?
@@ -1053,6 +1144,7 @@ cmd_with() {
     return "${status}"
   fi
   while :; do
+    SNAP_LOADED=0
     if [[ -n "${parent}" ]]; then
       out="$( (cmd_claim --job "${job}" --holder "${holder}" --ttl "${ttl}" --parent "${parent}" -- "${paths[@]}") 2>"${errfile}")"
     else
@@ -1064,7 +1156,10 @@ cmd_with() {
     if ((rc != 1 || clock >= deadline)); then
       cat "${errfile}" >&2
       rm -f "${errfile}"
-      ((sem_held)) && (sem_release_once "${sem}" "${job}") >&2
+      if ((sem_held)); then
+        SNAP_LOADED=0
+        (sem_release_once "${sem}" "${job}") >&2
+      fi
       exit "${rc}"
     fi
     sleep 1
@@ -1074,8 +1169,12 @@ cmd_with() {
 
   local status=0
   with_release() {
+    SNAP_LOADED=0
     (cmd_release --job "${job}") >&2
-    ((sem_held)) && (sem_release_once "${sem}" "${job}") >&2
+    if ((sem_held)); then
+      SNAP_LOADED=0
+      (sem_release_once "${sem}" "${job}") >&2
+    fi
     return 0
   }
   trap 'with_release; exit 130' INT
@@ -1151,7 +1250,7 @@ sem_read() { # name -> 0, or 1 when the semaphore does not exist
   SLOT_REMAINING=()
   SEM_LIVE=0
   at="$(now)"
-  rows="$(g for-each-ref --format='%(refname) %(objectname)' "${NS}/sem/${name}/slots/")"
+  rows="$(refs_under "${NS}/sem/${name}/slots/")"
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
     SLOT_JOBS+=("$(field "${oid}" job)")
@@ -1189,7 +1288,10 @@ sem_transact() { # name -> runs PLAN plus the generation CAS; 0 ok, 1 lost the r
   PLAN+=("update ${gref} ${newgen} ${SEM_GEN_OID}")
   PLAN+=("verify $(sem_meta_ref "$1") ${SEM_META_OID}")
   local err
-  if err="$(printf '%s\n' "${PLAN[@]}" | transact 2>&1)"; then
+  err="$(transact "${PLAN[@]}" 2>&1)"
+  local trc=$?
+  SNAP_LOADED=0 # the $(…) above ran transact in a subshell, so its own invalidation did not reach us
+  if ((trc == 0)); then
     return 0
   fi
   SEM_LAST_ERR="${err}"
@@ -1245,7 +1347,7 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
   at="$(now)"
   expires=$((at + ttl))
   record="$(printf 'schema: %s\nsemaphore: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\n' "${SLOT_SCHEMA}" "${name}" "${job}" "${holder}" "${at}" "${expires}")"
-  oid="$(printf '%s\n' "${record}" | g hash-object -w --stdin)" || fail 'could not write the slot record'
+  write_blob oid "${record}" || fail 'could not write the slot record'
   PLAN=()
   sem_plan_evict_expired "${name}"
   local live_after slot_ref
@@ -1316,7 +1418,7 @@ cmd_sem() {
     list)
       (($# == 0)) || usage
       local rows ref oid
-      rows="$(g for-each-ref --format='%(refname) %(objectname)' "${NS}/sem/")"
+      rows="$(refs_under "${NS}/sem/")"
       while IFS=' ' read -r ref oid; do
         [[ "${ref}" == */meta ]] || continue
         name="${ref#"${NS}"/sem/}"
@@ -1378,7 +1480,7 @@ cmd_sem() {
       mref="$(sem_meta_ref "${name}")"
       gref="$(sem_gen_ref "${name}")"
       PLAN=("create ${mref} ${meta}" "create ${gref} ${gen}")
-      printf '%s\n' "${PLAN[@]}" | transact >/dev/null 2>&1 || {
+      transact "${PLAN[@]}" >/dev/null 2>&1 || {
         sem_refusal "${name}" exists
         exit 1
       }
@@ -1430,7 +1532,7 @@ cmd_sem() {
       PLAN=("delete ${mref} ${SEM_META_OID}" "delete ${gref} ${SEM_GEN_OID}")
       local i
       for i in "${!SLOT_JOBS[@]}"; do PLAN+=("delete $(sem_slot_ref "${name}" "${SLOT_JOBS[${i}]}") ${SLOT_OIDS[${i}]}"); done
-      printf '%s\n' "${PLAN[@]}" | transact >/dev/null 2>&1 || fail "could not delete semaphore ${name} (changed underneath; re-run)"
+      transact "${PLAN[@]}" >/dev/null 2>&1 || fail "could not delete semaphore ${name} (changed underneath; re-run)"
       json_str _j1 "${name}"
       if ((TEXT)); then printf 'deleted semaphore %s\n' "${name}"; else printf '{"event":"deleted","semaphore":%s}\n' "${_j1}"; fi
       ;;
@@ -2313,6 +2415,7 @@ main() {
     fi
   done
   resolve_store
+  case "${cmd}" in store) ;; *) ensure_snapshot ;; esac # once, in this shell: subshells inherit it instead of re-reading
   "cmd_${cmd}" "$@"
 }
 

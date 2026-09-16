@@ -4,6 +4,13 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-15
+
+### Changed
+
+- One git process per protocol per command, not per object (#12). Every invocation takes one snapshot of the store, `for-each-ref` over `refs/locks/` plus one `cat-file --batch` for every blob, parsed in bash; reads come from that snapshot and every transaction invalidates it. The store lookup went from four processes to two. Measured on 50 locks: `list` 305 processes to 4, `check` on three paths 19 to 7, a three-path `claim` 13 to at most 10. The bounds are tests, run with a git shim that counts spawns. The pattern is @git-stunts/plumbing's persistent cat-file session, in bash.
+- Requires bash 4 or newer (associative arrays); the script refuses older shells with a message. `LC_ALL=C` inside the script, so string offsets are byte offsets.
+
 ### Changed
 
 - README rewritten as a guided explainer: one running example (alice, bob, one path) followed from claim to semaphore, with real transcripts and five Mermaid figures (rendered and checked) showing the store's refs and blobs as claims, refusals, releases and slots happen. The command reference and install, develop and limits sections stay at the end.

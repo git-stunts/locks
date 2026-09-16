@@ -689,6 +689,40 @@ git-locks sem acquire pool --job other --holder ho >/dev/null 2>&1
 git-locks with --sem pool --job w2 --holder hw -- echo never >/dev/null 2>&1
 check "with --sem at capacity exits 1 without --wait" "$?" "1"
 
+# ---------------------------------------------------------------- git processes: one per protocol, not per object (issue #12)
+
+SHIM="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-shim.XXXXXX")"
+REAL_GIT="$(command -v git)"
+printf '#!/usr/bin/env bash\nprintf 1 >> "%s/count"\nexec "%s" "$@"\n' "${SHIM}" "${REAL_GIT}" >"${SHIM}/git"
+chmod +x "${SHIM}/git"
+git_count() { # runs the args with the shim first on PATH; sets n to the number of git processes spawned
+  rm -f "${SHIM}/count"
+  PATH="${SHIM}:${PATH}" "$@" >/dev/null 2>&1
+  if [[ -f "${SHIM}/count" ]]; then
+    n="$(wc -c <"${SHIM}/count")"
+    n="${n//[[:space:]]/}"
+  else n=0; fi
+}
+R="$(mkrepo)"
+cd "${R}" || exit 2
+for i in $(seq 1 50); do git-locks claim --job "j${i}" --holder h "p${i}.md" >/dev/null 2>&1; done
+git_count git-locks list
+check "list of 50 locks spawns at most 4 git processes (rev-parse, config, for-each-ref, cat-file --batch)" "$((n <= 4))" "1"
+git_count git-locks check p1.md p2.md p3.md
+check "check of 3 paths spawns at most 7 git processes (snapshot plus one hash-object per path)" "$((n <= 7))" "1"
+git_count git-locks show --job j7
+check "show spawns at most 4 git processes" "$((n <= 4))" "1"
+git_count git-locks claim --job jx --holder h a.md b.md c.md
+check "a 3-path claim spawns at most 10 git processes (lookup, snapshot, 3 hashes, a blob write, a transaction)" "$((n <= 10))" "1"
+git-locks sem create s --capacity 5 >/dev/null 2>&1
+for i in 1 2 3; do git-locks sem acquire s --job "t${i}" --holder h >/dev/null 2>&1; done
+git_count git-locks sem show s
+check "sem show spawns at most 4 git processes" "$((n <= 4))" "1"
+out="$(git-locks list 2>&1)"
+lines n "${out}"
+check "the snapshot path lists every lock" "${n}" "51"
+valid "list lines after the snapshot refactor" "${out}"
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"
