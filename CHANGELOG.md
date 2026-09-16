@@ -4,6 +4,17 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-16
+
+### Fixed
+
+- Every read phase loads the snapshot in the parent shell first (#23's trace found five reads per retry: after an invalidation each `$(…)` took its own). A waiter now takes exactly two reads across a release it could not see at first, the stale one and one fresh one; that is a forced, traced test for both `sem acquire --wait` and `with --wait`.
+
+### Changed
+
+- Tests assert on parsed fields (`jfields key=value…`) instead of exact JSON substrings, so key order is not part of the contract (#15); schema validation remains the structural guard.
+- Two more test hooks: `GIT_LOCKS_PAUSE_AFTER_READ=<file>` pauses after every store read, `GIT_LOCKS_TRACE=<file>` appends one line per read.
+
 ## [0.3.1] - 2026-09-15
 
 ### Fixed

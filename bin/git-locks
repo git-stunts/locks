@@ -45,7 +45,9 @@
 # Exit codes: 0 done (or free), 1 refused / held, 2 usage or a store error.
 # GIT_LOCKS_NOW=<epoch seconds> fixes the clock (tests).
 # GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file> makes every transaction wait for that
-# file to exist before committing (tests force interleavings with it).
+# file to exist before committing; GIT_LOCKS_PAUSE_AFTER_READ=<file> makes
+# every store read wait after loading; GIT_LOCKS_TRACE=<file> appends one line
+# per store read. Tests force interleavings and count reads with them.
 set -uo pipefail
 if ((BASH_VERSINFO[0] < 4)); then
   printf 'git-locks: needs bash 4 or newer (associative arrays); this is %s\n' "${BASH_VERSION}" >&2
@@ -58,7 +60,7 @@ DEFAULT_TTL=14400
 SCHEMA='git-locks/1'
 SEM_SCHEMA='git-locks-sem/1'
 SLOT_SCHEMA='git-locks-slot/1'
-VERSION='0.3.1'
+VERSION='0.3.2'
 RETRIES=200 # a plan refused for a stale expectation is re-read and re-planned this many times
 
 usage_text() {
@@ -370,6 +372,18 @@ snapshot() {
   for ref in "${!refs[@]}"; do REF_OID["${ref}"]="${refs[${ref}]}"; done
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
   SNAP_LOADED=1
+  [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'snapshot %s\n' "${#refs[@]}" >>"${GIT_LOCKS_TRACE}"
+  test_gate "${GIT_LOCKS_PAUSE_AFTER_READ:-}" # tests force an interleaving between a read and what follows it
+}
+
+test_gate() { # file-or-empty: when set, wait here until the file exists (at most 30 s); tests only
+  [[ -n "$1" ]] || return 0
+  local waited=0
+  until [[ -e "$1" ]] || ((waited >= 600)); do
+    sleep 0.05
+    waited=$((waited + 1))
+  done
+  return 0
 }
 
 ensure_snapshot() { ((SNAP_LOADED)) || snapshot; }
@@ -502,16 +516,9 @@ plan_lines() { # -> update-ref stdin lines, one per ref, in plan order
 TRANSACT_ERR=''
 
 transact() { # commits the plan; 0 ok, 1 refused (TRANSACT_ERR carries git's words). Invalidates the snapshot either way.
-  local lines rc gate
+  local lines rc
   lines="$(plan_lines)"
-  gate="${GIT_LOCKS_PAUSE_BEFORE_COMMIT:-}"
-  if [[ -n "${gate}" ]]; then # tests force an interleaving: wait here until the gate file exists
-    local waited=0
-    until [[ -e "${gate}" ]] || ((waited >= 600)); do
-      sleep 0.05
-      waited=$((waited + 1))
-    done
-  fi
+  test_gate "${GIT_LOCKS_PAUSE_BEFORE_COMMIT:-}" # tests force an interleaving between planning and commit
   TRANSACT_ERR="$(
     {
       printf 'start\n'
@@ -562,7 +569,8 @@ transaction_refusal() { # git's words, as one line
 # against the parent's old blob fails when a child was admitted meanwhile, and
 # re-plans with the child in view. A child cannot outlive its parent.
 
-descendants() { # job... -> DESC: every job whose parent chain reaches one of them (transitively), sorted
+descendants() {   # job... -> DESC: every job whose parent chain reaches one of them (transitively), sorted
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   DESC=()
   local rows ref oid rjob rparent changed=1 seeds=("$@") j
   rows="$(job_refs)"
@@ -598,6 +606,7 @@ descendants() { # job... -> DESC: every job whose parent chain reaches one of th
 }
 
 plan_delete_job() { # job -> plans deletes for its job ref and the path refs still pointing at it; DELETED_PATHS = how many
+  ensure_snapshot   # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local jref oid p ref have paths count=0
   DELETED_PATHS=0
   jref="$(job_ref "$1")"
@@ -646,7 +655,8 @@ record_text() { # VAR job holder claimed expires parent family acquisition paths
   printf -v "$1" '%s' "${body}"
 }
 
-bump_parent() { # parent-job parent-oid -> plans the parent's blob rewrite with family+1 on its job ref and path refs
+bump_parent() {   # parent-job parent-oid -> plans the parent's blob rewrite with family+1 on its job ref and path refs
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local pjob="$1" poid="$2" fam newfam claimed expires holder parent paths record newoid p ref have acq
   fam="$(field "${poid}" family)"
   acq="$(field "${poid}" acquisition)"
@@ -680,7 +690,8 @@ CLAIM_LINE=''
 TERMINATED_PATHS=0
 TERMINATED_CASCADE='[]'
 
-plan_claim() { # job holder ttl parent path... -> plans one claim; sets CLAIM_LINE/CLAIM_OID; CONFLICTS=1 on refusal
+plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM_LINE/CLAIM_OID; CONFLICTS=1 on refusal
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local job="$1" holder="$2" ttl="$3" parent="$4"
   shift 4
   local paths=("$@") p n norm=() sorted wanted=()
@@ -995,7 +1006,7 @@ cmd_release() {
   done
   local attempt i present counts cascades absent superseded jref oid
   for ((attempt = 0; attempt < RETRIES; attempt++)); do
-    SNAP_LOADED=0
+    snapshot
     plan_reset
     present=()
     counts=()
@@ -1057,6 +1068,7 @@ cmd_release() {
 # ---------------------------------------------------------------- check
 
 cmd_check() {
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   (($# > 0)) || usage
   local at held=0 p n ref cur jp _j1 _j2
   at="$(now)"
@@ -1084,7 +1096,8 @@ cmd_check() {
 
 # ---------------------------------------------------------------- list / show / ttl
 
-lock_line() { # oid -> one JSON line for list and show
+lock_line() {     # oid -> one JSON line for list and show
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local _j1 _j2 _j3 _j4 jpaths claimed pj paths acq
   describe "$1"
   claimed="$(field "$1" claimed)"
@@ -1141,6 +1154,7 @@ missing() { # job -> one line on stderr, exit 1
 }
 
 cmd_show() {
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local jref oid
   job_arg "$@"
   jref="$(job_ref "${JOB_ARG}")"
@@ -1150,6 +1164,7 @@ cmd_show() {
 }
 
 cmd_ttl() {
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local _j1 jref oid
   job_arg "$@"
   jref="$(job_ref "${JOB_ARG}")"
@@ -1168,7 +1183,7 @@ cmd_extend() {
   [[ "${TTL_ARG}" =~ ^[0-9]+$ && "${TTL_ARG}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
   jref="$(job_ref "${JOB_ARG}")"
   for ((attempt = 0; attempt < RETRIES; attempt++)); do
-    SNAP_LOADED=0
+    snapshot
     plan_reset
     oid="$(ref_oid "${jref}")"
     [[ -n "${oid}" ]] || missing "${JOB_ARG}"
@@ -1217,7 +1232,7 @@ cmd_sweep() {
     rexpires="${D_EXPIRES}"
     local swept=0
     for ((attempt = 0; attempt < RETRIES; attempt++)); do
-      SNAP_LOADED=0
+      snapshot
       plan_reset
       still="$(ref_oid "${ref}")"
       [[ -n "${still}" ]] || break # gone meanwhile
@@ -1428,7 +1443,8 @@ gen_blob() { # VAR: a fresh generation token as a blob
 
 # Reads a semaphore into: SEM_CAP, SEM_META_OID, SEM_GEN_OID, SEM_LIVE, and parallel arrays
 # SLOT_JOBS SLOT_OIDS SLOT_LIVE (1/0) SLOT_HOLDER SLOT_CLAIMED SLOT_EXPIRES SLOT_REMAINING.
-sem_read() { # name -> 0, or 1 when the semaphore does not exist
+sem_read() {      # name -> 0, or 1 when the semaphore does not exist
+  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local name="$1" mref gref rows ref oid at exp claimed
   mref="$(sem_meta_ref "${name}")"
   SEM_META_OID="$(ref_oid "${mref}")"
@@ -1508,7 +1524,7 @@ sem_show_line() { # name, after sem_read -> one JSON line or the text block
 sem_acquire_once() { # name job holder ttl -> 0 acquired (line printed), 1 refused, 2 usage/missing
   local attempt rc
   for ((attempt = 0; attempt < RETRIES; attempt++)); do
-    SNAP_LOADED=0
+    snapshot
     sem_acquire_attempt "$1" "$2" "$3" "$4"
     rc=$?
     ((rc == 2)) || return "${rc}"
@@ -1519,6 +1535,7 @@ sem_acquire_once() { # name job holder ttl -> 0 acquired (line printed), 1 refus
 }
 
 sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacity), 2 lost the race
+  ensure_snapshot       # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local name="$1" job="$2" holder="$3" ttl="$4" i at expires record oid _j1 _j2 _j3 _j4 _j5 own_oid='' own_live=0 slot_ref live_after acq=''
   sem_read "${name}" || sem_missing "${name}"
   for i in "${!SLOT_JOBS[@]}"; do
@@ -1561,7 +1578,7 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
 sem_release_once() { # name job [record] -> 0 released or nothing to release; 1 only when the race never settles
   local attempt rc
   for ((attempt = 0; attempt < RETRIES; attempt++)); do
-    SNAP_LOADED=0
+    snapshot
     sem_release_attempt "$1" "$2" "${3:-}"
     rc=$?
     ((rc == 2)) || return "${rc}"
@@ -1572,6 +1589,7 @@ sem_release_once() { # name job [record] -> 0 released or nothing to release; 1 
 }
 
 sem_release_attempt() { # one read-plan-transact; 0 done, 2 lost the race
+  ensure_snapshot       # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local name="$1" job="$2" want="$3" i own_oid='' own_live=0 _j1 _j2 live_after slot_ref
   sem_read "${name}" || sem_missing "${name}"
   for i in "${!SLOT_JOBS[@]}"; do
@@ -1720,7 +1738,7 @@ cmd_sem() {
     delete)
       local attempt deleted=0 i mref gref sref
       for ((attempt = 0; attempt < RETRIES; attempt++)); do
-        SNAP_LOADED=0
+        snapshot
         sem_read "${name}" || sem_missing "${name}"
         if ((SEM_LIVE > 0)); then
           sem_refusal "${name}" live "${SEM_CAP}" "${SEM_LIVE}"

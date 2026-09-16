@@ -71,6 +71,36 @@ for line in sys.argv[2].splitlines():
   check "$1 validates against schema/git-locks.schema.json" "${rc}" "0"
 }
 
+jval() { # VAR JSON-LINE KEY: the raw JSON value of KEY at the top level of the first object that has it (string with quotes, number, array, literal), or empty
+  local line="$2" key="$3" val=''
+  if [[ "${line}" =~ \"${key}\":(\"([^\"\\]|\\.)*\"|-?[0-9]+|\[[^]]*\]|true|false|null) ]]; then
+    val="${BASH_REMATCH[1]}"
+  fi
+  printf -v "$1" '%s' "${val}"
+}
+
+jfields() { # label JSON-LINE key=value... : each key's raw JSON value equals the expectation, in any key order
+  local label="$1" line="$2" pair key want got ok=1 missing=''
+  shift 2
+  for pair in "$@"; do
+    key="${pair%%=*}"
+    want="${pair#*=}"
+    jval got "${line}" "${key}"
+    if [[ "${got}" != "${want}" ]]; then
+      ok=0
+      missing+=" ${key}: got ${got:-<absent>}, want ${want};"
+    fi
+  done
+  if ((ok)); then
+    PASS=$((PASS + 1))
+    printf '  ok   %s\n' "${label}"
+  else
+    FAIL=$((FAIL + 1))
+    FAILED+=("${label}")
+    printf '  FAIL %s\n       line: %q\n       mismatch:%s\n' "${label}" "${line}" "${missing}"
+  fi
+}
+
 jstr() { # VAR JSON-LINE KEY: the string value of KEY (first occurrence), or empty
   local line="$2" key="$3" val=''
   [[ "${line}" =~ \"${key}\":\"([^\"]*)\" ]] && val="${BASH_REMATCH[1]}"
@@ -105,7 +135,7 @@ cd "${R}" || exit 2
 out="$(git-locks claim --job j1 --holder alice notes/x.md 'briefs/2026-09-15/y z.md' 2>&1)"
 rc=$?
 check "claim exits 0" "${rc}" "0"
-contains "claim prints the holder" "${out}" '"holder":"alice"'
+jfields "claim prints the holder" "${out}" 'holder="alice"'
 got="$(refs "${R}" | wc -l | tr -d ' ')"
 check "claim writes one job ref and one ref per path" "${got}" "3"
 got="$(refs "${R}" jobs/)"
@@ -120,7 +150,7 @@ contains "check names the job" "${out}" "j1"
 out="$(git-locks check notes/free.md 2>&1)"
 rc=$?
 check "check on a free path exits 0" "${rc}" "0"
-contains "check says free" "${out}" '"state":"free"'
+jfields "check says free" "${out}" 'state="free"'
 
 out="$(git-locks check 'briefs/2026-09-15/y z.md' 2>&1)"
 check "a path with a space is held" "$?" "1"
@@ -168,7 +198,7 @@ check "release removes the job ref and its path refs" "${got}" "refs/locks/jobs/
 refs/locks/paths/${h}"
 out="$(git-locks release --job j1 2>&1)"
 check "release of a missing lock exits 0" "$?" "0"
-contains "release of a missing lock says so" "${out}" '"event":"nothing"'
+jfields "release of a missing lock says so" "${out}" 'event="nothing"'
 
 # ---------------------------------------------------------------- expiry
 
@@ -180,10 +210,10 @@ check "before expiry the path is held" "$?" "1"
 out="$(GIT_LOCKS_NOW=1200 git-locks check notes/e.md 2>&1)"
 rc=$?
 check "after expiry the path is free" "${rc}" "0"
-contains "after expiry check still names the expired holder" "${out}" '"state":"expired"'
+jfields "after expiry check still names the expired holder" "${out}" 'state="expired"'
 contains "after expiry check names who held it" "${out}" "bob"
 out="$(GIT_LOCKS_NOW=1200 git-locks list 2>&1)"
-contains "list marks the lock expired" "${out}" '"state":"expired"'
+jfields "list marks the lock expired" "${out}" 'state="expired"'
 out="$(GIT_LOCKS_NOW=1200 git-locks claim --job new --holder alice notes/e.md 2>&1)"
 check "a claim over an expired lock succeeds" "$?" "0"
 got="$(refs "${R}" jobs/)"
@@ -194,7 +224,7 @@ check "the new lock is held again" "$?" "1"
 GIT_LOCKS_NOW=1000 git-locks claim --job sweepme --holder bob --ttl 10 notes/s.md >/dev/null 2>&1
 out="$(GIT_LOCKS_NOW=5000 git-locks sweep 2>&1)"
 check "sweep exits 0" "$?" "0"
-contains "sweep names what it removed" "${out}" '"event":"swept","job":"sweepme"'
+jfields "sweep names what it removed" "${out}" 'event="swept"' 'job="sweepme"'
 got="$(refs "${R}" jobs/)"
 check "sweep removes only expired locks" "${got}" "refs/locks/jobs/new"
 
@@ -327,8 +357,8 @@ jsonl_ok() { python3 -c 'import json,sys; [json.loads(l) for l in sys.stdin if l
 out="$(git-locks claim --job jj --holder hh 'a b.md' c.md 2>&1)"
 lines n "${out}"
 check "claim is one JSON line" "${n}" "1"
-contains "claim line carries the event" "${out}" '"event":"claimed"'
-contains "claim line carries the paths as an array" "${out}" '"paths":["a b.md","c.md"]'
+jfields "claim line carries the event" "${out}" 'event="claimed"'
+jfields "claim line carries the paths as an array" "${out}" 'paths=["a b.md","c.md"]'
 jsonl_ok <<<"${out}" >/dev/null 2>&1
 check "claim line parses as JSON" "$?" "0"
 valid "claim line" "${out}"
@@ -338,7 +368,8 @@ check "check still exits 1 when a path is held" "$?" "1"
 lines n "${out}"
 check "check streams one line per path" "${n}" "3"
 contains "check line carries the path with its space" "${out}" '"path":"a b.md","state":"held","holder":"hh","job":"jj","expires":'
-contains "check reports the free path as free" "${out}" '{"path":"free.md","state":"free"}'
+line="$(grep -F '"path":"free.md"' <<<"${out}")"
+jfields "check reports the free path as free" "${line}" 'path="free.md"' 'state="free"'
 jsonl_ok <<<"${out}" >/dev/null 2>&1
 check "check lines parse as JSON" "$?" "0"
 valid "check lines (held and free)" "${out}"
@@ -346,7 +377,7 @@ valid "check lines (held and free)" "${out}"
 err="$(git-locks claim --job other --holder oo 'a b.md' c.md 2>&1 >/dev/null)"
 lines n "${err}"
 check "a refused claim streams one refusal line per held path on stderr" "${n}" "2"
-contains "refusal line names the holder" "${err}" '"event":"refused","path":"a b.md","holder":"hh","job":"jj"'
+jfields "refusal line names the holder" "${err}" 'event="refused"' 'path="a b.md"' 'holder="hh"' 'job="jj"'
 jsonl_ok <<<"${err}" >/dev/null 2>&1
 check "refusal lines parse as JSON" "$?" "0"
 valid "refusal lines" "${err}"
@@ -355,13 +386,13 @@ out="$(git-locks list 2>&1)"
 lines n "${out}"
 check "list streams one line per lock" "${n}" "1"
 contains "list line carries job, holder, state" "${out}" '{"job":"jj","holder":"hh","state":"live","claimed":'
-contains "list line carries the paths as an array" "${out}" '"paths":["a b.md","c.md"]'
+jfields "list line carries the paths as an array" "${out}" 'paths=["a b.md","c.md"]'
 jsonl_ok <<<"${out}" >/dev/null 2>&1
 check "list line parses as JSON" "$?" "0"
 valid "list line" "${out}"
 
 out="$(git-locks release --job jj 2>&1)"
-contains "release is one JSON line" "${out}" '{"event":"released","job":"jj","paths":2}'
+jfields "release is one JSON line" "${out}" 'event="released"' 'job="jj"' 'paths=2'
 valid "release line" "${out}"
 out="$(git-locks release --job jj 2>&1)"
 valid "release-nothing line" "${out}"
@@ -394,7 +425,7 @@ first="$( (
   git-locks check one.md two.md three.md 2>/dev/null
   true
 ) | head -n 1)"
-contains "the first check line is a complete object on its own" "${first}" '{"path":"one.md","state":"free"}'
+jfields "the first check line is a complete object on its own" "${first}" 'path="one.md"' 'state="free"'
 
 # ---------------------------------------------------------------- see everything: show, ttl, extend, remaining
 
@@ -403,14 +434,14 @@ cd "${R}" || exit 2
 GIT_LOCKS_NOW=1000 git-locks claim --job s1 --holder hs --ttl 500 one.md two.md >/dev/null 2>&1
 out="$(GIT_LOCKS_NOW=1100 git-locks show --job s1 2>&1)"
 check "show exits 0 for a live lock" "$?" "0"
-contains "show carries the state and remaining seconds" "${out}" '"job":"s1","holder":"hs","state":"live","claimed":1000,"expires":1500,"remaining":400,"paths":["one.md","two.md"]'
+jfields "show carries the state and remaining seconds" "${out}" 'job="s1"' 'holder="hs"' 'state="live"' 'claimed=1000' 'expires=1500' 'remaining=400' 'paths=["one.md","two.md"]'
 valid "show line" "${out}"
 out="$(GIT_LOCKS_NOW=2000 git-locks show --job s1 2>&1)"
 check "show exits 0 for an expired lock too" "$?" "0"
-contains "show reports expired with remaining 0" "${out}" '"state":"expired","claimed":1000,"expires":1500,"remaining":0'
+jfields "show reports expired with remaining 0" "${out}" 'state="expired"' 'claimed=1000' 'expires=1500' 'remaining=0'
 err="$(git-locks show --job nope 2>&1 >/dev/null)"
 check "show exits 1 for a missing lock" "$?" "1"
-contains "show missing is a JSON line on stderr" "${err}" '{"event":"missing","job":"nope"}'
+jfields "show missing is a JSON line on stderr" "${err}" 'event="missing"' 'job="nope"'
 valid "missing line" "${err}"
 
 out="$(GIT_LOCKS_NOW=1100 git-locks ttl --job s1 2>&1)"
@@ -422,20 +453,20 @@ check "ttl exits 1 for a missing lock" "$?" "1"
 
 out="$(GIT_LOCKS_NOW=1100 git-locks extend --job s1 --ttl 1000 2>&1)"
 check "extend exits 0" "$?" "0"
-contains "extend reports the new expiry" "${out}" '{"event":"extended","job":"s1","expires":2100}'
+jfields "extend reports the new expiry" "${out}" 'event="extended"' 'job="s1"' 'expires=2100'
 valid "extend line" "${out}"
 out="$(GIT_LOCKS_NOW=1100 git-locks ttl --job s1 2>&1)"
-contains "extend moved the expiry" "${out}" '"remaining":1000'
+jfields "extend moved the expiry" "${out}" 'remaining=1000'
 GIT_LOCKS_NOW=1100 git-locks check one.md >/dev/null 2>&1
 check "extend keeps every path held" "$?" "1"
 git-locks extend --job nope --ttl 5 >/dev/null 2>&1
 check "extend exits 1 for a missing lock" "$?" "1"
 
 out="$(GIT_LOCKS_NOW=1100 git-locks list 2>&1)"
-contains "list lines carry remaining seconds" "${out}" '"remaining":1000'
+jfields "list lines carry remaining seconds" "${out}" 'remaining=1000'
 valid "list line with remaining" "${out}"
 out="$(GIT_LOCKS_NOW=1100 git-locks check one.md 2>&1)"
-contains "check lines carry remaining seconds" "${out}" '"remaining":1000'
+jfields "check lines carry remaining seconds" "${out}" 'remaining=1000'
 valid "check line with remaining" "${out}"
 
 # ---------------------------------------------------------------- with: claim, run, release
@@ -445,13 +476,14 @@ cd "${R}" || exit 2
 out="$(git-locks with --job w1 --holder hw a.md -- sh -c 'git-locks check a.md; echo ran' 2>/dev/null)"
 rc=$?
 check "with exits with the command's status (0)" "${rc}" "0"
-contains "the command ran while the path was held" "${out}" '"path":"a.md","state":"held","holder":"hw","job":"w1"'
+jfields "the command ran while the path was held" "${out}" 'path="a.md"' 'state="held"' 'holder="hw"' 'job="w1"'
 contains "the command's stdout passes through untouched" "${out}" "ran"
 git-locks check a.md >/dev/null 2>&1
 check "with released the lock afterwards" "$?" "0"
 err="$(git-locks with --job w1 --holder hw a.md -- true 2>&1 >/dev/null)"
-contains "with reports its own claim on stderr, not stdout" "${err}" '"event":"claimed","job":"w1"'
-contains "with reports its release on stderr" "${err}" '"event":"released","job":"w1"'
+jfields "with reports its own claim on stderr, not stdout" "${err}" 'event="claimed"' 'job="w1"'
+line="$(grep -F '"event":"released"' <<<"${err}")"
+jfields "with reports its release on stderr" "${line}" 'event="released"' 'job="w1"'
 valid "with lifecycle lines" "${err}"
 git-locks with --job w2 --holder hw b.md -- sh -c 'exit 7' >/dev/null 2>&1
 check "with propagates a non-zero exit status" "$?" "7"
@@ -460,7 +492,7 @@ check "with releases even when the command fails" "$?" "0"
 git-locks claim --job holder --holder other c.md >/dev/null 2>&1
 err="$(git-locks with --job w3 --holder hw c.md -- echo never 2>&1 >/dev/null)"
 check "with exits 1 when the path is held and no --wait is given" "$?" "1"
-contains "with refusal names the holder" "${err}" '"event":"refused","path":"c.md","holder":"other","job":"holder"'
+jfields "with refusal names the holder" "${err}" 'event="refused"' 'path="c.md"' 'holder="other"' 'job="holder"'
 out="$(git-locks with --job w3 --holder hw c.md -- echo never 2>/dev/null)"
 check "the command never ran" "${out}" ""
 # --wait: the holder releases after one second; with polls and then runs.
@@ -505,20 +537,20 @@ cd "${R}" || exit 2
 git-locks claim --job parent --holder hp p.md >/dev/null 2>&1
 out="$(git-locks claim --job kid --parent parent --holder hp k.md 2>&1)"
 check "a child claim under a live parent by the same holder exits 0" "$?" "0"
-contains "the claim line carries the parent" "${out}" '"parent":"parent"'
+jfields "the claim line carries the parent" "${out}" 'parent="parent"'
 valid "claim line with parent" "${out}"
 out="$(git-locks show --job kid 2>&1)"
-contains "show carries the parent" "${out}" '"parent":"parent"'
+jfields "show carries the parent" "${out}" 'parent="parent"'
 valid "show line with parent" "${out}"
 out="$(git-locks list 2>&1)"
 valid "list lines with and without parent" "${out}"
 err="$(git-locks claim --job orphan --parent nope --holder hp o.md 2>&1 >/dev/null)"
 check "a child claim under a missing parent exits 1" "$?" "1"
-contains "the refusal names the missing parent" "${err}" '"event":"refused","reason":"parent","job":"orphan","parent":"nope","detail":"missing"'
+jfields "the refusal names the missing parent" "${err}" 'event="refused"' 'reason="parent"' 'job="orphan"' 'parent="nope"' 'detail="missing"'
 valid "parent refusal line" "${err}"
 err="$(git-locks claim --job stranger --parent parent --holder other s.md 2>&1 >/dev/null)"
 check "a child claim under another holder's parent exits 1" "$?" "1"
-contains "the refusal says the holder differs" "${err}" '"detail":"holder"'
+jfields "the refusal says the holder differs" "${err}" 'detail="holder"'
 got="$(refs "${R}" jobs/)"
 check "refused children leave no refs" "${got}" "refs/locks/jobs/kid
 refs/locks/jobs/parent"
@@ -529,7 +561,7 @@ git-locks claim --job kid --parent parent --holder hp k.md >/dev/null 2>&1
 git-locks claim --job grandkid --parent kid --holder hp g.md >/dev/null 2>&1
 out="$(git-locks release --job parent 2>&1)"
 check "releasing the parent exits 0" "$?" "0"
-contains "the release line counts the family" "${out}" '"event":"released","job":"parent","paths":3,"cascaded":["grandkid","kid"]'
+jfields "the release line counts the family" "${out}" 'event="released"' 'job="parent"' 'paths=3' 'cascaded=["grandkid","kid"]'
 valid "cascading release line" "${out}"
 got="$(refs "${R}")"
 check "releasing the parent removed every descendant, atomically" "${got}" ""
@@ -537,7 +569,7 @@ check "releasing the parent removed every descendant, atomically" "${got}" ""
 GIT_LOCKS_NOW=1000 git-locks claim --job oldp --holder hp --ttl 10 op.md >/dev/null 2>&1
 GIT_LOCKS_NOW=1000 git-locks claim --job livekid --parent oldp --holder hp --ttl 100000 lk.md >/dev/null 2>&1
 out="$(GIT_LOCKS_NOW=2000 git-locks sweep 2>&1)"
-contains "sweep of an expired parent names the child it took with it" "${out}" '"event":"swept","job":"oldp","holder":"hp","expires":1010,"cascaded":["livekid"]'
+jfields "sweep of an expired parent names the child it took with it" "${out}" 'event="swept"' 'job="oldp"' 'holder="hp"' 'expires=1010' 'cascaded=["livekid"]'
 valid "cascading sweep line" "${out}"
 got="$(refs "${R}" jobs/)"
 check "a live child does not outlive its swept parent" "${got}" ""
@@ -573,8 +605,9 @@ out="$(printf '%s' "${spec}" | git-locks batch 2>&1)"
 check "batch claims every lock in the spec, exit 0" "$?" "0"
 lines n "${out}"
 check "batch emits one claimed line per lock" "${n}" "2"
-contains "batch honoured the per-lock ttl" "${out}" '"job":"x","holder":"hx","claimed":1000000,"expires":1000100'
-contains "batch let a child name a parent claimed in the same batch, same holder" "${out}" '"job":"y","holder":"hx"'
+jfields "batch honoured the per-lock ttl" "${out}" 'job="x"' 'holder="hx"' 'claimed=1000000' 'expires=1000100'
+line="$(grep -F '"job":"y"' <<<"${out}")"
+jfields "batch let a child name a parent claimed in the same batch, same holder" "${line}" 'job="y"' 'holder="hx"'
 valid "batch claim lines" "${out}"
 got="$(refs "${R}" jobs/)"
 check "batch created both job refs" "${got}" "refs/locks/jobs/c
@@ -593,7 +626,7 @@ c.md
 '
 err="$(printf '%s' "${spec2}" | git-locks batch 2>&1 >/dev/null)"
 check "a batch with one held path is refused, exit 1" "$?" "1"
-contains "the batch refusal names the holder of the held path" "${err}" '"event":"refused","path":"c.md","holder":"h","job":"c"'
+jfields "the batch refusal names the holder of the held path" "${err}" 'event="refused"' 'path="c.md"' 'holder="h"' 'job="c"'
 git-locks check m.md >/dev/null 2>&1
 check "and the free path in that batch was not taken: none at all" "$?" "0"
 printf 'job: bad name\nholder: h\npaths:\nz.md\n' | git-locks batch >/dev/null 2>&1
@@ -628,7 +661,7 @@ check "the refusal says capacity, with the numbers" "${err}" '{"event":"refused"
 valid "capacity refusal line" "${err}"
 out="$(git-locks sem acquire gpu --job a --holder ha 2>&1)"
 check "re-acquiring a slot the job already holds exits 0 and does not consume another" "$?" "0"
-contains "re-acquire reports live unchanged" "${out}" '"live":2,"capacity":2'
+jfields "re-acquire reports live unchanged" "${out}" 'live=2' 'capacity=2'
 
 out="$(git-locks sem show gpu 2>&1)"
 check "sem show exits 0" "$?" "0"
@@ -636,7 +669,7 @@ contains "sem show carries capacity and live" "${out}" '{"semaphore":"gpu","capa
 contains "sem show lists each holder with remaining" "${out}" '{"job":"a","holder":"ha","claimed":1000000,"expires":1014400,"remaining":14400,"record":"'
 valid "sem show line" "${out}"
 out="$(git-locks sem list 2>&1)"
-contains "sem list streams one line per semaphore" "${out}" '{"semaphore":"gpu","capacity":2,"live":2'
+jfields "sem list streams one line per semaphore" "${out}" 'semaphore="gpu"' 'capacity=2' 'live=2'
 valid "sem list line" "${out}"
 
 out="$(git-locks sem release gpu --job a 2>&1)"
@@ -647,7 +680,7 @@ git-locks sem acquire gpu --job c --holder hc >/dev/null 2>&1
 check "the freed slot can be taken" "$?" "0"
 out="$(git-locks sem release gpu --job zzz 2>&1)"
 check "releasing a slot the job does not hold exits 0" "$?" "0"
-contains "and says nothing was held" "${out}" '{"event":"nothing","semaphore":"gpu","job":"zzz"}'
+jfields "and says nothing was held" "${out}" 'event="nothing"' 'semaphore="gpu"' 'job="zzz"'
 
 GIT_LOCKS_NOW=1000 git-locks sem create batch --capacity 1 >/dev/null 2>&1
 GIT_LOCKS_NOW=1000 git-locks sem acquire batch --job old --holder ho --ttl 10 >/dev/null 2>&1
@@ -655,7 +688,7 @@ GIT_LOCKS_NOW=1005 git-locks sem acquire batch --job new --holder hn >/dev/null 
 check "a live slot blocks at capacity" "$?" "1"
 out="$(GIT_LOCKS_NOW=2000 git-locks sem acquire batch --job new --holder hn 2>&1)"
 check "an expired slot frees its capacity" "$?" "0"
-contains "the expired slot was evicted, live is 1 not 2" "${out}" '"live":1,"capacity":1'
+jfields "the expired slot was evicted, live is 1 not 2" "${out}" 'live=1' 'capacity=1'
 out="$(GIT_LOCKS_NOW=2000 git-locks sem show batch 2>&1)"
 contains "show no longer lists the evicted job" "${out}" '"slots":[{"job":"new"'
 
@@ -682,16 +715,16 @@ for pid in "${pids[@]}"; do
 done
 check "twenty racers on capacity three: exactly three win" "${wins}" "3"
 out="$(git-locks sem show race 2>&1)"
-contains "and the semaphore agrees" "${out}" '"capacity":3,"live":3'
+jfields "and the semaphore agrees" "${out}" 'capacity=3' 'live=3'
 
 # with --sem: take a slot, run, release
 git-locks sem create pool --capacity 1 >/dev/null 2>&1
 out="$(git-locks with --sem pool --job w --holder hw -- sh -c 'git-locks sem show pool; echo ran' 2>/dev/null)"
 check "with --sem exits with the command's status" "$?" "0"
-contains "the slot was held while the command ran" "${out}" '"capacity":1,"live":1'
+jfields "the slot was held while the command ran" "${out}" 'capacity=1' 'live=1'
 contains "the command ran" "${out}" "ran"
 out="$(git-locks sem show pool 2>&1)"
-contains "with --sem released the slot afterwards" "${out}" '"live":0'
+jfields "with --sem released the slot afterwards" "${out}" 'live=0'
 git-locks sem acquire pool --job other --holder ho >/dev/null 2>&1
 git-locks with --sem pool --job w2 --holder hw -- echo never >/dev/null 2>&1
 check "with --sem at capacity exits 1 without --wait" "$?" "1"
@@ -762,7 +795,7 @@ git-locks sem create s --capacity 1 >/dev/null 2>&1
 GIT_LOCKS_NOW=1000 git-locks sem acquire s --job s1 --holder h --ttl 10 >/dev/null 2>&1
 out="$(GIT_LOCKS_NOW=2000 git-locks sem acquire s --job s1 --holder h 2>&1)"
 check "re-acquiring an expired slot under the same job id succeeds (one transition for that slot ref)" "$?" "0"
-contains "and reports one live slot" "${out}" '"live":1,"capacity":1'
+jfields "and reports one live slot" "${out}" 'live=1' 'capacity=1'
 
 # ---------------------------------------------------------------- MUST 1: a failed read is an error, never a free path; waits see releases
 
@@ -777,7 +810,7 @@ rc=$?
 err="$(PATH="${BROKEN}:${PATH}" git-locks check x.md 2>&1 >/dev/null)"
 check "a failed store read exits 2, not 0" "${rc}" "2"
 check "a failed store read prints no path line" "${out}" ""
-contains "a failed store read is a structured error line" "${err}" '{"event":"error","reason":"store-read"'
+jfields "a failed store read is a structured error line" "${err}" 'event="error"' 'reason="store-read"'
 valid "store-read error line" "${err}"
 
 git-locks sem create w --capacity 1 >/dev/null 2>&1
@@ -820,7 +853,7 @@ cy.md
 '
 err="$(printf '%s' "${spec}" | git-locks batch 2>&1 >/dev/null)"
 check "a batch child under a same-batch parent with a different holder is refused" "$?" "1"
-contains "the refusal says holder" "${err}" '"reason":"parent","job":"cy","parent":"px","detail":"holder"'
+jfields "the refusal says holder" "${err}" 'reason="parent"' 'job="cy"' 'parent="px"' 'detail="holder"'
 got="$(refs "${R}" jobs/)"
 check "and neither record landed" "${got}" ""
 
@@ -841,7 +874,7 @@ rec="$(printf '%s' "${out}" | sed -n 's/.*"record":"\([0-9a-f]*\)".*/\1/p')"
 git-locks claim --job build --holder B y.md >/dev/null 2>&1
 out="$(git-locks release --job build --record "${rec}" 2>&1)"
 check "release --record of a superseded acquisition exits 0 and releases nothing" "$?" "0"
-contains "and says so" "${out}" '"event":"nothing","job":"build","reason":"superseded"'
+jfields "and says so" "${out}" 'event="nothing"' 'job="build"' 'reason="superseded"'
 git-locks check y.md >/dev/null 2>&1
 check "B's acquisition under the same job name survives A's release" "$?" "1"
 git-locks with --job w --holder A z.md -- sh -c 'git-locks claim --job w --holder B other.md >/dev/null 2>&1' >/dev/null 2>&1
@@ -858,10 +891,10 @@ out="$(git-locks claim --job ctrl --holder "${ctrl}" a.md 2>&1)"
 check "a control character in a holder does not break the claim" "$?" "0"
 jsonl_ok <<<"${out}" >/dev/null 2>&1
 check "the claim line is still valid JSON (control characters escaped)" "$?" "0"
-contains "the escape is the JSON one" "${out}" '"holder":"h\u0001x"'
+jfields "the escape is the JSON one" "${out}" 'holder="h\u0001x"'
 err="$(git-locks claim --job bad --holder h --ttl nope a.md 2>&1 >/dev/null)"
 check "a usage failure still exits 2" "$?" "2"
-contains "a usage failure is a structured error line in JSON mode" "${err}" '{"event":"error","reason":"usage"'
+jfields "a usage failure is a structured error line in JSON mode" "${err}" 'event="error"' 'reason="usage"'
 valid "usage error line" "${err}"
 BROKEN2="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-broken2.XXXXXX")"
 printf '#!/usr/bin/env bash\nif [[ " $* " == *" update-ref "* ]]; then printf "fatal: injected\\nsecond line with \\"quotes\\"\\n" >&2; exit 128; fi\nexec "%s" "$@"\n' "${REAL_GIT}" >"${BROKEN2}/git"
@@ -911,10 +944,10 @@ changed=no
 check "extend changes the record oid" "${changed}" "yes"
 out="$(git-locks release --job ren --acquisition "${acq}" 2>&1)"
 check "release --acquisition after a renewal releases the lock" "$?" "0"
-contains "and reports it released" "${out}" '{"event":"released","job":"ren"'
+jfields "and reports it released" "${out}" 'event="released"' 'job="ren"'
 git-locks claim --job ren --holder B other.md >/dev/null 2>&1
 out="$(git-locks release --job ren --acquisition "${acq}" 2>&1)"
-contains "release --acquisition of a superseded acquisition releases nothing" "${out}" '"event":"nothing","job":"ren","reason":"superseded"'
+jfields "release --acquisition of a superseded acquisition releases nothing" "${out}" 'event="nothing"' 'job="ren"' 'reason="superseded"'
 git-locks check other.md >/dev/null 2>&1
 check "B's acquisition survives" "$?" "1"
 git-locks release --job ren >/dev/null 2>&1
@@ -951,6 +984,47 @@ wait "${rel}"
 check "the paused release still exits 0 after the renewal moved the record" "$?" "0"
 got="$(refs "${R}" jobs/)"
 check "and the renewed lock is gone: the release re-planned against the new record" "${got}" ""
+
+# ---------------------------------------------------------------- forced schedule: a waiter's stale read, then a release (#23)
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks sem create w3 --capacity 1 >/dev/null 2>&1
+git-locks sem acquire w3 --job holder --holder o >/dev/null 2>&1
+GATE3="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate3.XXXXXX")/go"
+TRACE3="$(mktemp "${TMPDIR:-/tmp}/git-locks-trace3.XXXXXX")"
+# The waiter reads (semaphore full), then pauses after that read. The holder releases. The gate opens.
+GIT_LOCKS_PAUSE_AFTER_READ="${GATE3}" GIT_LOCKS_TRACE="${TRACE3}" git-locks sem acquire w3 --job waiter --holder h --wait 20 >/tmp/gl-waiter.out 2>&1 &
+wpid=$!
+sleep 1
+git-locks sem release w3 --job holder >/dev/null 2>&1
+: >"${GATE3}"
+wait "${wpid}"
+check "the waiter acquires after the release it could not see at first" "$?" "0"
+out="$(cat /tmp/gl-waiter.out)"
+jfields "the waiter's line is a real acquisition" "${out}" 'event="acquired"' 'job="waiter"' 'live=1' 'capacity=1'
+reads="$(grep -c '^snapshot' "${TRACE3}")"
+check "the waiter took exactly two reads: the stale one it was paused on, and one fresh read that saw the release" "${reads}" "2"
+out="$(git-locks sem show w3 2>&1)"
+jfields "the semaphore holds one live slot, the waiter's" "${out}" 'live=1' 'capacity=1'
+
+# The same gate on a path lock: with --wait sees a release made after its stale read.
+git-locks claim --job blocker --holder o p3.md >/dev/null 2>&1
+GATE4="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate4.XXXXXX")/go"
+TRACE4="$(mktemp "${TMPDIR:-/tmp}/git-locks-trace4.XXXXXX")"
+GIT_LOCKS_PAUSE_AFTER_READ="${GATE4}" GIT_LOCKS_TRACE="${TRACE4}" git-locks with --job waiter2 --holder h --wait 20 p3.md -- sh -c "cp '${TRACE4}' '${TRACE4}.at-run'; echo ran" >/tmp/gl-waiter2.out 2>/dev/null &
+wpid=$!
+sleep 1
+git-locks release --job blocker >/dev/null 2>&1
+: >"${GATE4}"
+wait "${wpid}"
+check "with --wait runs its command after a release it could not see at first" "$?" "0"
+ran="$(cat /tmp/gl-waiter2.out)"
+check "and the command ran once" "${ran}" "ran"
+reads="$(grep -c '^snapshot' "${TRACE4}.at-run")"
+check "with took exactly two reads before running its command (the release afterwards is a third)" "${reads}" "2"
+git-locks check p3.md >/dev/null 2>&1
+check "with released its lock afterwards" "$?" "0"
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
