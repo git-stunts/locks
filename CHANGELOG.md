@@ -13,6 +13,16 @@ All notable changes to this project are recorded here. The format follows Keep a
 - The snapshot reads `cat-file --batch` output with `read -N` instead of slicing the captured text, which was quadratic in the store size. Measured on 500 locks (macOS, bash 5.3, same store, before and after): `list` 6.75 s to 0.58 s; `check` 0.87 s to 0.28 s; `show` 0.85 s to 0.25 s; `claim` about 1.0 s to 0.33 s. The 0.07 s figures the README carried for 0.3.x were not reproducible on that store and are withdrawn.
 - One clock reading per invocation (`now_v` caches it), so every `remaining` in one `list` is computed against the same instant.
 
+### Fixed
+
+- A `--ttl` with a leading zero was octal in arithmetic (`010` gave eight seconds; `08` failed); ttl values are decimal everywhere (`claim`, `batch`, `extend`, `sem acquire`, `with`).
+- Parsed record fields are stored whole, keyed by record and field name, so no byte in a holder can read as a field delimiter (the first cut of 0.4.0 joined them with control bytes). A holder is one line; `sem acquire` and `with` now refuse a newline in it as `claim` already did.
+- A `batch` record with only `parent:` or `ttl:` was skipped as empty and its parent leaked into the next record; it is malformed now.
+- `sweep` deletes only the record it saw expire: a lock renewed between its read and its transaction is left alone.
+- `with --sem` validates its arguments before acquiring anything, and arms its release traps before the first acquisition, so a signal during the wait for the path lock gives back the slot already taken.
+- `check` reads the clock in the parent shell, so `remaining` and `state` on one line agree.
+- `version` refuses extra arguments like every other command.
+
 ## [0.3.2] - 2026-09-16
 
 ### Fixed

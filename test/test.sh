@@ -1052,6 +1052,104 @@ GIT_LOCKS_TRACE="${TRACE5}" git-locks list >/dev/null 2>&1
 parses="$(grep -c '^parse' "${TRACE5}")"
 check "each record is parsed exactly once for a list (one parse line per blob in the trace)" "${parses}" "200"
 
+# ---------------------------------------------------------------- review of 0.4.0: ttl is decimal, a holder is one line stored whole, sweep never deletes a renewed lock
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(GIT_LOCKS_NOW=1000 git-locks claim --job oct --holder h --ttl 010 x.md 2>&1)"
+check "claim --ttl 010 is ten seconds, not octal eight" "$?" "0"
+out="$(GIT_LOCKS_NOW=1000 git-locks ttl --job oct 2>&1)"
+jfields "and the lock expires at now + 10" "${out}" 'expires=1010'
+GIT_LOCKS_NOW=1000 git-locks extend --job oct --ttl 020 >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=1000 git-locks ttl --job oct 2>&1)"
+jfields "extend --ttl 020 is twenty seconds" "${out}" 'expires=1020'
+out="$(GIT_LOCKS_NOW=1000 git-locks extend --job oct --ttl 08 2>&1)"
+check "extend --ttl 08 is eight seconds, not an arithmetic error" "$?" "0"
+out="$(GIT_LOCKS_NOW=1000 git-locks ttl --job oct 2>&1)"
+jfields "and expires at now + 8" "${out}" 'expires=1008'
+git-locks sem create o --capacity 1 >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=1000 git-locks sem acquire o --job s --holder h --ttl 010 2>&1)"
+check "sem acquire --ttl 010 is accepted" "$?" "0"
+out="$(GIT_LOCKS_NOW=1000 git-locks sem show o 2>&1)"
+contains "and the slot has ten seconds" "${out}" '"remaining":10'
+out="$(printf 'job: b\nholder: h\nttl: 010\npaths:\nb.md\n' | GIT_LOCKS_NOW=1000 git-locks batch 2>&1)"
+check "batch ttl: 010 is accepted" "$?" "0"
+out="$(GIT_LOCKS_NOW=1000 git-locks ttl --job b 2>&1)"
+jfields "and is ten seconds" "${out}" 'expires=1010'
+
+out="$(printf 'parent: oct\n' | git-locks batch 2>&1)"
+check "a batch record with only parent: is malformed, not silently dropped" "$?" "2"
+out="$(printf 'parent: oct\n\njob: k\nholder: h\npaths:\nk.md\n' | git-locks batch 2>&1)"
+check "and cannot leak its parent into the next record" "$?" "2"
+git-locks show --job k >/dev/null 2>&1
+check "so no lock k was made" "$?" "1"
+
+out="$(GIT_LOCKS_NOW=1000 git-locks claim --job ctl --holder $'a\x1eexpires: 5\x1fjob\x1e' --ttl 10 c1.md 2>&1)"
+check "a holder carrying bytes that look like field delimiters claims" "$?" "0"
+out="$(GIT_LOCKS_NOW=1000 git-locks show --job ctl 2>&1)"
+jfields "and cannot shadow a field: expires and job are the record's own" "${out}" 'expires=1010' 'job="ctl"' 'holder="a\u001eexpires: 5\u001fjob\u001e"'
+valid "a show line with control bytes in the holder" "${out}"
+out="$(git-locks claim --job ctl2 --holder $'two\nlines' c2.md 2>&1)"
+check "a holder with a newline is refused at claim" "$?" "2"
+out="$(git-locks sem acquire o --job ctl --holder $'a\nb' 2>&1)"
+check "a holder with a newline is refused at sem acquire" "$?" "2"
+out="$(git-locks sem acquire o --job ctl --holder $'a\rb' 2>&1)"
+check "and so is a carriage return" "$?" "2"
+out="$(git-locks with --job ctl2 --holder $'a\nb' c2.md -- true 2>&1)"
+check "and a newline at with" "$?" "2"
+git-locks check c2.md >/dev/null 2>&1
+check "none of those refusals left a lock behind" "$?" "0"
+
+out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks claim --job u --holder 'héloïse' 'café/naïve.md' 2>&1)"
+check "a non-ASCII holder and path claim under a UTF-8 locale" "$?" "0"
+out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks list 2>&1)"
+check "and list under that locale exits 0" "$?" "0"
+contains "with the holder intact" "${out}" '"holder":"héloïse"'
+contains "and the path intact" "${out}" '"paths":["café/naïve.md"]'
+valid "list lines with non-ASCII text" "${out}"
+out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks check 'café/naïve.md' 2>&1)"
+check "check sees it held" "$?" "1"
+
+out="$(git-locks with --job z --holder h --sem o --ttl 0 -- true 2>&1)"
+check "with --sem refuses --ttl 0 before acquiring anything" "$?" "2"
+out="$(git-locks sem show o 2>&1)"
+rc=0
+[[ "${out}" != *'"job":"z"'* ]] || rc=1
+check "and left no slot for it" "${rc}" "0"
+out="$(git-locks with --job z --holder h --sem 'bad name' -- true 2>&1)"
+check "with --sem validates the semaphore name" "$?" "2"
+
+# A signal while with waits for the path lock must release the slot it already took.
+git-locks sem create w1 --capacity 1 >/dev/null 2>&1
+git-locks claim --job blocker --holder o held.md >/dev/null 2>&1
+git-locks with --job waiter --holder h --sem w1 --wait 30 held.md -- true >/dev/null 2>&1 &
+wpid=$!
+sleep 2
+kill -TERM "${wpid}" 2>/dev/null
+wait "${wpid}" 2>/dev/null
+out="$(git-locks sem show w1 2>&1)"
+jfields "a TERM during the lock wait released the semaphore slot with had taken" "${out}" 'live=0'
+
+# sweep: a lock renewed between sweep's read and its transaction is not deleted.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+GIT_LOCKS_NOW=1000 git-locks claim --job renew --holder h --ttl 10 r.md >/dev/null 2>&1
+GATE6="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate6.XXXXXX")/go"
+GIT_LOCKS_NOW=2000 GIT_LOCKS_PAUSE_AFTER_READ="${GATE6}" git-locks sweep >/tmp/gl-sweep.out 2>&1 &
+spid=$!
+sleep 1
+GIT_LOCKS_NOW=2000 git-locks extend --job renew --ttl 100 >/dev/null 2>&1
+: >"${GATE6}"
+wait "${spid}"
+check "sweep exits 0 when the expired lock it saw was renewed underneath" "$?" "0"
+out="$(cat /tmp/gl-sweep.out)"
+check "and sweeps nothing" "${out}" ""
+out="$(GIT_LOCKS_NOW=2000 git-locks ttl --job renew 2>&1)"
+jfields "the renewed lock is still there with its new expiry" "${out}" 'expires=2100'
+
+out="$(git-locks version extra 2>&1)"
+check "version takes no arguments" "$?" "2"
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"

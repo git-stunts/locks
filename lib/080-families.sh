@@ -15,8 +15,8 @@ descendants() {   # job... -> DESC: every job whose parent chain reaches one of 
   local all_jobs=() all_parents=()
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
-    rjob="$(field "${oid}" job)"
-    rparent="$(field "${oid}" parent)"
+    field_v rjob "${oid}" job
+    field_v rparent "${oid}" parent
     all_jobs+=("${rjob}")
     all_parents+=("${rparent}")
   done <<<"${rows}"
@@ -79,7 +79,7 @@ plan_terminate() { # job -> plans the deletion of the job and every descendant; 
 
 new_acquisition() { # VAR: a fresh acquisition id. The record oid changes on every rewrite (renewal, family bump);
   local at          # this id does not, so a caller can name the acquisition it made across renewals.
-  at="$(now)"
+  now_v at
   printf -v "$1" '%s-%05d-%05d%05d' "${at}" "$$" "${RANDOM}" "${RANDOM}"
 }
 

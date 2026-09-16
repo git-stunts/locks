@@ -1,9 +1,9 @@
 # ---------------------------------------------------------------- extend
 
 cmd_extend() {
-  local _j1 oid jref at expires record new_oid paths p ref have claimed parent family attempt acq
+  local _j1 oid jref at expires record new_oid paths p ref have claimed parent family attempt acq ttl
   job_arg "$@"
-  [[ "${TTL_ARG}" =~ ^[0-9]+$ && "${TTL_ARG}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
+  valid_ttl ttl "${TTL_ARG}" || fail '--ttl is a positive number of seconds' 2
   jref="$(job_ref "${JOB_ARG}")"
   for ((attempt = 0; attempt < RETRIES; attempt++)); do
     snapshot
@@ -11,8 +11,8 @@ cmd_extend() {
     oid="$(ref_oid "${jref}")"
     [[ -n "${oid}" ]] || missing "${JOB_ARG}"
     describe "${oid}"
-    at="$(now)"
-    expires=$((at + TTL_ARG))
+    now_v at
+    expires=$((at + ttl))
     paths="$(record_paths "${oid}")"
     claimed="$(field "${oid}" claimed)"
     parent="$(field "${oid}" parent)"

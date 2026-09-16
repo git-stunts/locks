@@ -9,13 +9,14 @@
 
 declare -A REF_OID=()  # ref -> oid
 declare -A BLOB=()     # oid -> record text
-declare -A R_FIELDS=() # oid -> "key\x1fvalue\x1e..." for the header lines before paths:
+declare -A R_PARSED=() # oid -> 1 once parsed
+declare -A R_FIELD=()  # "oid key" -> value, for the header lines before paths: (first occurrence wins); values are stored whole, so no byte in one can read as a delimiter
 declare -A R_PATHS=()  # oid -> the path lines, newline separated
 SNAP_LOADED=0
 
-parse_record() { # oid -> fills R_FIELDS[oid] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
-  [[ -n "${R_FIELDS[$1]+x}" ]] && return 0
-  local text="${BLOB[$1]:-}" line fields='' paths='' in_paths=0
+parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
+  [[ -n "${R_PARSED[$1]+x}" ]] && return 0
+  local text="${BLOB[$1]:-}" line key paths='' in_paths=0
   while [[ -n "${text}" ]]; do
     line="${text%%$'\n'*}"
     if [[ "${line}" == "${text}" ]]; then text=''; else text="${text#*$'\n'}"; fi
@@ -24,10 +25,11 @@ parse_record() { # oid -> fills R_FIELDS[oid] and R_PATHS[oid] from BLOB[oid], o
     elif [[ "${line}" == 'paths:' ]]; then
       in_paths=1
     elif [[ "${line}" == *': '* ]]; then
-      fields+="${line%%: *}"$'\x1f'"${line#*: }"$'\x1e'
+      key="${line%%: *}"
+      [[ -n "${R_FIELD["$1 ${key}"]+x}" ]] || R_FIELD["$1 ${key}"]="${line#*: }"
     fi
   done
-  R_FIELDS["$1"]="${fields}"
+  R_PARSED["$1"]=1
   R_PATHS["$1"]="${paths%$'\n'}"
   [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'parse %s\n' "$1" >>"${GIT_LOCKS_TRACE}"
   return 0
@@ -69,7 +71,8 @@ snapshot() {
   fi
   REF_OID=()
   BLOB=()
-  R_FIELDS=()
+  R_PARSED=()
+  R_FIELD=()
   R_PATHS=()
   for ref in "${!refs[@]}"; do REF_OID["${ref}"]="${refs[${ref}]}"; done
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
@@ -98,16 +101,7 @@ ref_oid() { # ref -> oid or empty
 field_v() { # VAR oid key: set VAR to the value of `key:` in the record's header (before paths:), empty when absent; no fork, so the parse memoises in this shell
   ensure_snapshot
   parse_record "$2"
-  local fields="${R_FIELDS[$2]:-}" rest
-  if [[ "${fields}" == "$3"$'\x1f'* ]]; then
-    rest="${fields#"$3"$'\x1f'}"
-  elif [[ "${fields}" == *$'\x1e'"$3"$'\x1f'* ]]; then
-    rest="${fields#*$'\x1e'"$3"$'\x1f'}"
-  else
-    printf -v "$1" ''
-    return 0
-  fi
-  printf -v "$1" '%s' "${rest%%$'\x1e'*}"
+  printf -v "$1" '%s' "${R_FIELD["$2 $3"]:-}"
 }
 
 field() { # oid key -> the value on stdout; inside $(…) the parse happens in the subshell, so hot paths use field_v

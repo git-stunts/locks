@@ -32,6 +32,15 @@ job_ref() { printf '%s/jobs/%s' "${NS}" "$1"; }
 
 valid_job() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
+valid_holder() { [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one line: the record is line-oriented; any other byte is stored whole and escaped on output
+
+valid_ttl() { # VAR value: VAR = the value as a decimal number of seconds; 1 unless it is digits only and positive (010 is ten, never octal eight)
+  [[ "$2" =~ ^[0-9]+$ ]] || return 1
+  local _vt=$((10#$2))
+  ((_vt > 0)) || return 1
+  printf -v "$1" '%s' "${_vt}"
+}
+
 valid_oid() { [[ "$1" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; }
 
 path_error() { # detail -> a usage error line on stderr (the caller returns 2)

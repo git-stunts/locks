@@ -22,6 +22,7 @@ main() {
       exit 0
       ;;
     version | --version)
+      (($# == 0)) || usage
       printf '{"name":"git-locks","version":"%s"}\n' "${VERSION}"
       exit 0
       ;;

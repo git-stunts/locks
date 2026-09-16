@@ -21,7 +21,7 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
   while IFS= read -r n; do [[ -n "${n}" ]] && wanted+=("${n}"); done <<<"${sorted}"
 
   local at expires
-  at="$(now)"
+  now_v at
   expires=$((at + ttl))
 
   # The parent, if any: live and the same holder, whether it exists already or is planned earlier in this batch.
@@ -88,8 +88,8 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
       }
       continue
     fi
-    rjob="$(field "${cur}" job)"
-    rexp="$(field "${cur}" expires)"
+    field_v rjob "${cur}" job
+    field_v rexp "${cur}" expires
     if [[ "${rjob}" == "${job}" ]]; then
       plan_set "${ref}" "${cur}" "${new_oid}" || {
         duplicate_refusal "${p}"
@@ -130,7 +130,7 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
     path_ref ref "${p}"
     cur="$(ref_oid "${ref}")"
     [[ -z "${cur}" ]] && continue
-    rjob="$(field "${cur}" job)"
+    field_v rjob "${cur}" job
     in_list "${rjob}" "${evict[@]}" || continue
     T_AFTER["${ref}"]="${new_oid}" # planned as a delete by plan_terminate; the path passes to the new lock instead
   done
@@ -225,8 +225,8 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
   done
   [[ -n "${CA_JOB}" && -n "${CA_HOLDER}" ]] || usage
   valid_job "${CA_JOB}" || fail "job id '${CA_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-  [[ "${CA_TTL}" =~ ^[0-9]+$ && "${CA_TTL}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
-  [[ "${CA_HOLDER}" == *$'\n'* ]] && fail 'holder must be one line' 2
+  valid_ttl CA_TTL "${CA_TTL}" || fail '--ttl is a positive number of seconds' 2
+  valid_holder "${CA_HOLDER}" || fail 'holder must be one line' 2
   ((${#CA_PATHS[@]} > 0)) || usage
 }
 
