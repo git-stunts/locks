@@ -4,6 +4,12 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-16
+
+### Added
+
+- `--note <text>` on `claim` and `with`, and `note:` in a batch record: one line saying why the lock is held (#8). It is stored in the record and carried on every line that names the lock: the claim line, `show`, `list`, `check` on a held or expired path, and the refusal another claimant gets, which can now read "held by alice: building the release bundle" rather than just "held by alice". `extend` and a child admission keep it. Optional in the schema; absent when none was given.
+
 ## [0.5.0] - 2026-09-16
 
 ### Added

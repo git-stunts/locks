@@ -34,6 +34,8 @@ valid_job() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
 valid_holder() { [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one line: the record is line-oriented; any other byte is stored whole and escaped on output
 
+valid_note() { [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one line; empty means no note
+
 valid_ttl() { # VAR value: VAR = the value as a decimal number of seconds; 1 unless it is digits only and positive (010 is ten, never octal eight)
   [[ "$2" =~ ^[0-9]+$ ]] || return 1
   local _vt=$((10#$2))

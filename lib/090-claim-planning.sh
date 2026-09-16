@@ -8,10 +8,10 @@ CLAIM_LINE=''
 TERMINATED_PATHS=0
 TERMINATED_CASCADE='[]'
 
-plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM_LINE/CLAIM_OID; CONFLICTS=1 on refusal
+plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets CLAIM_LINE/CLAIM_OID; CONFLICTS=1 on refusal
   ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
-  local job="$1" holder="$2" ttl="$3" parent="$4"
-  shift 4
+  local job="$1" holder="$2" ttl="$3" parent="$4" note="$5"
+  shift 5
   local paths=("$@") p n norm=() sorted wanted=()
   for p in "${paths[@]}"; do
     n="$(normalize_path "${p}")" || exit 2
@@ -69,7 +69,7 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
   local record new_oid acq joined
   new_acquisition acq
   joined="$(printf '%s\n' "${wanted[@]}")"
-  record_text record "${job}" "${holder}" "${at}" "${expires}" "${parent}" "${old_family:-0}" "${acq}" "${joined}"
+  record_text record "${job}" "${holder}" "${at}" "${expires}" "${parent}" "${old_family:-0}" "${acq}" "${joined}" "${note}"
   write_blob new_oid "${record}" || fail 'could not write the lock record'
 
   local evict=() ref cur rjob rexp
@@ -137,7 +137,7 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
 
   BATCH_JOBS+=("${job}")
   BATCH_HOLDER["${job}"]="${holder}"
-  local jpaths _j1 _j2 _j3 _j4 pj=''
+  local jpaths _j1 _j2 _j3 _j4 pj='' nj=''
   json_paths jpaths < <(printf '%s\n' "${wanted[@]}")
   json_str _j1 "${job}"
   json_str _j2 "${holder}"
@@ -147,7 +147,11 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
     json_str pj "${parent}"
     pj=",\"parent\":${pj}"
   fi
-  CLAIM_LINE="{\"event\":\"claimed\",\"job\":${_j1},\"holder\":${_j2},\"claimed\":${at},\"expires\":${expires}${pj},\"paths\":${jpaths},\"record\":${_j3},\"acquisition\":${_j4}}"
+  if [[ -n "${note}" ]]; then
+    json_str nj "${note}"
+    nj=",\"note\":${nj}"
+  fi
+  CLAIM_LINE="{\"event\":\"claimed\",\"job\":${_j1},\"holder\":${_j2}${nj},\"claimed\":${at},\"expires\":${expires}${pj},\"paths\":${jpaths},\"record\":${_j3},\"acquisition\":${_j4}}"
   return 0
 }
 
@@ -183,11 +187,12 @@ commit_plan() { # -> 0 committed; 1 lost a race (refusals printed)
   return 1
 }
 
-claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT CA_PATHS
+claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT CA_NOTE CA_PATHS
   CA_JOB=''
   CA_HOLDER=''
   CA_TTL="${DEFAULT_TTL}"
   CA_PARENT=''
+  CA_NOTE=''
   CA_PATHS=()
   while (($# > 0)); do
     case "$1" in
@@ -211,6 +216,11 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
         CA_PARENT="$2"
         shift 2
         ;;
+      --note)
+        [[ $# -ge 2 ]] || usage
+        CA_NOTE="$2"
+        shift 2
+        ;;
       --)
         shift
         CA_PATHS+=("$@")
@@ -227,13 +237,14 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
   valid_job "${CA_JOB}" || fail "job id '${CA_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   valid_ttl CA_TTL "${CA_TTL}" || fail '--ttl is a positive number of seconds' 2
   valid_holder "${CA_HOLDER}" || fail 'holder must be one line' 2
+  valid_note "${CA_NOTE}" || fail '--note must be one line' 2
   ((${#CA_PATHS[@]} > 0)) || usage
 }
 
 cmd_claim() {
   claim_args "$@"
   plan_reset
-  plan_claim "${CA_JOB}" "${CA_HOLDER}" "${CA_TTL}" "${CA_PARENT}" "${CA_PATHS[@]}"
+  plan_claim "${CA_JOB}" "${CA_HOLDER}" "${CA_TTL}" "${CA_PARENT}" "${CA_NOTE}" "${CA_PATHS[@]}"
   ((CONFLICTS)) && exit 1
   commit_plan || exit 1
   printf '%s\n' "${CLAIM_LINE}"

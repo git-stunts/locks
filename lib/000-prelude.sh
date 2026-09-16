@@ -60,13 +60,13 @@ DEFAULT_TTL=14400
 SCHEMA='git-locks/1'
 SEM_SCHEMA='git-locks-sem/1'
 SLOT_SCHEMA='git-locks-slot/1'
-VERSION='0.5.0'
+VERSION='0.6.0'
 RETRIES=200   # a plan refused for a stale expectation is re-read and re-planned this many times
 NOW_CACHED='' # the clock, read once per invocation by now()
 
 usage_text() {
   cat <<'EOF'
-usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] <path>...
+usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] [--note <text>] <path>...
        git locks batch   < records        several claims in ONE transaction, all or nothing
        git locks release --job <id> [--record <oid> | --acquisition <id>] [--job <id>...]
        git locks check   <path>...
@@ -76,7 +76,7 @@ usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent 
        git locks show    --job <id>
        git locks ttl     --job <id>
        git locks extend  --job <id> --ttl <seconds>
-       git locks with    --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [<path>...] -- <command>...
+       git locks with    --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--note <text>] [<path>...] -- <command>...
        git locks sem     create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]
                                   | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>
        git locks doctor
@@ -86,7 +86,9 @@ usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent 
 claim    lock the paths for the job, atomically; re-claiming with the same job replaces its path set and
          its record; --parent makes it a child: the parent must be live and held by the same holder, and the
          child is released or swept with it. The claim line carries the record id of this acquisition.
-batch    read lock records on stdin (blank-line separated: job:, holder:, ttl:, parent:, paths: then
+         --note is one line saying why, carried on every line that names the lock: a refusal reads
+         'held by alice: building the release bundle' instead of just 'held by alice'
+batch    read lock records on stdin (blank-line separated: job:, holder:, ttl:, parent:, note:, paths: then
          one path per line) and claim them all in one transaction, or none
 release  drop the named jobs' locks and all their descendants, in one transaction; --acquisition releases
          only if the job's current record belongs to that acquisition (an id that survives extend), --record
@@ -143,7 +145,7 @@ sub_usage() { # subcommand -> its usage as a usage object on stdout
 
 sub_usage_text() {
   case "$1" in
-    claim) printf 'usage: git locks claim --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] <path>...\n' ;;
+    claim) printf 'usage: git locks claim --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] [--note <text>] <path>...\n' ;;
     batch) printf 'usage: git locks batch < records\n' ;;
     release) printf 'usage: git locks release --job <id> [--record <oid> | --acquisition <id>] [--job <id>...]\n' ;;
     check) printf 'usage: git locks check <path>...\n' ;;
@@ -153,7 +155,7 @@ sub_usage_text() {
     show) printf 'usage: git locks show --job <id>\n' ;;
     ttl) printf 'usage: git locks ttl --job <id>\n' ;;
     extend) printf 'usage: git locks extend --job <id> --ttl <seconds>\n' ;;
-    with) printf 'usage: git locks with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [<path>...] -- <command>...\n' ;;
+    with) printf 'usage: git locks with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--note <text>] [<path>...] -- <command>...\n' ;;
     doctor) printf 'usage: git locks doctor\n' ;;
     sem) printf 'usage: git locks sem create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>] | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>\n' ;;
     *) usage_text ;;

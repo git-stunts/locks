@@ -1319,6 +1319,65 @@ jfields "the renewed lock is still there with its new expiry" "${out}" 'expires=
 out="$(git-locks version extra 2>&1)"
 check "version takes no arguments" "$?" "2"
 
+# ---------------------------------------------------------------- #8: a note on a claim, carried wherever the lock is named
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(git-locks claim --job rel --holder alice --note 'building the release bundle' dist/a.js 2>&1)"
+check "claim --note exits 0" "$?" "0"
+jfields "the claim line carries the note" "${out}" 'note="building the release bundle"'
+valid "claim line with a note" "${out}"
+out="$(git-locks show --job rel 2>&1)"
+jfields "show carries the note" "${out}" 'note="building the release bundle"'
+valid "show line with a note" "${out}"
+out="$(git-locks list 2>&1)"
+jfields "list carries the note" "${out}" 'note="building the release bundle"'
+out="$(git-locks check dist/a.js 2>&1)"
+jfields "check on the held path carries the note beside the holder" "${out}" 'state="held"' 'holder="alice"' 'note="building the release bundle"'
+valid "check line with a note" "${out}"
+err="$(git-locks claim --job other --holder bob dist/a.js 2>&1 >/dev/null)"
+check "another job's claim is refused" "$?" "1"
+jfields "and the refusal says why the path is held" "${err}" 'holder="alice"' 'job="rel"' 'note="building the release bundle"'
+valid "refusal line with a note" "${err}"
+git-locks extend --job rel --ttl 500 >/dev/null 2>&1
+out="$(git-locks show --job rel 2>&1)"
+jfields "extend keeps the note" "${out}" 'note="building the release bundle"'
+git-locks claim --job rel-child --holder alice --parent rel dist/b.js >/dev/null 2>&1
+out="$(git-locks show --job rel 2>&1)"
+jfields "a child admission keeps the parent's note through the family bump" "${out}" 'note="building the release bundle"'
+out="$(git-locks show --job rel-child 2>&1)"
+rc=0
+[[ "${out}" != *'"note"'* ]] || rc=1
+check "the child, claimed without a note, has none" "${rc}" "0"
+
+out="$(printf 'job: bt\nholder: alice\nnote: from a batch\npaths:\nbt.md\n' | git-locks batch 2>&1)"
+check "batch accepts a note: line" "$?" "0"
+jfields "and the claim line carries it" "${out}" 'note="from a batch"'
+out="$(git-locks with --job w --holder alice --note 'inside with' w.md -- git-locks check w.md 2>/dev/null)"
+check "with --note runs the command" "$?" "1"
+jfields "and the lock it held carried the note" "${out}" 'state="held"' 'note="inside with"'
+
+out="$(git-locks claim --job nl --holder alice --note $'two\nlines' nl.md 2>&1)"
+check "a note with a newline is refused" "$?" "2"
+git-locks check nl.md >/dev/null 2>&1
+check "and left no lock" "$?" "0"
+out="$(git-locks claim --job plain --holder alice plain.md 2>&1)"
+rc=0
+[[ "${out}" != *'"note"'* ]] || rc=1
+check "a claim without --note has no note key" "${rc}" "0"
+out="$(git-locks check plain.md 2>&1)"
+rc=0
+[[ "${out}" != *'"note"'* ]] || rc=1
+check "nor does its check line" "${rc}" "0"
+out="$(git-locks claim --job empty --holder alice --note '' e.md 2>&1)"
+check "an empty --note is accepted as no note" "$?" "0"
+rc=0
+[[ "${out}" != *'"note"'* ]] || rc=1
+check "and prints no note key" "${rc}" "0"
+out="$(git-locks claim --job q --holder alice --note 'say "hi"' q.md 2>&1)"
+jfields "a note is JSON-escaped" "${out}" 'note="say \"hi\""'
+valid "claim line with a quoted note" "${out}"
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"

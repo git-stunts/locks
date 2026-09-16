@@ -138,9 +138,18 @@ D_JOB=''
 D_EXPIRES=0
 D_REMAINING=0
 D_STATE=''
+D_NOTE=''
+D_NOTE_JSON='' # ',"note":<json>' when the record has one, else empty: splice it after the holder
 
-describe() { # oid -> D_HOLDER D_JOB D_EXPIRES D_REMAINING D_STATE; no fork
+describe() { # oid -> D_HOLDER D_JOB D_EXPIRES D_REMAINING D_STATE D_NOTE D_NOTE_JSON; no fork
   field_v D_HOLDER "$1" holder
+  field_v D_NOTE "$1" note
+  D_NOTE_JSON=''
+  if [[ -n "${D_NOTE}" ]]; then
+    local _dn
+    json_str _dn "${D_NOTE}"
+    D_NOTE_JSON=",\"note\":${_dn}"
+  fi
   field_v D_JOB "$1" job
   local exp at
   field_v exp "$1" expires

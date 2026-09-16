@@ -5,7 +5,7 @@ refusal() { # path, after describe(): one refusal line on stderr
   json_str _j1 "$1"
   json_str _j2 "${D_HOLDER}"
   json_str _j3 "${D_JOB}"
-  printf '{"event":"refused","path":%s,"holder":%s,"job":%s,"expires":%s}\n' "${_j1}" "${_j2}" "${_j3}" "${D_EXPIRES}" >&2
+  printf '{"event":"refused","path":%s,"holder":%s%s,"job":%s,"expires":%s}\n' "${_j1}" "${_j2}" "${D_NOTE_JSON}" "${_j3}" "${D_EXPIRES}" >&2
 }
 
 parent_refusal() { # child parent detail
