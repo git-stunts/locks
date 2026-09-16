@@ -46,7 +46,7 @@ plan_lines() { # -> update-ref stdin lines, one per ref, in plan order
     before="${T_BEFORE[${ref}]}"
     after="${T_AFTER[${ref}]}"
     if [[ "${after}" == '=' ]]; then
-      [[ -n "${before}" ]] && printf 'verify %s %s\n' "${ref}" "${before}"
+      if [[ -n "${before}" ]]; then printf 'verify %s %s\n' "${ref}" "${before}"; else printf 'verify %s\n' "${ref}"; fi # no old value: the ref must not exist
     elif [[ -z "${after}" ]]; then
       [[ -n "${before}" ]] && printf 'delete %s %s\n' "${ref}" "${before}"
     elif [[ -z "${before}" ]]; then

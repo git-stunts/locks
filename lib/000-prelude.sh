@@ -60,7 +60,7 @@ DEFAULT_TTL=14400
 SCHEMA='git-locks/1'
 SEM_SCHEMA='git-locks-sem/1'
 SLOT_SCHEMA='git-locks-slot/1'
-VERSION='0.6.0'
+VERSION='0.7.0'
 RETRIES=200   # a plan refused for a stale expectation is re-read and re-planned this many times
 NOW_CACHED='' # the clock, read once per invocation by now()
 
@@ -87,13 +87,15 @@ claim    lock the paths for the job, atomically; re-claiming with the same job r
          its record; --parent makes it a child: the parent must be live and held by the same holder, and the
          child is released or swept with it. The claim line carries the record id of this acquisition.
          --note is one line saying why, carried on every line that names the lock: a refusal reads
-         'held by alice: building the release bundle' instead of just 'held by alice'
+         'held by alice: building the release bundle' instead of just 'held by alice'. A path ending
+         in / is a prefix: dist/ covers every path under it and is covered by any lock under it
 batch    read lock records on stdin (blank-line separated: job:, holder:, ttl:, parent:, note:, paths: then
          one path per line) and claim them all in one transaction, or none
 release  drop the named jobs' locks and all their descendants, in one transaction; --acquisition releases
          only if the job's current record belongs to that acquisition (an id that survives extend), --record
          only if the record oid is exactly that one
-check    who holds each path, with the seconds left; exit 1 if any is held
+check    who holds each path, with the seconds left; exit 1 if any is held. A path covered by a prefix
+         lock, or a prefix with a lock under it, is held via that other path
 list     every lock, live or expired, with its paths and the seconds left
 sweep    delete expired locks, each with its descendants
 store    print the store this directory resolves to

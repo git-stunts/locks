@@ -107,11 +107,19 @@ jstr() { # VAR JSON-LINE KEY: the string value of KEY (first occurrence), or emp
   printf -v "$1" '%s' "${val}"
 }
 
-refs() { # subject-repo [prefix] -> refs in whatever store resolves for it
+refs() { # subject-repo [prefix] -> refs in whatever store resolves for it; directory tokens (refs/locks/dirs/, not locks) are left out unless asked for
   local store line
   line="$(cd "$1" && git-locks store)" || return 1
   jstr store "${line}" store
-  git --git-dir="${store}" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | sort
+  git --git-dir="${store}" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | grep -v '^refs/locks/dirs/' | sort
+  return 0
+}
+
+dir_tokens() { # subject-repo -> the number of directory token refs
+  local store line
+  line="$(cd "$1" && git-locks store)" || return 1
+  jstr store "${line}" store
+  git --git-dir="${store}" for-each-ref --format='%(refname)' 'refs/locks/dirs/' | wc -l | tr -d ' '
 }
 
 export GIT_LOCKS_NOW=1000000
@@ -915,7 +923,7 @@ check "dir//file.md names the same path as dir/file.md" "$?" "1"
 git-locks check 'dir/./file.md' >/dev/null 2>&1
 check "dir/./file.md names the same path as dir/file.md" "$?" "1"
 git-locks check 'dir/file.md/' >/dev/null 2>&1
-check "a trailing slash is stripped" "$?" "1"
+check "a trailing slash is a prefix, not the same key: dir/file.md/ asks about paths under dir/file.md, and none is held" "$?" "0"
 
 # ---------------------------------------------------------------- acquisition identity survives renewal (review MUST 4, second half)
 
@@ -1377,6 +1385,149 @@ check "and prints no note key" "${rc}" "0"
 out="$(git-locks claim --job q --holder alice --note 'say "hi"' q.md 2>&1)"
 jfields "a note is JSON-escaped" "${out}" 'note="say \"hi\""'
 valid "claim line with a quoted note" "${out}"
+
+# ---------------------------------------------------------------- #6: prefix locks
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(git-locks claim --job build --holder alice dist/ 2>&1)"
+check "a claim on dist/ exits 0" "$?" "0"
+jfields "and the claim line keeps the trailing slash: the path is a prefix" "${out}" 'paths=["dist/"]'
+err="$(git-locks claim --job other --holder bob dist/a.js 2>&1 >/dev/null)"
+check "a claim on dist/a.js by another job is refused: dist/ covers it" "$?" "1"
+jfields "the refusal names the holder, the job and the prefix that covers the path" "${err}" 'path="dist/a.js"' 'holder="alice"' 'job="build"' 'via="dist/"'
+valid "refusal line with via" "${err}"
+git-locks show --job other >/dev/null 2>&1
+check "and nothing landed for the loser" "$?" "1"
+out="$(git-locks check dist/a.js 2>&1)"
+check "check dist/a.js is held" "$?" "1"
+jfields "and says which prefix holds it" "${out}" 'state="held"' 'job="build"' 'via="dist/"'
+valid "check line with via" "${out}"
+out="$(git-locks check dist/ 2>&1)"
+check "check dist/ is held, by the prefix lock itself" "$?" "1"
+rc=0
+[[ "${out}" != *'"via"'* ]] || rc=1
+check "with no via: the path asked about is the lock's own" "${rc}" "0"
+git-locks check dist >/dev/null 2>&1
+check "check dist (no slash) is free: a prefix covers what is under it, not the directory entry itself" "$?" "0"
+git-locks check other/a.js >/dev/null 2>&1
+check "a path elsewhere is free" "$?" "0"
+out="$(git-locks claim --job build --holder alice dist/ dist/a.js 2>&1)"
+check "the same job may claim under its own prefix" "$?" "0"
+git-locks release --job build >/dev/null 2>&1
+
+# The other direction: a prefix claim over a held path.
+git-locks claim --job a --holder alice src/x.md >/dev/null 2>&1
+err="$(git-locks claim --job b --holder bob src/ 2>&1 >/dev/null)"
+check "a claim on src/ while src/x.md is held by another job is refused" "$?" "1"
+jfields "the refusal names the held path under the prefix" "${err}" 'path="src/"' 'job="a"' 'via="src/x.md"'
+out="$(git-locks check src/ 2>&1)"
+check "check src/ is held" "$?" "1"
+jfields "via the held path under it" "${out}" 'via="src/x.md"'
+git-locks claim --job c --holder carol s/ >/dev/null 2>&1
+check "s/ is not a prefix of src/x.md: a sibling prefix claims" "$?" "0"
+git-locks claim --job d --holder dan srcs/y.md >/dev/null 2>&1
+check "srcs/y.md is not under src/: it claims" "$?" "0"
+git-locks release --job a --job c --job d >/dev/null 2>&1
+
+# Nested prefixes conflict both ways, across jobs.
+git-locks claim --job outer --holder alice a/ >/dev/null 2>&1
+err="$(git-locks claim --job inner --holder bob a/b/ 2>&1 >/dev/null)"
+check "a/b/ under a held a/ is refused" "$?" "1"
+jfields "via a/" "${err}" 'via="a/"'
+git-locks release --job outer >/dev/null 2>&1
+git-locks claim --job inner --holder bob a/b/ >/dev/null 2>&1
+err="$(git-locks claim --job outer --holder alice a/ 2>&1 >/dev/null)"
+check "a/ over a held a/b/ is refused" "$?" "1"
+jfields "via a/b/" "${err}" 'via="a/b/"'
+git-locks release --job inner >/dev/null 2>&1
+
+# Expired locks in the way are evicted, in either direction.
+GIT_LOCKS_NOW=1000 git-locks claim --job old --holder alice --ttl 10 src/y.md >/dev/null 2>&1
+GIT_LOCKS_NOW=2000 git-locks claim --job sweeper --holder bob src/ >/dev/null 2>&1
+check "a prefix claim over an expired lock under it succeeds" "$?" "0"
+GIT_LOCKS_NOW=2000 git-locks show --job old >/dev/null 2>&1
+check "and the expired lock was evicted" "$?" "1"
+GIT_LOCKS_NOW=2000 git-locks release --job sweeper >/dev/null 2>&1
+GIT_LOCKS_NOW=1000 git-locks claim --job oldp --holder alice --ttl 10 lib/ >/dev/null 2>&1
+GIT_LOCKS_NOW=2000 git-locks claim --job leaf --holder bob lib/z.md >/dev/null 2>&1
+check "a claim under an expired prefix succeeds" "$?" "0"
+GIT_LOCKS_NOW=2000 git-locks show --job oldp >/dev/null 2>&1
+check "and the expired prefix was evicted" "$?" "1"
+GIT_LOCKS_NOW=2000 git-locks release --job leaf >/dev/null 2>&1
+
+# Normalisation keeps the marker and nothing else.
+git-locks claim --job n --holder alice 'dir//' >/dev/null 2>&1
+git-locks check 'dir/' >/dev/null 2>&1
+check "dir// is the prefix dir/" "$?" "1"
+git-locks check './dir/./' >/dev/null 2>&1
+check "./dir/./ is the prefix dir/" "$?" "1"
+out="$(git-locks list 2>&1)"
+jfields "list shows the prefix with its slash" "${out}" 'paths=["dir/"]'
+git-locks release --job n >/dev/null 2>&1
+out="$(git-locks claim --job root --holder alice '/' 2>&1)"
+check "a bare slash is an empty path, refused" "$?" "2"
+
+# with, the case in the issue: with --job build dist/ -- make protects everything under dist/.
+out="$(git-locks with --job build --holder alice dist/ -- git-locks check dist/a.js 2>/dev/null)"
+check "under with --job build dist/, dist/a.js is held" "$?" "1"
+jfields "via dist/" "${out}" 'via="dist/"'
+git-locks check dist/a.js >/dev/null 2>&1
+check "and free once with returns" "$?" "0"
+
+# A batch of two claims under one directory moves that directory's token once.
+out="$(printf 'job: b1\nholder: alice\npaths:\nd/one.md\n\njob: b2\nholder: alice\npaths:\nd/two.md\n' | git-locks batch 2>&1)"
+check "a batch of two claims in one directory succeeds" "$?" "0"
+lines n "${out}"
+check "with two claim lines" "${n}" "2"
+git-locks release --job b1 --job b2 >/dev/null 2>&1
+
+# The race, forced both ways. First: a prefix claim reads, pauses before commit; a path under it lands meanwhile.
+GATE7="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate7.XXXXXX")/go"
+GIT_LOCKS_PAUSE_BEFORE_COMMIT="${GATE7}" git-locks claim --job pre --holder alice r/ >/tmp/gl-pre.out 2>/tmp/gl-pre.err &
+ppid=$!
+sleep 1
+git-locks claim --job leaf2 --holder bob r/f.md >/dev/null 2>&1
+check "the path claim lands while the prefix claim is paused" "$?" "0"
+: >"${GATE7}"
+wait "${ppid}"
+check "the paused prefix claim is refused: its transaction failed and the re-plan saw the path" "$?" "1"
+err="$(cat /tmp/gl-pre.err)"
+jfields "and it says via which path" "${err}" 'via="r/f.md"'
+git-locks show --job pre >/dev/null 2>&1
+check "no prefix lock landed" "$?" "1"
+git-locks release --job leaf2 >/dev/null 2>&1
+# Second: a path claim pauses before commit; a prefix over it lands meanwhile.
+GATE8="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate8.XXXXXX")/go"
+GIT_LOCKS_PAUSE_BEFORE_COMMIT="${GATE8}" git-locks claim --job leaf3 --holder bob r2/f.md >/tmp/gl-leaf3.out 2>/tmp/gl-leaf3.err &
+ppid=$!
+sleep 1
+git-locks claim --job pre2 --holder alice r2/ >/dev/null 2>&1
+check "the prefix claim lands while the path claim is paused" "$?" "0"
+: >"${GATE8}"
+wait "${ppid}"
+check "the paused path claim is refused: the prefix landed first" "$?" "1"
+err="$(cat /tmp/gl-leaf3.err)"
+jfields "via the prefix" "${err}" 'via="r2/"'
+git-locks release --job pre2 >/dev/null 2>&1
+
+out="$(git-locks doctor 2>&1)"
+check "doctor is healthy with prefix locks and directory tokens in the store" "$?" "0"
+
+# Directory tokens are bookkeeping, not locks: one per directory level ever touched, left in place by release.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks claim --job t --holder alice a/b/c.md >/dev/null 2>&1
+n="$(dir_tokens "${R}")"
+check "a claim two directories deep leaves two directory tokens (a/ and a/b/)" "${n}" "2"
+git-locks claim --job t2 --holder bob a/b/d.md >/dev/null 2>&1
+n="$(dir_tokens "${R}")"
+check "a second claim in the same directories adds none" "${n}" "2"
+git-locks release --job t --job t2 >/dev/null 2>&1
+n="$(dir_tokens "${R}")"
+check "release leaves them: they record the last claim that touched the directory, not a lock" "${n}" "2"
+git-locks check a/b/c.md >/dev/null 2>&1
+check "and the paths are free" "$?" "0"
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
