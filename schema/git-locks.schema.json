@@ -162,7 +162,8 @@
         "expires",
         "remaining",
         "paths",
-        "record"
+        "record",
+        "acquisition"
       ],
       "properties": {
         "job": {
@@ -199,6 +200,9 @@
         },
         "record": {
           "$ref": "#/$defs/record"
+        },
+        "acquisition": {
+          "$ref": "#/$defs/acquisition"
         }
       },
       "additionalProperties": false
@@ -213,7 +217,8 @@
         "claimed",
         "expires",
         "paths",
-        "record"
+        "record",
+        "acquisition"
       ],
       "properties": {
         "event": {
@@ -244,6 +249,9 @@
         },
         "record": {
           "$ref": "#/$defs/record"
+        },
+        "acquisition": {
+          "$ref": "#/$defs/acquisition"
         }
       },
       "additionalProperties": false
@@ -474,7 +482,7 @@
             },
             "reason": {
               "const": "superseded",
-              "description": "Present when --record named an acquisition the job no longer holds: nothing was released."
+              "description": "Present when --acquisition or --record named an acquisition the job no longer holds: nothing was released."
             }
           },
           "additionalProperties": false
@@ -665,7 +673,8 @@
               "claimed",
               "expires",
               "remaining",
-              "record"
+              "record",
+              "acquisition"
             ],
             "properties": {
               "job": {
@@ -685,6 +694,9 @@
               },
               "record": {
                 "$ref": "#/$defs/record"
+              },
+              "acquisition": {
+                "$ref": "#/$defs/acquisition"
               }
             },
             "additionalProperties": false
@@ -728,7 +740,8 @@
             "expires",
             "live",
             "capacity",
-            "record"
+            "record",
+            "acquisition"
           ],
           "properties": {
             "event": {
@@ -761,6 +774,9 @@
             },
             "record": {
               "$ref": "#/$defs/record"
+            },
+            "acquisition": {
+              "$ref": "#/$defs/acquisition"
             }
           },
           "additionalProperties": false
@@ -899,6 +915,11 @@
         }
       },
       "additionalProperties": false
+    },
+    "acquisition": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The identity of one acquisition. Minted by a claim (and by a re-claim, which is a new acquisition), kept by extend and by a child admission's rewrite of the parent record, so a caller can release the acquisition it made even after renewals. Distinct from record, the oid of the current version of its record."
     }
   }
 }

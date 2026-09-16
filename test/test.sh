@@ -884,6 +884,74 @@ check "dir/./file.md names the same path as dir/file.md" "$?" "1"
 git-locks check 'dir/file.md/' >/dev/null 2>&1
 check "a trailing slash is stripped" "$?" "1"
 
+# ---------------------------------------------------------------- acquisition identity survives renewal (review MUST 4, second half)
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(git-locks claim --job ren --holder A r.md 2>&1)"
+contains "a claim line carries an acquisition id distinct from the record oid" "${out}" '"acquisition":"'
+acq=''
+rec=''
+acq2=''
+rec2=''
+pacq=''
+pacq2=''
+jstr acq "${out}" acquisition
+jstr rec "${out}" record
+distinct=no
+[[ -n "${acq}" && "${acq}" != "${rec}" ]] && distinct=yes
+check "acquisition and record differ in kind: the acquisition is not the oid" "${distinct}" "yes"
+out="$(git-locks extend --job ren --ttl 999 2>&1)"
+line="$(git-locks show --job ren 2>&1)"
+jstr acq2 "${line}" acquisition
+jstr rec2 "${line}" record
+check "extend keeps the acquisition id" "${acq2}" "${acq}"
+changed=no
+[[ "${rec2}" != "${rec}" ]] && changed=yes
+check "extend changes the record oid" "${changed}" "yes"
+out="$(git-locks release --job ren --acquisition "${acq}" 2>&1)"
+check "release --acquisition after a renewal releases the lock" "$?" "0"
+contains "and reports it released" "${out}" '{"event":"released","job":"ren"'
+git-locks claim --job ren --holder B other.md >/dev/null 2>&1
+out="$(git-locks release --job ren --acquisition "${acq}" 2>&1)"
+contains "release --acquisition of a superseded acquisition releases nothing" "${out}" '"event":"nothing","job":"ren","reason":"superseded"'
+git-locks check other.md >/dev/null 2>&1
+check "B's acquisition survives" "$?" "1"
+git-locks release --job ren >/dev/null 2>&1
+
+git-locks with --job w --holder A z.md -- sh -c 'git-locks extend --job w --ttl 5000 >/dev/null 2>&1' >/dev/null 2>&1
+check "with exits 0 when the command renewed the lock" "$?" "0"
+git-locks check z.md >/dev/null 2>&1
+check "with still releases its lock after the command renewed it (release by acquisition, not by record)" "$?" "0"
+
+# a parent renewed by extend keeps its acquisition and its children
+git-locks claim --job P --holder h p.md >/dev/null 2>&1
+git-locks claim --job C --parent P --holder h c.md >/dev/null 2>&1
+line="$(git-locks show --job P 2>&1)"
+jstr pacq "${line}" acquisition
+git-locks extend --job P --ttl 7777 >/dev/null 2>&1
+line="$(git-locks show --job P 2>&1)"
+jstr pacq2 "${line}" acquisition
+check "a parent keeps its acquisition id across a child admission and a renewal" "${pacq2}" "${pacq}"
+git-locks release --job P >/dev/null 2>&1
+
+# ---------------------------------------------------------------- forced schedule: renewal between a release's read and its commit
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks claim --job P --holder h p.md >/dev/null 2>&1
+GATE="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate2.XXXXXX")/go"
+GIT_LOCKS_PAUSE_BEFORE_COMMIT="${GATE}" git-locks release --job P >/dev/null 2>&1 &
+rel=$!
+sleep 1
+git-locks extend --job P --ttl 4242 >/dev/null 2>&1
+check "a renewal while a release is paused before commit succeeds" "$?" "0"
+: >"${GATE}"
+wait "${rel}"
+check "the paused release still exits 0 after the renewal moved the record" "$?" "0"
+got="$(refs "${R}" jobs/)"
+check "and the renewed lock is gone: the release re-planned against the new record" "${got}" ""
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"
