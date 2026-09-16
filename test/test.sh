@@ -71,16 +71,32 @@ for line in sys.argv[2].splitlines():
   check "$1 validates against schema/git-locks.schema.json" "${rc}" "0"
 }
 
+jstr() { # VAR JSON-LINE KEY: the string value of KEY (first occurrence), or empty
+  local line="$2" key="$3" val=''
+  [[ "${line}" =~ \"${key}\":\"([^\"]*)\" ]] && val="${BASH_REMATCH[1]}"
+  printf -v "$1" '%s' "${val}"
+}
+
 refs() { # subject-repo [prefix] -> refs in whatever store resolves for it
-  local store
-  store="$(cd "$1" && git-locks --text store)" || return 1
+  local store line
+  line="$(cd "$1" && git-locks store)" || return 1
+  jstr store "${line}" store
   git --git-dir="${store}" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | sort
 }
 
 export GIT_LOCKS_NOW=1000000
+REAL_HOME="${HOME}"
 HOME="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-home.XXXXXX")"
 export HOME
 unset GIT_LOCKS_STORE GIT_LOCKS_HOME
+# Never under the operator's home: every store this suite creates lives in the throwaway HOME above.
+case "${HOME}/" in
+  "${REAL_HOME}/"*)
+    printf 'test.sh: refusing to run with HOME under %s\n' "${REAL_HOME}" >&2
+    exit 2
+    ;;
+  *) ;;
+esac
 
 # ---------------------------------------------------------------- claim / check / list
 
@@ -237,7 +253,8 @@ check "and the free path in that claim was not taken" "$?" "0"
 R="$(mkrepo)"
 cd "${R}" || exit 2
 top="$(git rev-parse --show-toplevel)"
-got="$(git-locks --text store)"
+line="$(git-locks store)"
+jstr got "${line}" store
 check "the default store is under HOME/.git-stunts/locks mirroring the subject's absolute path" "${got}" "${HOME}/.git-stunts/locks${top}"
 git-locks claim --job d --holder h a.md >/dev/null 2>&1
 got="$(git -C "${R}" for-each-ref refs/locks/)"
@@ -257,7 +274,8 @@ check "a linked worktree shares its main repo's store" "$?" "1"
 
 cd "${R}" || exit 2
 common="$(git rev-parse --path-format=absolute --git-common-dir)"
-got="$(GIT_LOCKS_STORE=self git-locks --text store)"
+line="$(GIT_LOCKS_STORE=self git-locks store)"
+jstr got "${line}" store
 check "GIT_LOCKS_STORE=self resolves to the subject's own git dir" "${got}" "${common}"
 GIT_LOCKS_STORE=self git-locks claim --job s --holder h self.md >/dev/null 2>&1
 got="$(git -C "${R}" for-each-ref --format='%(refname)' refs/locks/jobs/)"
@@ -267,26 +285,29 @@ check "self mode does not see the default store's locks" "$?" "0"
 
 custom="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-store.XXXXXX")/store"
 git config locks.store "${custom}"
-got="$(git-locks --text store)"
+line="$(git-locks store)"
+jstr got "${line}" store
 check "git config locks.store picks a custom store path" "${got}" "${custom}"
 git-locks claim --job c --holder h custom.md >/dev/null 2>&1
 bare="$(git --git-dir="${custom}" rev-parse --is-bare-repository)"
 check "the custom store is created bare on first use" "${bare}" "true"
-got="$(GIT_LOCKS_STORE=self git-locks --text store)"
+line="$(GIT_LOCKS_STORE=self git-locks store)"
+jstr got "${line}" store
 check "the environment overrides the config" "${got}" "${common}"
 git config --unset locks.store
-got="$(GIT_LOCKS_HOME=/tmp/elsewhere git-locks --text store)"
+line="$(GIT_LOCKS_HOME=/tmp/elsewhere git-locks store)"
+jstr got "${line}" store
 check "GIT_LOCKS_HOME relocates the default store root" "${got}" "/tmp/elsewhere/locks${top}"
 git-locks store extra >/dev/null 2>&1
 check "store takes no arguments" "$?" "2"
 
-# ---------------------------------------------------------------- the CLI surface: JSONL by default, --text for humans
+# ---------------------------------------------------------------- the CLI surface: JSON Lines, always
 
 R="$(mkrepo)"
 cd "${R}" || exit 2
 out="$(git-locks --help 2>&1)"
 check "--help exits 0" "$?" "0"
-contains "--help prints the usage" "${out}" "git locks [--text] claim"
+contains "--help is a usage object" "${out}" '{"event":"usage","usage":"usage: git locks claim'
 out="$(git-locks help 2>&1)"
 check "help exits 0" "$?" "0"
 git-locks >/dev/null 2>&1
@@ -294,10 +315,9 @@ check "no arguments is still a usage error, exit 2" "$?" "2"
 out="$(git-locks version 2>&1)"
 check "version exits 0" "$?" "0"
 contains "version is JSON by default" "${out}" '{"name":"git-locks","version":"'
-out="$(git-locks --text version 2>&1)"
 rc=1
-[[ "${out}" =~ ^git-locks\ [0-9]+\.[0-9]+\.[0-9]+$ ]] && rc=0
-check "--text version is 'git-locks <semver>'" "${rc}" "0"
+[[ "${out}" =~ \"version\":\"[0-9]+\.[0-9]+\.[0-9]+\" ]] && rc=0
+check "version carries a semver" "${rc}" "0"
 out="$(git-locks claim --help 2>&1)"
 check "claim --help exits 0" "$?" "0"
 contains "claim --help shows claim's own usage" "${out}" "--holder"
@@ -322,8 +342,6 @@ contains "check reports the free path as free" "${out}" '{"path":"free.md","stat
 jsonl_ok <<<"${out}" >/dev/null 2>&1
 check "check lines parse as JSON" "$?" "0"
 valid "check lines (held and free)" "${out}"
-out="$(git-locks --text check 'a b.md' free.md 2>&1)"
-contains "--text check is the human line" "${out}" "a b.md: held by hh (job jj, until "
 
 err="$(git-locks claim --job other --holder oo 'a b.md' c.md 2>&1 >/dev/null)"
 lines n "${err}"
@@ -332,8 +350,6 @@ contains "refusal line names the holder" "${err}" '"event":"refused","path":"a b
 jsonl_ok <<<"${err}" >/dev/null 2>&1
 check "refusal lines parse as JSON" "$?" "0"
 valid "refusal lines" "${err}"
-err="$(git-locks --text claim --job other --holder oo 'a b.md' 2>&1 >/dev/null)"
-contains "--text refusal is the human line" "${err}" "refused — a b.md: held by hh (job jj"
 
 out="$(git-locks list 2>&1)"
 lines n "${out}"
@@ -343,8 +359,6 @@ contains "list line carries the paths as an array" "${out}" '"paths":["a b.md","
 jsonl_ok <<<"${out}" >/dev/null 2>&1
 check "list line parses as JSON" "$?" "0"
 valid "list line" "${out}"
-out="$(git-locks --text list 2>&1)"
-contains "--text list is the table" "${out}" "live    hh  job jj  until "
 
 out="$(git-locks release --job jj 2>&1)"
 contains "release is one JSON line" "${out}" '{"event":"released","job":"jj","paths":2}'
@@ -353,8 +367,6 @@ out="$(git-locks release --job jj 2>&1)"
 valid "release-nothing line" "${out}"
 out="$(git-locks list 2>&1)"
 check "list with no locks streams nothing" "${out}" ""
-out="$(git-locks --text list 2>&1)"
-check "--text list with no locks says so" "${out}" "no locks"
 out="$(git-locks store 2>&1)"
 contains "store is one JSON line" "${out}" '{"store":"'
 valid "store line" "${out}"
@@ -370,8 +382,10 @@ valid "sweep line" "${out}"
 
 out="$(git-locks schema 2>&1)"
 check "schema exits 0" "$?" "0"
-got="$(diff <(printf '%s\n' "${out}") "${SCHEMA_FILE}" && printf identical)"
-check "schema output is byte-identical to schema/git-locks.schema.json" "${got}" "identical"
+lines n "${out}"
+check "schema is one line" "${n}" "1"
+python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b=json.load(open(sys.argv[2])); sys.exit(0 if a==b else 1)' "${out}" "${SCHEMA_FILE}" >/dev/null 2>&1
+check "schema output is the same document as schema/git-locks.schema.json" "$?" "0"
 python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "${SCHEMA_FILE}" >/dev/null 2>&1
 check "the schema file is valid JSON" "$?" "0"
 
@@ -391,10 +405,6 @@ out="$(GIT_LOCKS_NOW=1100 git-locks show --job s1 2>&1)"
 check "show exits 0 for a live lock" "$?" "0"
 contains "show carries the state and remaining seconds" "${out}" '"job":"s1","holder":"hs","state":"live","claimed":1000,"expires":1500,"remaining":400,"paths":["one.md","two.md"]'
 valid "show line" "${out}"
-out="$(GIT_LOCKS_NOW=1100 git-locks --text show --job s1 2>&1)"
-contains "--text show names the job" "${out}" "job:       s1"
-contains "--text show names the remaining time" "${out}" "remaining: 400s"
-contains "--text show lists the paths" "${out}" "one.md"
 out="$(GIT_LOCKS_NOW=2000 git-locks show --job s1 2>&1)"
 check "show exits 0 for an expired lock too" "$?" "0"
 contains "show reports expired with remaining 0" "${out}" '"state":"expired","claimed":1000,"expires":1500,"remaining":0'
@@ -407,8 +417,6 @@ out="$(GIT_LOCKS_NOW=1100 git-locks ttl --job s1 2>&1)"
 check "ttl exits 0" "$?" "0"
 check "ttl is one JSON line with the remaining seconds" "${out}" '{"job":"s1","expires":1500,"remaining":400}'
 valid "ttl line" "${out}"
-out="$(GIT_LOCKS_NOW=1100 git-locks --text ttl --job s1 2>&1)"
-check "--text ttl is just the number" "${out}" "400"
 git-locks ttl --job nope >/dev/null 2>&1
 check "ttl exits 1 for a missing lock" "$?" "1"
 
@@ -434,10 +442,10 @@ valid "check line with remaining" "${out}"
 
 R="$(mkrepo)"
 cd "${R}" || exit 2
-out="$(git-locks with --job w1 --holder hw a.md -- sh -c 'git-locks --text check a.md | head -n 1; echo ran' 2>/dev/null)"
+out="$(git-locks with --job w1 --holder hw a.md -- sh -c 'git-locks check a.md; echo ran' 2>/dev/null)"
 rc=$?
 check "with exits with the command's status (0)" "${rc}" "0"
-contains "the command ran while the path was held" "${out}" "a.md: held by hw (job w1"
+contains "the command ran while the path was held" "${out}" '"path":"a.md","state":"held","holder":"hw","job":"w1"'
 contains "the command's stdout passes through untouched" "${out}" "ran"
 git-locks check a.md >/dev/null 2>&1
 check "with released the lock afterwards" "$?" "0"
@@ -478,7 +486,8 @@ check "a usage error in with leaves no lock" "${got}" ""
 D="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-plain.XXXXXX")"
 cd "${D}" || exit 2
 here="$(pwd)"
-got="$(git-locks --text store 2>&1)"
+line="$(git-locks store 2>&1)"
+jstr got "${line}" store
 check "outside a repository the store is keyed on the directory" "${got}" "${HOME}/.git-stunts/locks${here}"
 git-locks claim --job p1 --holder hp file.txt >/dev/null 2>&1
 check "claim works outside a git repository" "$?" "0"
@@ -555,7 +564,7 @@ x1.md
 x2.md
 
 job: y
-holder: hy
+holder: hx
 parent: x
 paths:
 y1.md
@@ -565,7 +574,7 @@ check "batch claims every lock in the spec, exit 0" "$?" "0"
 lines n "${out}"
 check "batch emits one claimed line per lock" "${n}" "2"
 contains "batch honoured the per-lock ttl" "${out}" '"job":"x","holder":"hx","claimed":1000000,"expires":1000100'
-contains "batch let a child name a parent claimed in the same batch" "${out}" '"job":"y","holder":"hy"'
+contains "batch let a child name a parent claimed in the same batch, same holder" "${out}" '"job":"y","holder":"hx"'
 valid "batch claim lines" "${out}"
 got="$(refs "${R}" jobs/)"
 check "batch created both job refs" "${got}" "refs/locks/jobs/c
@@ -609,7 +618,7 @@ check "acquiring a missing semaphore exits 1" "$?" "1"
 
 out="$(git-locks sem acquire gpu --job a --holder ha 2>&1)"
 check "first acquire exits 0" "$?" "0"
-contains "acquire line names the slot taken" "${out}" '{"event":"acquired","semaphore":"gpu","job":"a","holder":"ha","claimed":1000000,"expires":1014400,"live":1,"capacity":2}'
+contains "acquire line names the slot taken" "${out}" '{"event":"acquired","semaphore":"gpu","job":"a","holder":"ha","claimed":1000000,"expires":1014400,"live":1,"capacity":2,"record":"'
 valid "acquire line" "${out}"
 git-locks sem acquire gpu --job b --holder hb >/dev/null 2>&1
 check "second acquire fills the semaphore" "$?" "0"
@@ -624,10 +633,8 @@ contains "re-acquire reports live unchanged" "${out}" '"live":2,"capacity":2'
 out="$(git-locks sem show gpu 2>&1)"
 check "sem show exits 0" "$?" "0"
 contains "sem show carries capacity and live" "${out}" '{"semaphore":"gpu","capacity":2,"live":2,"slots":['
-contains "sem show lists each holder with remaining" "${out}" '{"job":"a","holder":"ha","claimed":1000000,"expires":1014400,"remaining":14400}'
+contains "sem show lists each holder with remaining" "${out}" '{"job":"a","holder":"ha","claimed":1000000,"expires":1014400,"remaining":14400,"record":"'
 valid "sem show line" "${out}"
-out="$(git-locks --text sem show gpu 2>&1)"
-contains "--text sem show is readable" "${out}" "gpu: 2/2 slots live"
 out="$(git-locks sem list 2>&1)"
 contains "sem list streams one line per semaphore" "${out}" '{"semaphore":"gpu","capacity":2,"live":2'
 valid "sem list line" "${out}"
@@ -679,9 +686,9 @@ contains "and the semaphore agrees" "${out}" '"capacity":3,"live":3'
 
 # with --sem: take a slot, run, release
 git-locks sem create pool --capacity 1 >/dev/null 2>&1
-out="$(git-locks with --sem pool --job w --holder hw -- sh -c 'git-locks --text sem show pool | head -n 1; echo ran' 2>/dev/null)"
+out="$(git-locks with --sem pool --job w --holder hw -- sh -c 'git-locks sem show pool; echo ran' 2>/dev/null)"
 check "with --sem exits with the command's status" "$?" "0"
-contains "the slot was held while the command ran" "${out}" 'pool: 1/1 slots live'
+contains "the slot was held while the command ran" "${out}" '"capacity":1,"live":1'
 contains "the command ran" "${out}" "ran"
 out="$(git-locks sem show pool 2>&1)"
 contains "with --sem released the slot afterwards" "${out}" '"live":0'
@@ -722,6 +729,160 @@ out="$(git-locks list 2>&1)"
 lines n "${out}"
 check "the snapshot path lists every lock" "${n}" "51"
 valid "list lines after the snapshot refactor" "${out}"
+
+# ================================================================ correctness review, 2026-09-15: every finding reproduced first
+
+# ---------------------------------------------------------------- MUST 2: one final transition per ref
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+GIT_LOCKS_NOW=1000 git-locks claim --job expired-two --holder h --ttl 10 a.md b.md >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=2000 git-locks claim --job taker --holder h a.md b.md 2>&1)"
+check "claiming two paths held by one expired job succeeds (the expired job ref is deleted once, not twice)" "$?" "0"
+got="$(refs "${R}" jobs/)"
+check "the expired job is evicted and the taker holds both" "${got}" "refs/locks/jobs/taker"
+
+git-locks claim --job P --holder h p.md >/dev/null 2>&1
+spec='job: c1
+holder: h
+parent: P
+paths:
+c1.md
+
+job: c2
+holder: h
+parent: P
+paths:
+c2.md
+'
+out="$(printf '%s' "${spec}" | git-locks batch 2>&1)"
+check "a batch of two children under one existing parent succeeds (the parent is verified once)" "$?" "0"
+git-locks release --job P >/dev/null 2>&1
+git-locks sem create s --capacity 1 >/dev/null 2>&1
+GIT_LOCKS_NOW=1000 git-locks sem acquire s --job s1 --holder h --ttl 10 >/dev/null 2>&1
+out="$(GIT_LOCKS_NOW=2000 git-locks sem acquire s --job s1 --holder h 2>&1)"
+check "re-acquiring an expired slot under the same job id succeeds (one transition for that slot ref)" "$?" "0"
+contains "and reports one live slot" "${out}" '"live":1,"capacity":1'
+
+# ---------------------------------------------------------------- MUST 1: a failed read is an error, never a free path; waits see releases
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks claim --job held --holder h x.md >/dev/null 2>&1
+BROKEN="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-broken.XXXXXX")"
+printf '#!/usr/bin/env bash\nif [[ " $* " == *" for-each-ref "* ]]; then echo "fatal: injected read failure" >&2; exit 128; fi\nexec "%s" "$@"\n' "${REAL_GIT}" >"${BROKEN}/git"
+chmod +x "${BROKEN}/git"
+out="$(PATH="${BROKEN}:${PATH}" git-locks check x.md 2>/dev/null)"
+rc=$?
+err="$(PATH="${BROKEN}:${PATH}" git-locks check x.md 2>&1 >/dev/null)"
+check "a failed store read exits 2, not 0" "${rc}" "2"
+check "a failed store read prints no path line" "${out}" ""
+contains "a failed store read is a structured error line" "${err}" '{"event":"error","reason":"store-read"'
+valid "store-read error line" "${err}"
+
+git-locks sem create w --capacity 1 >/dev/null 2>&1
+git-locks sem acquire w --job other --holder o >/dev/null 2>&1
+(
+  sleep 1
+  git-locks sem release w --job other >/dev/null 2>&1
+) &
+out="$(git-locks sem acquire w --job waiter --holder h --wait 10 2>&1)"
+check "sem acquire --wait sees a release made during the wait (the cached read is refreshed per attempt)" "$?" "0"
+wait
+
+# ---------------------------------------------------------------- MUST 3: membership is part of the conflict boundary
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks claim --job P --holder h p.md >/dev/null 2>&1
+GATE="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate.XXXXXX")/go"
+GIT_LOCKS_PAUSE_BEFORE_COMMIT="${GATE}" git-locks release --job P >/dev/null 2>&1 &
+rel=$!
+sleep 1 # the release has read the family (no children) and is paused before its transaction
+git-locks claim --job C --parent P --holder h c.md >/dev/null 2>&1
+check "a child claim while a release is paused before commit succeeds (the parent still exists)" "$?" "0"
+: >"${GATE}"
+wait "${rel}"
+check "the paused release still exits 0 (it re-reads after its stale plan is refused)" "$?" "0"
+got="$(refs "${R}" jobs/)"
+check "no child survives its parent's release: the release took C with it or was told about it" "${got}" ""
+
+spec='job: px
+holder: hx
+paths:
+px.md
+
+job: cy
+holder: hy
+parent: px
+paths:
+cy.md
+'
+err="$(printf '%s' "${spec}" | git-locks batch 2>&1 >/dev/null)"
+check "a batch child under a same-batch parent with a different holder is refused" "$?" "1"
+contains "the refusal says holder" "${err}" '"reason":"parent","job":"cy","parent":"px","detail":"holder"'
+got="$(refs "${R}" jobs/)"
+check "and neither record landed" "${got}" ""
+
+GIT_LOCKS_NOW=1000 git-locks claim --job oldp --holder h --ttl 10 op.md >/dev/null 2>&1
+GIT_LOCKS_NOW=1000 git-locks claim --job kid --parent oldp --holder h --ttl 100000 k.md >/dev/null 2>&1
+GIT_LOCKS_NOW=2000 git-locks claim --job newp --holder h op.md >/dev/null 2>&1
+check "a claim that evicts an expired parent succeeds" "$?" "0"
+got="$(GIT_LOCKS_NOW=2000 refs "${R}" jobs/)"
+check "claim-time eviction of a parent cascades like release and sweep do: the live child is gone too" "${got}" "refs/locks/jobs/newp"
+
+# ---------------------------------------------------------------- MUST 4: release the acquisition you made, not whatever wears the name now
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+out="$(git-locks claim --job build --holder A x.md 2>&1)"
+contains "a claim line carries the record id of this acquisition" "${out}" '"record":"'
+rec="$(printf '%s' "${out}" | sed -n 's/.*"record":"\([0-9a-f]*\)".*/\1/p')"
+git-locks claim --job build --holder B y.md >/dev/null 2>&1
+out="$(git-locks release --job build --record "${rec}" 2>&1)"
+check "release --record of a superseded acquisition exits 0 and releases nothing" "$?" "0"
+contains "and says so" "${out}" '"event":"nothing","job":"build","reason":"superseded"'
+git-locks check y.md >/dev/null 2>&1
+check "B's acquisition under the same job name survives A's release" "$?" "1"
+git-locks with --job w --holder A z.md -- sh -c 'git-locks claim --job w --holder B other.md >/dev/null 2>&1' >/dev/null 2>&1
+git-locks check other.md >/dev/null 2>&1
+check "with releases only the acquisition it made: a re-claim of its job name by another holder survives" "$?" "1"
+git-locks release --job w >/dev/null 2>&1
+
+# ---------------------------------------------------------------- MUST 5: the JSON contract survives failures
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+ctrl="$(printf 'h\001x')"
+out="$(git-locks claim --job ctrl --holder "${ctrl}" a.md 2>&1)"
+check "a control character in a holder does not break the claim" "$?" "0"
+jsonl_ok <<<"${out}" >/dev/null 2>&1
+check "the claim line is still valid JSON (control characters escaped)" "$?" "0"
+contains "the escape is the JSON one" "${out}" '"holder":"h\u0001x"'
+err="$(git-locks claim --job bad --holder h --ttl nope a.md 2>&1 >/dev/null)"
+check "a usage failure still exits 2" "$?" "2"
+contains "a usage failure is a structured error line in JSON mode" "${err}" '{"event":"error","reason":"usage"'
+valid "usage error line" "${err}"
+BROKEN2="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-broken2.XXXXXX")"
+printf '#!/usr/bin/env bash\nif [[ " $* " == *" update-ref "* ]]; then printf "fatal: injected\\nsecond line with \\"quotes\\"\\n" >&2; exit 128; fi\nexec "%s" "$@"\n' "${REAL_GIT}" >"${BROKEN2}/git"
+chmod +x "${BROKEN2}/git"
+err="$(PATH="${BROKEN2}:${PATH}" git-locks claim --job t --holder h t.md 2>&1 >/dev/null)"
+check "a failed transaction exits 1" "$?" "1"
+jsonl_ok <<<"${err}" >/dev/null 2>&1
+check "a multi-line git diagnostic inside a refusal is still valid JSON" "$?" "0"
+valid "transaction refusal line" "${err}"
+
+# ---------------------------------------------------------------- SHOULD: what a path identifies
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+git-locks claim --job n1 --holder h dir/file.md >/dev/null 2>&1
+git-locks check 'dir//file.md' >/dev/null 2>&1
+check "dir//file.md names the same path as dir/file.md" "$?" "1"
+git-locks check 'dir/./file.md' >/dev/null 2>&1
+check "dir/./file.md names the same path as dir/file.md" "$?" "1"
+git-locks check 'dir/file.md/' >/dev/null 2>&1
+check "a trailing slash is stripped" "$?" "1"
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
