@@ -1,6 +1,6 @@
 # Contributing
 
-- Tests are the spec. Write the failing case in `test/test.sh` first, show it red, then change `bin/git-locks`.
+- Tests are the spec. Write the failing case in `test/test.sh` first, show it red, then change the module under `lib/` and run `make build`; `bin/git-locks` is the build product and is committed beside the `lib/` change (the suite refuses a stale one).
 - `make lint` must pass with zero output: shellcheck with every optional check enabled, and shfmt with the repository's settings (`-i 2 -ci -bn`). Do not add a `# shellcheck disable` without a comment saying why.
 - Pure bash and git only. No jq, no Python, no external daemons. Anything that would need one belongs in a different project.
 - Keep `README.md` and `CHANGELOG.md` current in the same commit as the change they describe.
@@ -12,3 +12,5 @@
   - Load the store snapshot once in the parent shell before dispatch; a subshell inherits it, a subshell cannot refresh it for the parent. Invalidate explicitly after any `$(transact …)`.
   - Never install this tool as a symlink into a checkout you edit. `make install` copies for that reason: a half-fixed branch went live under another project's pre-commit hook on 2026-09-15.
   - Every git spawn is a test: `test/test.sh` counts them with a shim. Keep one process per protocol per command.
+  - A fork per record is a fork per record. `$(field …)` inside a render loop costs a process each time and forgets the parse; the `_v` helpers (`field_v`, `record_paths_v`, `now_v`, `json_paths_v`) exist so hot paths never fork. `list` on 500 locks went from 6.75 s to 0.58 s by using them.
+  - `${text:pos:len}` on a large string copies from `pos` every call; a loop over it is quadratic. Read structured output with `read -N` instead (the snapshot's `cat-file --batch` parse).

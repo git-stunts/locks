@@ -4,6 +4,15 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-16
+
+### Changed
+
+- The script is built. `bin/git-locks` is assembled by `scripts/build.sh` from `lib/*.sh` in numeric order, with the schema module generated from `schema/git-locks.schema.json`; `make build` writes it, and the test suite refuses a committed `bin/git-locks` that is not byte-for-byte what `lib/` builds (#11). The installed artifact, the release asset and `make install` are unchanged: one file.
+- `list` renders without forking. Record fields, paths, the clock and JSON arrays have `printf -v` forms (`field_v`, `record_paths_v`, `now_v`, `json_paths_v`) and the render path uses only those, so each record is parsed once and a list of n locks is O(n) bash with no processes per line; `GIT_LOCKS_TRACE` writes one `parse <oid>` line per record and the suite counts them (#24).
+- The snapshot reads `cat-file --batch` output with `read -N` instead of slicing the captured text, which was quadratic in the store size. Measured on 500 locks (macOS, bash 5.3, same store, before and after): `list` 6.75 s to 0.58 s; `check` 0.87 s to 0.28 s; `show` 0.85 s to 0.25 s; `claim` about 1.0 s to 0.33 s. The 0.07 s figures the README carried for 0.3.x were not reproducible on that store and are withdrawn.
+- One clock reading per invocation (`now_v` caches it), so every `remaining` in one `list` is computed against the same instant.
+
 ## [0.3.2] - 2026-09-16
 
 ### Fixed

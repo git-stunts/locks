@@ -1026,6 +1026,32 @@ check "with took exactly two reads before running its command (the release after
 git-locks check p3.md >/dev/null 2>&1
 check "with released its lock afterwards" "$?" "0"
 
+# ---------------------------------------------------------------- #11: bin/git-locks is built from lib/, byte for byte
+
+BUILT="$(mktemp "${TMPDIR:-/tmp}/git-locks-built.XXXXXX")"
+(cd "${HERE}/.." && bash scripts/build.sh "${BUILT}") >/dev/null 2>&1
+check "scripts/build.sh assembles the script from lib/ and the schema" "$?" "0"
+cmp -s "${BUILT}" "${HERE}/../bin/git-locks"
+check "the committed bin/git-locks is exactly what lib/ builds (run make build after editing lib/)" "$?" "0"
+libs=("${HERE}/../lib/"*.sh)
+check "lib/ has more than one module" "$((${#libs[@]} > 1))" "1"
+
+# ---------------------------------------------------------------- #24: records are parsed once; list cost is printed, not gated
+
+R="$(mkrepo)"
+cd "${R}" || exit 2
+for i in $(seq 1 200); do git-locks claim --job "l${i}" --holder h "f${i}.md" >/dev/null 2>&1; done
+t0="$(date +%s)"
+out="$(git-locks list 2>&1)"
+t1="$(date +%s)"
+lines n "${out}"
+check "list renders all 200 locks" "${n}" "200"
+printf '  info list of 200 locks took %ds (printed for the record; #24 tracks it, no gate)\n' "$((t1 - t0))"
+TRACE5="$(mktemp "${TMPDIR:-/tmp}/git-locks-trace5.XXXXXX")"
+GIT_LOCKS_TRACE="${TRACE5}" git-locks list >/dev/null 2>&1
+parses="$(grep -c '^parse' "${TRACE5}")"
+check "each record is parsed exactly once for a list (one parse line per blob in the trace)" "${parses}" "200"
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"

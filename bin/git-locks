@@ -60,8 +60,9 @@ DEFAULT_TTL=14400
 SCHEMA='git-locks/1'
 SEM_SCHEMA='git-locks-sem/1'
 SLOT_SCHEMA='git-locks-slot/1'
-VERSION='0.3.2'
-RETRIES=200 # a plan refused for a stale expectation is re-read and re-planned this many times
+VERSION='0.4.0'
+RETRIES=200   # a plan refused for a stale expectation is re-read and re-planned this many times
+NOW_CACHED='' # the clock, read once per invocation by now()
 
 usage_text() {
   cat <<'EOF'
@@ -153,7 +154,6 @@ sub_usage_text() {
     *) usage_text ;;
   esac
 }
-
 # ---------------------------------------------------------------- JSON
 
 json_str() { # VAR VALUE: set VAR to VALUE as a JSON string, every control character escaped
@@ -192,6 +192,20 @@ json_paths() { # VAR: set VAR to a JSON array of the lines on stdin
   printf -v "$1" '[%s]' "${items[*]}"
 }
 
+json_paths_v() { # VAR TEXT: set VAR to a JSON array of TEXT's non-empty lines; no fork
+  local text="$2" line items=() one IFS
+  while [[ -n "${text}" ]]; do
+    line="${text%%$'\n'*}"
+    if [[ "${line}" == "${text}" ]]; then text=''; else text="${text#*$'\n'}"; fi
+    if [[ -n "${line}" ]]; then
+      json_str one "${line}"
+      items+=("${one}")
+    fi
+  done
+  IFS=','
+  printf -v "$1" '[%s]' "${items[*]}"
+}
+
 json_jobs() { # VAR job... -> JSON array of job ids
   local var="$1" one items=() IFS j
   shift
@@ -205,7 +219,7 @@ json_jobs() { # VAR job... -> JSON array of job ids
 
 parent_json() { # VAR oid -> ',"parent":"<id>"' or '' when the record has no parent
   local p one
-  p="$(field "$2" parent)"
+  field_v p "$2" parent
   if [[ -n "${p}" ]]; then
     json_str one "${p}"
     printf -v "$1" ',"parent":%s' "${one}"
@@ -213,7 +227,6 @@ parent_json() { # VAR oid -> ',"parent":"<id>"' or '' when the record has no par
     printf -v "$1" ''
   fi
 }
-
 # ---------------------------------------------------------------- errors
 
 fail() { # message [code]: an error line on stderr, then exit (2 is usage, 1 is a failed operation)
@@ -230,15 +243,23 @@ store_error() { # detail: the store could not be read; nothing is reported as fr
   printf '{"event":"error","reason":"store-read","detail":%s}\n' "${_j1}" >&2
   exit 2
 }
-
 # ---------------------------------------------------------------- time, refs, records
 
-now() {
-  if [[ -n "${GIT_LOCKS_NOW:-}" ]]; then
-    printf '%s' "${GIT_LOCKS_NOW}"
-  else
-    date +%s
+now_v() { # VAR: set VAR to the clock, read once per invocation; no fork after the first call
+  if [[ -z "${NOW_CACHED}" ]]; then
+    if [[ -n "${GIT_LOCKS_NOW:-}" ]]; then
+      NOW_CACHED="${GIT_LOCKS_NOW}"
+    else
+      NOW_CACHED="$(date +%s)"
+    fi
   fi
+  printf -v "$1" '%s' "${NOW_CACHED}"
+}
+
+now() {
+  local v
+  now_v v
+  printf '%s' "${v}"
 }
 
 declare -A PATH_HASH=() # path -> git's hash of the path string, memoised per invocation
@@ -291,7 +312,6 @@ normalize_path() { # -> prints the lexical form, or returns 2 with the reason on
   }
   printf '%s' "${parts[*]}"
 }
-
 # ---------------------------------------------------------------- the store
 
 STORE=''
@@ -320,7 +340,6 @@ resolve_store() { # sets STORE; creates the default or a custom store on first u
 }
 
 g() { git --git-dir="${STORE}" "$@"; }
-
 # ---------------------------------------------------------------- the snapshot
 #
 # One for-each-ref and one cat-file --batch per invocation; every reader below
@@ -330,9 +349,31 @@ g() { git --git-dir="${STORE}" "$@"; }
 # cached read taken under one for-each-ref, not a proof of a consistent cut;
 # every write below carries the expectations that make a stale read fail.
 
-declare -A REF_OID=() # ref -> oid
-declare -A BLOB=()    # oid -> record text
+declare -A REF_OID=()  # ref -> oid
+declare -A BLOB=()     # oid -> record text
+declare -A R_FIELDS=() # oid -> "key\x1fvalue\x1e..." for the header lines before paths:
+declare -A R_PATHS=()  # oid -> the path lines, newline separated
 SNAP_LOADED=0
+
+parse_record() { # oid -> fills R_FIELDS[oid] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
+  [[ -n "${R_FIELDS[$1]+x}" ]] && return 0
+  local text="${BLOB[$1]:-}" line fields='' paths='' in_paths=0
+  while [[ -n "${text}" ]]; do
+    line="${text%%$'\n'*}"
+    if [[ "${line}" == "${text}" ]]; then text=''; else text="${text#*$'\n'}"; fi
+    if ((in_paths)); then
+      paths+="${line}"$'\n'
+    elif [[ "${line}" == 'paths:' ]]; then
+      in_paths=1
+    elif [[ "${line}" == *': '* ]]; then
+      fields+="${line%%: *}"$'\x1f'"${line#*: }"$'\x1e'
+    fi
+  done
+  R_FIELDS["$1"]="${fields}"
+  R_PATHS["$1"]="${paths%$'\n'}"
+  [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'parse %s\n' "$1" >>"${GIT_LOCKS_TRACE}"
+  return 0
+}
 
 snapshot() {
   local -A refs=() blobs=()
@@ -352,23 +393,26 @@ snapshot() {
     rc=$?
     ((rc == 0)) || store_error "cat-file --batch exited ${rc}: ${out%x}"
     out="${out%x}"
-    local pos=0 len="${#out}" header size
-    while ((pos < len)); do
-      header="${out:pos}"
-      header="${header%%$'\n'*}"
-      pos=$((pos + ${#header} + 1))
+    local header size body nl
+    # read -N over the captured text is linear; slicing ${out:pos:size} copies from pos every time and is quadratic in the store
+    while IFS= read -r header; do
       [[ "${header}" =~ ^([0-9a-f]+)\ blob\ ([0-9]+)$ ]] || store_error "cat-file --batch header does not parse: ${header}"
       oid="${BASH_REMATCH[1]}"
       size="${BASH_REMATCH[2]}"
-      blobs["${oid}"]="${out:pos:size}"
-      pos=$((pos + size + 1))
-    done
+      body=''
+      ((size > 0)) && { IFS= read -r -N "${size}" body || store_error "cat-file --batch object ${oid} is short"; }
+      IFS= read -r -N 1 nl || nl=''
+      [[ "${nl}" == $'\n' ]] || store_error "cat-file --batch object ${oid} is not newline terminated"
+      blobs["${oid}"]="${body}"
+    done <<<"${out%$'\n'}"
     for oid in "${oids[@]}"; do
       [[ -n "${blobs[${oid}]+x}" ]] || store_error "object ${oid} named by a ref is missing from the store"
     done
   fi
   REF_OID=()
   BLOB=()
+  R_FIELDS=()
+  R_PATHS=()
   for ref in "${!refs[@]}"; do REF_OID["${ref}"]="${refs[${ref}]}"; done
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
   SNAP_LOADED=1
@@ -393,28 +437,38 @@ ref_oid() { # ref -> oid or empty
   printf '%s' "${REF_OID[$1]:-}"
 }
 
-field() { # oid key -> the value of `key:` in the record's header (before paths:)
+field_v() { # VAR oid key: set VAR to the value of `key:` in the record's header (before paths:), empty when absent; no fork, so the parse memoises in this shell
   ensure_snapshot
-  local line
-  while IFS= read -r line; do
-    [[ "${line}" == 'paths:' ]] && return 0
-    if [[ "${line}" == "$2: "* ]]; then
-      printf '%s' "${line#"$2": }"
-      return 0
-    fi
-  done <<<"${BLOB[$1]:-}"
+  parse_record "$2"
+  local fields="${R_FIELDS[$2]:-}" rest
+  if [[ "${fields}" == "$3"$'\x1f'* ]]; then
+    rest="${fields#"$3"$'\x1f'}"
+  elif [[ "${fields}" == *$'\x1e'"$3"$'\x1f'* ]]; then
+    rest="${fields#*$'\x1e'"$3"$'\x1f'}"
+  else
+    printf -v "$1" ''
+    return 0
+  fi
+  printf -v "$1" '%s' "${rest%%$'\x1e'*}"
+}
+
+field() { # oid key -> the value on stdout; inside $(…) the parse happens in the subshell, so hot paths use field_v
+  local v
+  field_v v "$1" "$2"
+  printf '%s' "${v}"
+}
+
+record_paths_v() { # VAR oid: set VAR to the paths, newline separated; no fork
+  ensure_snapshot
+  parse_record "$2"
+  printf -v "$1" '%s' "${R_PATHS[$2]:-}"
 }
 
 record_paths() { # oid -> paths, one per line
-  ensure_snapshot
-  local line in_paths=0
-  while IFS= read -r line; do
-    if ((in_paths)); then
-      printf '%s\n' "${line}"
-    elif [[ "${line}" == 'paths:' ]]; then
-      in_paths=1
-    fi
-  done <<<"${BLOB[$1]:-}"
+  local v
+  record_paths_v v "$1"
+  [[ -n "${v}" ]] && printf '%s\n' "${v}"
+  return 0
 }
 
 refs_under() { # prefix -> "ref oid" lines, sorted by ref, from the snapshot
@@ -427,13 +481,19 @@ refs_under() { # prefix -> "ref oid" lines, sorted by ref, from the snapshot
 
 job_refs() { refs_under "${NS}/jobs/"; }
 
-describe() { # oid -> D_HOLDER D_JOB D_EXPIRES D_REMAINING D_STATE
-  D_HOLDER="$(field "$1" holder)"
-  D_JOB="$(field "$1" job)"
+D_HOLDER=''
+D_JOB=''
+D_EXPIRES=0
+D_REMAINING=0
+D_STATE=''
+
+describe() { # oid -> D_HOLDER D_JOB D_EXPIRES D_REMAINING D_STATE; no fork
+  field_v D_HOLDER "$1" holder
+  field_v D_JOB "$1" job
   local exp at
-  exp="$(field "$1" expires)"
+  field_v exp "$1" expires
   D_EXPIRES="${exp:-0}"
-  at="$(now)"
+  now_v at
   D_REMAINING=$((D_EXPIRES - at))
   ((D_REMAINING < 0)) && D_REMAINING=0
   if ((D_EXPIRES > at)); then D_STATE='live'; else D_STATE='expired'; fi
@@ -453,7 +513,6 @@ write_blob() {  # VAR CONTENT: write CONTENT as a blob, seed the snapshot with i
   BLOB["${written}"]="$2"$'\n'
   printf -v "$1" '%s' "${written}"
 }
-
 # ---------------------------------------------------------------- the transition plan
 #
 # One final transition per ref. Every writer says what it expects a ref to hold
@@ -530,7 +589,6 @@ transact() { # commits the plan; 0 ok, 1 refused (TRANSACT_ERR carries git's wor
   SNAP_LOADED=0
   ((rc == 0))
 }
-
 # ---------------------------------------------------------------- refusals
 
 refusal() { # path, after describe(): one refusal line on stderr
@@ -559,7 +617,6 @@ transaction_refusal() { # git's words, as one line
   json_str _j1 "${TRANSACT_ERR}"
   printf '{"event":"refused","reason":"transaction","detail":%s}\n' "${_j1}" >&2
 }
-
 # ---------------------------------------------------------------- families
 #
 # A child records `parent: <job>`. The parent's record carries `family: <n>`,
@@ -679,7 +736,6 @@ bump_parent() {   # parent-job parent-oid -> plans the parent's blob rewrite wit
   done <<<"${paths}"
   return 0
 }
-
 # ---------------------------------------------------------------- claim planning
 
 BATCH_JOBS=()
@@ -920,7 +976,6 @@ cmd_claim() {
   commit_plan || exit 1
   printf '%s\n' "${CLAIM_LINE}"
 }
-
 # ---------------------------------------------------------------- batch
 
 cmd_batch() {
@@ -970,7 +1025,6 @@ cmd_batch() {
   commit_plan || exit 1
   printf '%s\n' "${lines_out[@]}"
 }
-
 # ---------------------------------------------------------------- release
 
 cmd_release() {
@@ -1064,7 +1118,6 @@ cmd_release() {
   done
   return 0
 }
-
 # ---------------------------------------------------------------- check
 
 cmd_check() {
@@ -1093,18 +1146,17 @@ cmd_check() {
   done
   return "${held}"
 }
-
 # ---------------------------------------------------------------- list / show / ttl
 
-lock_line() {     # oid -> one JSON line for list and show
-  ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
+lock_line() {     # oid -> one JSON line for list and show; no fork per line, so a list of n locks is O(n) bash and no processes
+  ensure_snapshot # in this shell, so the record parses below memoise here
   local _j1 _j2 _j3 _j4 jpaths claimed pj paths acq
   describe "$1"
-  claimed="$(field "$1" claimed)"
-  acq="$(field "$1" acquisition)"
+  field_v claimed "$1" claimed
+  field_v acq "$1" acquisition
   json_str _j4 "${acq}"
-  paths="$(record_paths "$1")"
-  json_paths jpaths <<<"${paths}"
+  record_paths_v paths "$1"
+  json_paths_v jpaths "${paths}"
   json_str _j1 "${D_JOB}"
   json_str _j2 "${D_HOLDER}"
   json_str _j3 "$1"
@@ -1174,7 +1226,6 @@ cmd_ttl() {
   json_str _j1 "${D_JOB}"
   printf '{"job":%s,"expires":%s,"remaining":%s}\n' "${_j1}" "${D_EXPIRES}" "${D_REMAINING}"
 }
-
 # ---------------------------------------------------------------- extend
 
 cmd_extend() {
@@ -1214,7 +1265,6 @@ cmd_extend() {
   json_str _j1 "${JOB_ARG}"
   printf '{"event":"extended","job":%s,"expires":%s}\n' "${_j1}" "${expires}"
 }
-
 # ---------------------------------------------------------------- sweep
 
 cmd_sweep() {
@@ -1257,7 +1307,6 @@ cmd_sweep() {
   done <<<"${rows}"
   return 0
 }
-
 # ---------------------------------------------------------------- with
 
 acquire_with_wait() { # kind(lock|sem) wait-seconds errfile -> 0 acquired (ACQUIRED_LINE set), else exits with the refusal
@@ -1404,7 +1453,6 @@ with_release_sem() { # record -> releases this invocation's slot, if it is still
   SNAP_LOADED=0
   (sem_release_once "${W_SEM}" "${W_JOB}" "$1") >&2
 }
-
 # ---------------------------------------------------------------- semaphores
 #
 # refs/locks/sem/<name>/meta holds the capacity; slots/<job> one record per
@@ -1769,15 +1817,15 @@ cmd_sem() {
     *) usage ;;
   esac
 }
-
 # ---------------------------------------------------------------- schema, store, main
-
 cmd_schema() { # the public output schema, one JSON line; the pretty form is schema/git-locks.schema.json in the repository
   (($# == 0)) || usage
   cat <<'EOF'
 {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://raw.githubusercontent.com/git-stunts/locks/main/schema/git-locks.schema.json","title":"git-locks output","description":"Every line git-locks writes, on stdout or stderr, is one JSON object matching exactly one of the definitions below. Lines are emitted as each result is known (JSON Lines); nothing is buffered into an array. There is no plain-text mode: help is a usage object, errors are error objects, and `git locks schema` prints this document as one line. The one exception: a command wrapped by `with` owns stdout, and git-locks reports around it on stderr.","oneOf":[{"$ref":"#/$defs/check_line"},{"$ref":"#/$defs/list_line"},{"$ref":"#/$defs/claim_line"},{"$ref":"#/$defs/refusal_line"},{"$ref":"#/$defs/release_line"},{"$ref":"#/$defs/sweep_line"},{"$ref":"#/$defs/store_line"},{"$ref":"#/$defs/version_line"},{"$ref":"#/$defs/ttl_line"},{"$ref":"#/$defs/extend_line"},{"$ref":"#/$defs/missing_line"},{"$ref":"#/$defs/sem_line"},{"$ref":"#/$defs/sem_event_line"},{"$ref":"#/$defs/error_line"},{"$ref":"#/$defs/usage_line"}],"$defs":{"job":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9._-]*$","description":"The job id, as given to --job. Names the lock: refs/locks/jobs/<job>."},"holder":{"type":"string","minLength":1,"description":"Whoever claimed, as given to --holder. Free text, one line."},"path":{"type":"string","minLength":1,"description":"A repo-relative path, normalised: no leading ./, never absolute, never containing a .. component or a newline."},"epoch":{"type":"integer","minimum":0,"description":"Seconds since the Unix epoch, UTC."},"check_line":{"type":"object","description":"One line per path from `git locks check`, in argument order, as each is examined.","required":["path","state"],"properties":{"path":{"$ref":"#/$defs/path"},"state":{"enum":["free","held","expired"]},"holder":{"$ref":"#/$defs/holder"},"job":{"$ref":"#/$defs/job"},"expires":{"$ref":"#/$defs/epoch"},"remaining":{"$ref":"#/$defs/remaining"}},"additionalProperties":false,"if":{"properties":{"state":{"const":"free"}}},"then":{"required":["path","state"],"not":{"anyOf":[{"required":["holder"]},{"required":["job"]},{"required":["expires"]},{"required":["remaining"]}]}},"else":{"required":["path","state","holder","job","expires","remaining"]}},"list_line":{"type":"object","description":"One line per lock from `git locks list`, live or expired, in ref order; also the single line of `git locks show --job <id>`.","required":["job","holder","state","claimed","expires","remaining","paths","record","acquisition"],"properties":{"job":{"$ref":"#/$defs/job"},"holder":{"$ref":"#/$defs/holder"},"state":{"enum":["live","expired"]},"claimed":{"$ref":"#/$defs/epoch"},"expires":{"$ref":"#/$defs/epoch"},"paths":{"type":"array","items":{"$ref":"#/$defs/path"},"uniqueItems":true},"remaining":{"$ref":"#/$defs/remaining"},"parent":{"$ref":"#/$defs/job","description":"Present when the lock is a child: it is released or swept with this job."},"record":{"$ref":"#/$defs/record"},"acquisition":{"$ref":"#/$defs/acquisition"}},"additionalProperties":false},"claim_line":{"type":"object","description":"The single stdout line of a successful `git locks claim`; one per record for `git locks batch`.","required":["event","job","holder","claimed","expires","paths","record","acquisition"],"properties":{"event":{"const":"claimed"},"job":{"$ref":"#/$defs/job"},"holder":{"$ref":"#/$defs/holder"},"claimed":{"$ref":"#/$defs/epoch"},"expires":{"$ref":"#/$defs/epoch"},"paths":{"type":"array","items":{"$ref":"#/$defs/path"},"minItems":1,"uniqueItems":true},"parent":{"$ref":"#/$defs/job"},"record":{"$ref":"#/$defs/record"},"acquisition":{"$ref":"#/$defs/acquisition"}},"additionalProperties":false},"refusal_line":{"type":"object","description":"On stderr, one line per problem when a claim or batch is refused (exit 1): a held path naming its holder; a parent that is missing, expired or another holder's; a path named by two records of one batch; or a transaction failure with git's message. For semaphores: capacity (full), exists (create), live (delete with live slots).","oneOf":[{"required":["event","path","holder","job","expires"],"properties":{"event":{"const":"refused"},"path":{"$ref":"#/$defs/path"},"holder":{"$ref":"#/$defs/holder"},"job":{"$ref":"#/$defs/job"},"expires":{"$ref":"#/$defs/epoch"}},"additionalProperties":false},{"required":["event","reason","detail"],"properties":{"event":{"const":"refused"},"reason":{"const":"transaction"},"detail":{"type":"string"}},"additionalProperties":false},{"required":["event","reason","job","parent","detail"],"properties":{"event":{"const":"refused"},"reason":{"const":"parent"},"job":{"$ref":"#/$defs/job"},"parent":{"$ref":"#/$defs/job"},"detail":{"enum":["missing","expired","holder"],"description":"Why the parent cannot be used: no such lock, it has expired, or it belongs to another holder."}},"additionalProperties":false},{"required":["event","reason","path"],"properties":{"event":{"const":"refused"},"reason":{"const":"duplicate"},"path":{"$ref":"#/$defs/path"}},"additionalProperties":false},{"required":["event","reason","semaphore","capacity","live"],"properties":{"event":{"const":"refused"},"reason":{"const":"capacity"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."},"capacity":{"type":"integer","minimum":1},"live":{"type":"integer","minimum":0,"description":"Slots held by unexpired jobs."}},"additionalProperties":false},{"required":["event","reason","semaphore"],"properties":{"event":{"const":"refused"},"reason":{"const":"exists"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."}},"additionalProperties":false},{"required":["event","reason","semaphore","live"],"properties":{"event":{"const":"refused"},"reason":{"const":"live"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."},"live":{"type":"integer","minimum":0,"description":"Slots held by unexpired jobs."}},"additionalProperties":false}]},"release_line":{"type":"object","description":"One stdout line per --job of `git locks release`: what was released (with any descendants), or that there was nothing to release.","oneOf":[{"required":["event","job","paths"],"properties":{"event":{"const":"released"},"job":{"$ref":"#/$defs/job"},"paths":{"type":"integer","minimum":0,"description":"How many path refs were deleted, descendants included."},"cascaded":{"type":"array","items":{"$ref":"#/$defs/job"},"description":"Descendant jobs released in the same transaction, sorted; absent when there were none."}},"additionalProperties":false},{"required":["event","job"],"properties":{"event":{"const":"nothing"},"job":{"$ref":"#/$defs/job"},"reason":{"const":"superseded","description":"Present when --acquisition or --record named an acquisition the job no longer holds: nothing was released."}},"additionalProperties":false}]},"sweep_line":{"type":"object","description":"One stdout line per expired lock `git locks sweep` deleted; on stderr, one per lock it could not delete because it changed underneath.","oneOf":[{"required":["event","job","holder","expires"],"properties":{"event":{"const":"swept"},"job":{"$ref":"#/$defs/job"},"holder":{"$ref":"#/$defs/holder"},"expires":{"$ref":"#/$defs/epoch"},"cascaded":{"type":"array","items":{"$ref":"#/$defs/job"},"description":"Descendant jobs swept with this expired parent, sorted; absent when there were none."}},"additionalProperties":false},{"required":["event","job","reason"],"properties":{"event":{"const":"skipped"},"job":{"$ref":"#/$defs/job"},"reason":{"const":"changed underneath"}},"additionalProperties":false}]},"store_line":{"type":"object","description":"The single line of `git locks store`: the absolute path of the store this repository resolves to.","required":["store"],"properties":{"store":{"type":"string","minLength":1}},"additionalProperties":false},"version_line":{"type":"object","description":"The single line of `git locks version`.","required":["name","version"],"properties":{"name":{"const":"git-locks"},"version":{"type":"string","pattern":"^[0-9]+\\.[0-9]+\\.[0-9]+$"}},"additionalProperties":false},"remaining":{"type":"integer","minimum":0,"description":"Seconds until the lock expires, 0 once it has."},"ttl_line":{"type":"object","description":"The single line of `git locks ttl --job <id>`.","required":["job","expires","remaining"],"properties":{"job":{"$ref":"#/$defs/job"},"expires":{"$ref":"#/$defs/epoch"},"remaining":{"$ref":"#/$defs/remaining"}},"additionalProperties":false},"extend_line":{"type":"object","description":"The single line of `git locks extend --job <id> --ttl <seconds>`: the new expiry.","required":["event","job","expires"],"properties":{"event":{"const":"extended"},"job":{"$ref":"#/$defs/job"},"expires":{"$ref":"#/$defs/epoch"}},"additionalProperties":false},"missing_line":{"type":"object","description":"On stderr, from show, ttl or extend, when no lock exists for the job (exit 1).","required":["event","job"],"properties":{"event":{"const":"missing"},"job":{"$ref":"#/$defs/job"}},"additionalProperties":false},"sem_line":{"type":"object","description":"One line per semaphore from `git locks sem list`, and the single line of `git locks sem show <name>`: capacity, live count, and the live slots.","required":["semaphore","capacity","live","slots"],"properties":{"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."},"capacity":{"type":"integer","minimum":1},"live":{"type":"integer","minimum":0,"description":"Slots held by unexpired jobs."},"slots":{"type":"array","items":{"type":"object","required":["job","holder","claimed","expires","remaining","record","acquisition"],"properties":{"job":{"$ref":"#/$defs/job"},"holder":{"$ref":"#/$defs/holder"},"claimed":{"$ref":"#/$defs/epoch"},"expires":{"$ref":"#/$defs/epoch"},"remaining":{"$ref":"#/$defs/remaining"},"record":{"$ref":"#/$defs/record"},"acquisition":{"$ref":"#/$defs/acquisition"}},"additionalProperties":false}}},"additionalProperties":false},"sem_event_line":{"type":"object","description":"Semaphore lifecycle lines: created, acquired (with the live count after), released (likewise), nothing (the job held no slot), deleted.","oneOf":[{"required":["event","semaphore","capacity"],"properties":{"event":{"const":"created"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."},"capacity":{"type":"integer","minimum":1}},"additionalProperties":false},{"required":["event","semaphore","job","holder","claimed","expires","live","capacity","record","acquisition"],"properties":{"event":{"const":"acquired"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."},"job":{"$ref":"#/$defs/job"},"holder":{"$ref":"#/$defs/holder"},"claimed":{"$ref":"#/$defs/epoch"},"expires":{"$ref":"#/$defs/epoch"},"live":{"type":"integer","minimum":0,"description":"Slots held by unexpired jobs."},"capacity":{"type":"integer","minimum":1},"record":{"$ref":"#/$defs/record"},"acquisition":{"$ref":"#/$defs/acquisition"}},"additionalProperties":false},{"required":["event","semaphore","job","live","capacity"],"properties":{"event":{"const":"released"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."},"job":{"$ref":"#/$defs/job"},"live":{"type":"integer","minimum":0,"description":"Slots held by unexpired jobs."},"capacity":{"type":"integer","minimum":1}},"additionalProperties":false},{"required":["event","semaphore","job"],"properties":{"event":{"const":"nothing"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."},"job":{"$ref":"#/$defs/job"},"reason":{"const":"superseded"}},"additionalProperties":false},{"required":["event","semaphore"],"properties":{"event":{"const":"deleted"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."}},"additionalProperties":false},{"required":["event","semaphore"],"properties":{"event":{"const":"missing"},"semaphore":{"$ref":"#/$defs/job","description":"The semaphore's name; same grammar as a job id."}},"additionalProperties":false}]},"record":{"type":"string","pattern":"^[0-9a-f]{40}([0-9a-f]{24})?$","description":"The object id of this acquisition's record: the identity a later release or renewal names."},"error_line":{"type":"object","description":"On stderr: a usage failure (exit 2), a store that could not be read (exit 2; nothing is reported free or held), or a failed operation (exit 1).","required":["event","reason","detail"],"properties":{"event":{"const":"error"},"reason":{"enum":["usage","store-read","failed"]},"detail":{"type":"string"}},"additionalProperties":false},"usage_line":{"type":"object","description":"`git locks help` on stdout (exit 0), `<cmd> --help`, or a usage error on stderr (exit 2): the usage text as one string.","required":["event","usage"],"properties":{"event":{"const":"usage"},"usage":{"type":"string"}},"additionalProperties":false},"acquisition":{"type":"string","minLength":1,"description":"The identity of one acquisition. Minted by a claim (and by a re-claim, which is a new acquisition), kept by extend and by a child admission's rewrite of the parent record, so a caller can release the acquisition it made even after renewals. Distinct from record, the oid of the current version of its record."}}}
 EOF
 }
+
+# ---------------------------------------------------------------- store, main
 
 cmd_store() {
   local _j1
