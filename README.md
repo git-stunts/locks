@@ -420,6 +420,8 @@ git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push t
 - The lock is advisory. Nothing stops a writer that never claimed. The consumer that lands writes (a commit script, a CI step) is where refusal belongs; `check` exits 1 for exactly that use.
 - One machine. The store is local; a shared remote would need a fetch before every claim and is out of scope.
 - `git rev-parse --path-format=absolute` and `update-ref --stdin` transactions need git 2.31 or newer.
+- bash 4 or newer: the store snapshot uses associative arrays. macOS's `/bin/bash` is 3.2; the script's shebang finds a newer bash on `PATH` (Homebrew's, for instance).
+- Each command reads the store once (`for-each-ref` plus one `cat-file --batch`) and every transaction invalidates that snapshot, so an invocation is a handful of git processes however many locks exist; the test suite pins the counts with a shim that counts spawns.
 - The claim reads current refs, then runs the transaction. A racer can win in between; the transaction then fails and the loser is told who won. That is the designed outcome, not a gap.
 
 ## License
