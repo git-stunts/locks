@@ -146,6 +146,7 @@ cmd_doctor() {
         PATHREF_OID["${ref}"]="${oid}"
         pathrefs+=("${ref}")
         ;;
+      "${NS}"/dirs/*) ;; # a directory token: the last record that touched the directory; any object will do, the snapshot already checked it exists
       "${NS}"/sem/*)
         rest="${ref#"${NS}"/sem/}"
         name="${rest%%/*}"

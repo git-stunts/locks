@@ -3,6 +3,7 @@
 BATCH_JOBS=()
 declare -A BATCH_HOLDER=() # job planned in this batch -> holder
 declare -A BUMPED=()       # parent job -> 1 once its family generation is planned in this batch
+declare -A BATCH_PATH=()   # normalised path planned in this batch -> the job claiming it
 CONFLICTS=0
 CLAIM_LINE=''
 TERMINATED_PATHS=0
@@ -23,6 +24,22 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
   local at expires
   now_v at
   expires=$((at + ttl))
+
+  # Paths planned earlier in this batch are not in the snapshot, so the checks below cannot see them: a record
+  # claiming dist/ and another claiming dist/a.js would each plan against a store where the other does not exist,
+  # and the ancestor verify of one would be absorbed by the create of the other. Overlap inside one batch is
+  # therefore decided here, and only between different jobs; a job may hold a prefix and a path under it.
+  local bp bw
+  for bw in "${wanted[@]}"; do
+    for bp in "${!BATCH_PATH[@]}"; do
+      [[ "${BATCH_PATH[${bp}]}" == "${job}" ]] && continue
+      if covers "${bp}" "${bw}" || covers "${bw}" "${bp}"; then
+        duplicate_refusal "${bw}" "${bp}"
+        CONFLICTS=1
+      fi
+    done
+  done
+  for bw in "${wanted[@]}"; do BATCH_PATH["${bw}"]="${job}"; done
 
   # The parent, if any: live and the same holder, whether it exists already or is planned earlier in this batch.
   local pref poid
@@ -104,6 +121,80 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
     fi
   done
 
+  # Prefixes above each wanted path: absent (verified so inside the transaction), the job's own, expired (evicted),
+  # or another job's live lock, which covers the path.
+  local w ancs anc aref
+  for w in "${wanted[@]}"; do
+    ancestors_v ancs "${w}"
+    while [[ -n "${ancs}" ]]; do
+      anc="${ancs%%$'\n'*}"
+      if [[ "${anc}" == "${ancs}" ]]; then ancs=''; else ancs="${ancs#*$'\n'}"; fi
+      in_list "${anc}" "${wanted[@]}" && continue # planned above, as one of this claim's own paths
+      path_ref aref "${anc}"
+      cur="$(ref_oid "${aref}")"
+      if [[ -z "${cur}" ]]; then
+        plan_set "${aref}" '' '=' || fail "${PLAN_CONFLICT}" 1
+        continue
+      fi
+      field_v rjob "${cur}" job
+      field_v rexp "${cur}" expires
+      if [[ "${rjob}" == "${job}" ]]; then
+        continue
+      elif [[ -n "${rexp}" && "${rexp}" -le "${at}" ]]; then
+        in_list "${rjob}" "${evict[@]}" || evict+=("${rjob}")
+      else
+        describe "${cur}"
+        refusal "${w}" "${anc}"
+        CONFLICTS=1
+      fi
+    done
+  done
+
+  # Paths under each wanted prefix, from the snapshot: another job's live lock covers the prefix; an expired one is evicted.
+  # The directory token below makes a stale scan fail at commit.
+  local rows roid rpaths rp
+  for w in "${wanted[@]}"; do
+    is_prefix "${w}" || continue
+    rows="$(job_refs)"
+    while IFS=' ' read -r ref roid; do
+      [[ -z "${ref}" ]] && continue
+      field_v rjob "${roid}" job
+      [[ "${rjob}" == "${job}" ]] && continue
+      record_paths_v rpaths "${roid}"
+      while [[ -n "${rpaths}" ]]; do
+        rp="${rpaths%%$'\n'*}"
+        if [[ "${rp}" == "${rpaths}" ]]; then rpaths=''; else rpaths="${rpaths#*$'\n'}"; fi
+        [[ -n "${rp}" && "${rp}" == "${w}"?* ]] || continue
+        field_v rexp "${roid}" expires
+        if [[ -n "${rexp}" && "${rexp}" -le "${at}" ]]; then
+          in_list "${rjob}" "${evict[@]}" || evict+=("${rjob}")
+        else
+          describe "${roid}"
+          refusal "${w}" "${rp}"
+          CONFLICTS=1
+        fi
+        break # one path under the prefix is enough to decide about this record
+      done
+    done <<<"${rows}"
+  done
+
+  # Directory tokens: one per prefix above each wanted path, and the wanted prefix itself. Moved by compare-and-swap
+  # from the value this snapshot saw to this record, so two claims whose scans could not see each other cannot both
+  # commit. In a batch the token moves once, to the first record that touches it.
+  local dref dcur
+  for w in "${wanted[@]}"; do
+    ancestors_v ancs "${w}"
+    is_prefix "${w}" && ancs+="${ancs:+$'\n'}${w}"
+    while [[ -n "${ancs}" ]]; do
+      anc="${ancs%%$'\n'*}"
+      if [[ "${anc}" == "${ancs}" ]]; then ancs=''; else ancs="${ancs#*$'\n'}"; fi
+      dir_ref dref "${anc}"
+      [[ -n "${T_BEFORE[${dref}]+x}" && "${T_AFTER[${dref}]}" != '=' ]] && continue
+      dcur="$(ref_oid "${dref}")"
+      plan_set "${dref}" "${dcur}" "${new_oid}" || fail "${PLAN_CONFLICT}" 1
+    done
+  done
+
   # The job's own ref, and paths it held before but no longer lists.
   if [[ -n "${old_job_oid}" ]]; then
     plan_set "${jref}" "${old_job_oid}" "${new_oid}" || fail "${PLAN_CONFLICT}" 1
@@ -169,22 +260,27 @@ ref_path() { # oid ref -> which of the record's paths hashes to this ref (for na
   return 0
 }
 
-commit_plan() { # -> 0 committed; 1 lost a race (refusals printed)
-  transact && return 0
-  local lost=0 ref cur p
-  for ref in "${PLAN_ORDER[@]}"; do
-    [[ "${ref}" == "${NS}/paths/"* ]] || continue
-    cur="$(ref_oid "${ref}")"
-    [[ -z "${cur}" ]] && continue
-    p="$(ref_path "${cur}" "${ref}")"
-    [[ -z "${p}" ]] && continue
-    describe "${cur}"
-    in_list "${D_JOB}" "${BATCH_JOBS[@]}" && continue
-    refusal "${p}"
-    lost=1
+claim_reset() { # planning state for one attempt at a claim or a batch
+  plan_reset
+  BATCH_JOBS=()
+  BATCH_HOLDER=()
+  BUMPED=()
+  BATCH_PATH=()
+  CONFLICTS=0
+}
+
+commit_claims() { # plan-fn -> 0 committed; exits 1 refused. plan-fn plans every claim of this command against the current snapshot and sets CONFLICTS
+  local attempt
+  for ((attempt = 0; attempt < RETRIES; attempt++)); do
+    ((attempt > 0)) && snapshot # a lost transaction: read again and plan again, so the refusal names what actually won
+    claim_reset
+    "$1"
+    ((CONFLICTS)) && exit 1
+    transact && return 0
+    sleep 0.01
   done
-  ((lost == 0)) && transaction_refusal
-  return 1
+  transaction_refusal
+  exit 1
 }
 
 claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT CA_NOTE CA_PATHS
@@ -241,11 +337,10 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
   ((${#CA_PATHS[@]} > 0)) || usage
 }
 
+plan_one_claim() { plan_claim "${CA_JOB}" "${CA_HOLDER}" "${CA_TTL}" "${CA_PARENT}" "${CA_NOTE}" "${CA_PATHS[@]}"; }
+
 cmd_claim() {
   claim_args "$@"
-  plan_reset
-  plan_claim "${CA_JOB}" "${CA_HOLDER}" "${CA_TTL}" "${CA_PARENT}" "${CA_NOTE}" "${CA_PATHS[@]}"
-  ((CONFLICTS)) && exit 1
-  commit_plan || exit 1
+  commit_claims plan_one_claim
   printf '%s\n' "${CLAIM_LINE}"
 }

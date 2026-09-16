@@ -4,6 +4,18 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-16
+
+### Added
+
+- Prefix locks (#6). A path ending in `/` is a prefix: `claim --job build dist/` covers every path under `dist/`, so `with --job build dist/ -- make` now protects what it names. A claim on a path under a live prefix held by another job is refused `via` the prefix; a claim on a prefix over a live lock under it is refused `via` that path; `check` reports the same `via`. Expired locks in the way are evicted as before. The same job may claim under its own prefix. `dist` without the slash is the directory entry itself, a different key, and is not covered.
+- Overlap inside one `batch` is decided while planning, before any transaction: two records of different jobs may not claim a prefix and a path under it (the records are not in each other's snapshot, so neither the ancestor verify nor the descendant scan can see the other). The loser is a `duplicate` refusal naming the path and the record that covers it, and the batch lands nothing. One job may still hold a prefix and a path under it.
+- How the race closes: prefixes above a wanted path are verified inside the transaction (absent, or unchanged), and every claim moves a directory token ref (`refs/locks/dirs/<hash of the prefix>`) for each directory above its paths by compare-and-swap from the value its snapshot saw. A prefix claim's scan of what is under it and a path claim's check of what is above it therefore cannot both be stale: one of the two transactions fails and re-plans with the other in view. Both orders are forced in the suite with the before-commit gate. The cost is one extra ref transition per directory level on every claim, and two claims under one directory can now collide once and re-plan; `doctor` knows the token refs.
+
+### Changed
+
+- A trailing slash is no longer stripped by normalisation; it is the prefix marker. Before 0.7.0, `dir/file/` named the same key as `dir/file`; now it asks about, or claims, everything under `dir/file`. Every other normalisation rule is unchanged (`dir//` and `./dir/./` are the prefix `dir/`).
+
 ## [0.6.0] - 2026-09-16
 
 ### Added

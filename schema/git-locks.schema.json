@@ -70,7 +70,7 @@
     "path": {
       "type": "string",
       "minLength": 1,
-      "description": "A repo-relative path, normalised: no leading ./, never absolute, never containing a .. component or a newline."
+      "description": "A repo-relative path, normalised: no leading ./, never absolute, never containing a .. component or a newline. A trailing / makes it a prefix: dist/ covers every path under dist/ (and is covered by any lock under it); dist without the slash is the directory entry itself, a different key."
     },
     "epoch": {
       "type": "integer",
@@ -103,6 +103,9 @@
         },
         "job": {
           "$ref": "#/$defs/job"
+        },
+        "via": {
+          "$ref": "#/$defs/via"
         },
         "expires": {
           "$ref": "#/$defs/epoch"
@@ -149,6 +152,11 @@
             {
               "required": [
                 "note"
+              ]
+            },
+            {
+              "required": [
+                "via"
               ]
             }
           ]
@@ -304,6 +312,9 @@
             "job": {
               "$ref": "#/$defs/job"
             },
+            "via": {
+              "$ref": "#/$defs/via"
+            },
             "expires": {
               "$ref": "#/$defs/epoch"
             }
@@ -376,6 +387,9 @@
             },
             "path": {
               "$ref": "#/$defs/path"
+            },
+            "via": {
+              "$ref": "#/$defs/via"
             }
           },
           "additionalProperties": false
@@ -1066,6 +1080,10 @@
       "minLength": 1,
       "pattern": "^[^\\n\\r]*$",
       "description": "One line saying why the lock is held, given at claim time with --note (or note: in a batch record); absent when none was given. Carried on every line that names the lock."
+    },
+    "via": {
+      "$ref": "#/$defs/path",
+      "description": "The covering lock's own path when it differs from the one asked about or claimed: the prefix above it, or the path under a wanted prefix. Absent when the lock is on the path itself."
     }
   }
 }

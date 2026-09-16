@@ -52,10 +52,12 @@ path_error() { # detail -> a usage error line on stderr (the caller returns 2)
 }
 
 normalize_path() { # -> prints the lexical form, or returns 2 with the reason on stderr
-  # Policy, stated: leading ./, empty segments (//), single-dot segments and a
-  # trailing / are removed; absolute paths and .. segments are refused; case,
-  # symlinks and hard links are NOT resolved. dir/ and dir/file are different keys.
-  local p="$1" part parts=() IFS='/'
+  # Policy, stated: leading ./, empty segments (//) and single-dot segments are
+  # removed; absolute paths and .. segments are refused; case, symlinks and hard
+  # links are NOT resolved. A trailing / is kept: dir/ is a prefix that covers
+  # every path under it; dir is the directory entry itself, a different key.
+  local p="$1" part parts=() IFS='/' prefix=''
+  [[ "${p}" == */ ]] && prefix='/'
   [[ "${p}" == /* ]] && {
     path_error "${p}: paths are repo-relative"
     return 2
@@ -76,5 +78,34 @@ normalize_path() { # -> prints the lexical form, or returns 2 with the reason on
     path_error 'an empty path'
     return 2
   }
-  printf '%s' "${parts[*]}"
+  printf '%s%s' "${parts[*]}" "${prefix}"
+}
+
+is_prefix() { [[ "$1" == */ ]]; } # a normalised path that names everything under it
+
+covers() { # a b -> 0 when a is a prefix lock holding b (never itself)
+  is_prefix "$1" && [[ "$2" == "$1"?* ]]
+}
+
+ancestors_v() { # VAR path: set VAR to the prefixes above a normalised path, shortest first, newline separated (a/b/c.md -> a/ a/b/; a/b/ -> a/; c.md -> nothing)
+  local _an_p="$2" _an_acc='' _an_out='' _an_seg
+  _an_p="${_an_p%/}"
+  if [[ "${_an_p}" != */* ]]; then
+    printf -v "$1" ''
+    return 0
+  fi
+  _an_p="${_an_p%/*}"
+  while [[ -n "${_an_p}" ]]; do
+    _an_seg="${_an_p%%/*}"
+    if [[ "${_an_seg}" == "${_an_p}" ]]; then _an_p=''; else _an_p="${_an_p#*/}"; fi
+    _an_acc+="${_an_seg}/"
+    _an_out+="${_an_acc}"$'\n'
+  done
+  printf -v "$1" '%s' "${_an_out%$'\n'}"
+}
+
+dir_ref() { # VAR prefix: the directory token ref for a prefix; every claim that touches the directory moves it, so a
+  local _dr # prefix claim's scan of what is under it and a path claim's check of what is above it cannot both be stale
+  path_ref _dr "$2" || return 1
+  printf -v "$1" '%s/dirs/%s' "${NS}" "${_dr##*/}"
 }

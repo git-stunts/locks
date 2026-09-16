@@ -81,8 +81,9 @@ snapshot() {
   test_gate "${GIT_LOCKS_PAUSE_AFTER_READ:-}" # tests force an interleaving between a read and what follows it
 }
 
-test_gate() { # file-or-empty: when set, wait here until the file exists (at most 30 s); tests only
+test_gate() { # file-or-empty: when set, say so in <file>.ready and wait here until the file exists (at most 30 s); tests only
   [[ -n "$1" ]] || return 0
+  : >"$1.ready" # the test waits for this before racing us: a sleep would let the racer win before we had read and planned
   local waited=0
   until [[ -e "$1" ]] || ((waited >= 600)); do
     sleep 0.05
