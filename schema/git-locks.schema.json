@@ -44,6 +44,12 @@
       "$ref": "#/$defs/sem_event_line"
     },
     {
+      "$ref": "#/$defs/finding_line"
+    },
+    {
+      "$ref": "#/$defs/doctor_line"
+    },
+    {
       "$ref": "#/$defs/error_line"
     },
     {
@@ -920,6 +926,123 @@
       "type": "string",
       "minLength": 1,
       "description": "The identity of one acquisition. Minted by a claim (and by a re-claim, which is a new acquisition), kept by extend and by a child admission's rewrite of the parent record, so a caller can release the acquisition it made even after renewals. Distinct from record, the oid of the current version of its record."
+    },
+    "finding_line": {
+      "type": "object",
+      "description": "One stdout line per invariant `git locks doctor` found broken, as it is found. `check` names the invariant, `subject` the job, ref or semaphore it failed for, `detail` what was seen.",
+      "required": [
+        "event",
+        "check",
+        "subject",
+        "detail"
+      ],
+      "properties": {
+        "event": {
+          "const": "finding"
+        },
+        "check": {
+          "enum": [
+            "record-decodes",
+            "job-ref-name",
+            "path-ref-missing",
+            "path-ref-elsewhere",
+            "path-ref-orphan",
+            "path-ref-stray",
+            "parent-missing",
+            "parent-expired",
+            "parent-holder",
+            "family-cycle",
+            "sem-meta",
+            "sem-gen",
+            "sem-record",
+            "sem-capacity",
+            "unknown-ref"
+          ]
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "doctor_line": {
+      "type": "object",
+      "description": "The last stdout line of `git locks doctor`: the store, the reading basis (how many refs and records one snapshot held, and the clock the liveness checks used), the checks run, the number of finding lines, and the verdict. Exit 0 when healthy, 1 with findings. An unreadable store prints an error line instead and exits 2; it is never reported healthy.",
+      "required": [
+        "event",
+        "store",
+        "basis",
+        "checks",
+        "findings",
+        "healthy"
+      ],
+      "properties": {
+        "event": {
+          "const": "doctor"
+        },
+        "store": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basis": {
+          "type": "object",
+          "required": [
+            "refs",
+            "records",
+            "now"
+          ],
+          "properties": {
+            "refs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "records": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "now": {
+              "$ref": "#/$defs/epoch"
+            }
+          },
+          "additionalProperties": false
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "record-decodes",
+              "job-ref-name",
+              "path-ref-missing",
+              "path-ref-elsewhere",
+              "path-ref-orphan",
+              "path-ref-stray",
+              "parent-missing",
+              "parent-expired",
+              "parent-holder",
+              "family-cycle",
+              "sem-meta",
+              "sem-gen",
+              "sem-record",
+              "sem-capacity",
+              "unknown-ref"
+            ]
+          },
+          "minItems": 1
+        },
+        "findings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "healthy": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

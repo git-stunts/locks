@@ -60,7 +60,7 @@ DEFAULT_TTL=14400
 SCHEMA='git-locks/1'
 SEM_SCHEMA='git-locks-sem/1'
 SLOT_SCHEMA='git-locks-slot/1'
-VERSION='0.4.0'
+VERSION='0.5.0'
 RETRIES=200   # a plan refused for a stale expectation is re-read and re-planned this many times
 NOW_CACHED='' # the clock, read once per invocation by now()
 
@@ -79,6 +79,7 @@ usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent 
        git locks with    --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [<path>...] -- <command>...
        git locks sem     create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]
                                   | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>
+       git locks doctor
        git locks version
        git locks help | schema
 
@@ -104,6 +105,9 @@ with     claim, run the command, release the acquisition it made (also on failur
 sem      capacity, not exclusivity: up to <n> jobs hold a named semaphore at once; a slot expires like a
          lock; acquire is one transaction with a compare-and-swap on the semaphore's generation, so racers
          beyond capacity fail and exactly <n> win
+doctor   read-only invariant check of the store: one finding line per problem, then a doctor line with the
+         basis (refs and records read, the clock) and the verdict; exit 1 on findings, 2 when the store
+         cannot be read (an unreadable store is never healthy). Diagnosis only: nothing is repaired
 schema   print the JSON Schema every output line conforms to
 
 output:  JSON Lines, always: one object per result on stdout, written as each result is known;
@@ -150,6 +154,7 @@ sub_usage_text() {
     ttl) printf 'usage: git locks ttl --job <id>\n' ;;
     extend) printf 'usage: git locks extend --job <id> --ttl <seconds>\n' ;;
     with) printf 'usage: git locks with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [<path>...] -- <command>...\n' ;;
+    doctor) printf 'usage: git locks doctor\n' ;;
     sem) printf 'usage: git locks sem create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>] | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>\n' ;;
     *) usage_text ;;
   esac

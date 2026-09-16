@@ -36,18 +36,18 @@ json_paths() { # VAR: set VAR to a JSON array of the lines on stdin
   printf -v "$1" '[%s]' "${items[*]}"
 }
 
-json_paths_v() { # VAR TEXT: set VAR to a JSON array of TEXT's non-empty lines; no fork
-  local text="$2" line items=() one IFS
-  while [[ -n "${text}" ]]; do
-    line="${text%%$'\n'*}"
-    if [[ "${line}" == "${text}" ]]; then text=''; else text="${text#*$'\n'}"; fi
-    if [[ -n "${line}" ]]; then
-      json_str one "${line}"
-      items+=("${one}")
+json_paths_v() { # VAR TEXT: set VAR to a JSON array of TEXT's non-empty lines; no fork (locals underscored so none can shadow VAR)
+  local _jp_text="$2" _jp_line _jp_items=() _jp_one IFS
+  while [[ -n "${_jp_text}" ]]; do
+    _jp_line="${_jp_text%%$'\n'*}"
+    if [[ "${_jp_line}" == "${_jp_text}" ]]; then _jp_text=''; else _jp_text="${_jp_text#*$'\n'}"; fi
+    if [[ -n "${_jp_line}" ]]; then
+      json_str _jp_one "${_jp_line}"
+      _jp_items+=("${_jp_one}")
     fi
   done
   IFS=','
-  printf -v "$1" '[%s]' "${items[*]}"
+  printf -v "$1" '[%s]' "${_jp_items[*]}"
 }
 
 json_jobs() { # VAR job... -> JSON array of job ids

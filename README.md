@@ -353,6 +353,8 @@ An outside review of 0.2.1 found the guarantees running ahead of the implementat
 
 **What a failed read is.** An error, never a free path. If `for-each-ref` or `cat-file` fails, or an object does not parse, the command exits 2 with `{"event":"error","reason":"store-read"}` and reports nothing as free or held.
 
+**What the invariants are, and how to see them hold.** `git locks doctor` reads one snapshot and checks it, writing nothing: every job record decodes and names its own job; every path a record lists has a path ref pointing at that record; every path ref points at a record some job ref points at, and that record lists the path; every child's parent exists, is live and has the same holder, and no parent chain cycles; every semaphore has its meta and gen refs, its records decode, and its live slots fit its capacity. Each broken invariant is one `finding` line as it is found, and the last line states the basis it was checked against, the refs and records of that one snapshot and the clock, so a clean report says what was clean. An unreadable store is an error, never healthy. Repair is not a mode of this command; when a finding needs a hand, the fix is a `release`, a `sweep`, or an explicit `update-ref` on the store by someone who has read the finding.
+
 **What the tests are.** A contract with bounded conformance evidence, not a proof. The race tests show one winner among twenty racers and three among twenty on capacity three, in those runs. The interleaving that let a child survive its parent's release is forced deterministically with `GIT_LOCKS_PAUSE_BEFORE_COMMIT`, a test-only gate that makes a transaction wait for a file before committing, and the invariant is asserted on the resulting store.
 
 ## How it was built, including the missteps worth keeping
@@ -398,6 +400,7 @@ Output is JSON Lines on every command; there is no text mode.
 | `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] <path>... -- <cmd>...` | claim, run the command, release; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
+| `doctor` | read-only invariant check of the store; nothing is repaired | one `finding` object per broken invariant as it is found, then one `doctor` object with the basis (refs, records, clock), the checks run and the verdict | 0 healthy, 1 with findings, 2 if the store cannot be read |
 | `sem create <name> --capacity <n>` | a semaphore with n slots | one `created` object | 0, 1 if it exists |
 | `sem acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]` | take a slot; re-acquiring refreshes the job's own slot; `--wait` retries once a second | one `acquired` object with `live` and `capacity` | 0, 1 when full |
 | `sem release <name> --job <id>` | give the slot back | one `released` or `nothing` object | 0 |
