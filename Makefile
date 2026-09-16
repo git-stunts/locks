@@ -1,8 +1,12 @@
 SHELL := /usr/bin/env bash
-SCRIPTS := bin/git-locks test/test.sh scripts/hooks/pre-commit scripts/hooks/pre-push
+# lib/*.sh are fragments of one script and only lint as the whole they build into (bin/git-locks).
+SCRIPTS := bin/git-locks test/test.sh scripts/hooks/pre-commit scripts/hooks/pre-push scripts/build.sh
 PREFIX ?= $(HOME)/.local
 
-.PHONY: lint test test-docker install uninstall
+.PHONY: build lint test test-docker install uninstall
+
+build: # assemble bin/git-locks from lib/*.sh and schema/git-locks.schema.json; commit the result with the lib change
+	bash scripts/build.sh
 
 lint:
 	shellcheck -S style -o all $(SCRIPTS)

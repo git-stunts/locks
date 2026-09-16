@@ -410,13 +410,13 @@ Output is JSON Lines on every command; there is no text mode.
 
 Every JSON line git-locks writes, on stdout or stderr, matches exactly one definition in [`schema/git-locks.schema.json`](schema/git-locks.schema.json) (JSON Schema 2020-12). `git locks schema` prints that document byte-for-byte, and the test suite validates every line it provokes against it, so the contract cannot drift from the code. Consumers can pin the `$id` URL or the file at a tagged commit.
 
-Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`.
+Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`. A holder is one line of text; any byte but a newline is stored whole and escaped on output. A ttl is a decimal number of seconds; a leading zero is not octal.
 
 `GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests; `GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file>` makes every transaction wait for that file, so tests can force interleavings. Timestamps are epoch seconds.
 
 ## Versioning and releases
 
-`VERSION` in `bin/git-locks` is the version. A push to `main` whose version has no tag yet gets an annotated tag `v<version>` and a GitHub release whose notes are that version's section of `CHANGELOG.md`, with the script and the schema attached, from the `release` job in `.github/workflows/ci.yml`. So a release is: bump `VERSION`, write the changelog section, merge.
+`VERSION` in `lib/000-prelude.sh` is the version (it lands in `bin/git-locks` at build time). A push to `main` whose version has no tag yet gets an annotated tag `v<version>` and a GitHub release whose notes are that version's section of `CHANGELOG.md`, with the script and the schema attached, from the `release` job in `.github/workflows/ci.yml`. So a release is: bump `VERSION`, `make build`, write the changelog section, merge.
 
 ## Install
 
@@ -430,10 +430,13 @@ git locks list          # git dispatches `git locks` to git-locks on PATH
 ## Develop
 
 ```sh
+make build              # assemble bin/git-locks from lib/*.sh and schema/git-locks.schema.json
 make lint               # shellcheck with every optional check on, shfmt
 make test               # test/test.sh, pure bash, temporary repositories; needs python3 with jsonschema for the schema checks
 git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push tests
 ```
+
+The source is `lib/`, one module per section in numeric order (`000-prelude.sh` through `990-main.sh`); `bin/git-locks` is the build product and is committed, because it is what `make install`, the release asset and a `curl` of the raw file all want: one file, no runtime assembly. Edit under `lib/`, run `make build`, commit both. The suite checks that the committed script is exactly what `lib/` builds, so a `lib/` change without a rebuild fails the pre-push hook and CI. The schema module is generated at build time from `schema/git-locks.schema.json`, so there is one copy of the schema in the repository. Lint runs over the built script rather than the fragments, which do not parse on their own.
 
 ## Limits, stated
 
@@ -441,7 +444,7 @@ git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push t
 - One machine. The store is local; a shared remote would need a fetch before every claim and is out of scope.
 - `git rev-parse --path-format=absolute` and `update-ref --stdin` transactions need git 2.31 or newer.
 - bash 4 or newer: the store snapshot uses associative arrays. macOS's `/bin/bash` is 3.2; the script's shebang finds a newer bash on `PATH` (Homebrew's, for instance).
-- Each command reads the store once (`for-each-ref` plus one `cat-file --batch`) and every transaction invalidates that snapshot, so an invocation is a handful of git processes however many locks exist; the test suite pins the counts with a shim that counts spawns. Process count is not time: the snapshot is parsed in bash, so work grows with the store. Measured on 500 locks (macOS, bash 5.3): `check`, `claim` and `show` each about 0.07 s; `list`, which renders every record, 5.8 s. A store of hundreds of live locks is fine; one of thousands wants #11's split and a leaner `list`.
+- Each command reads the store once (`for-each-ref` plus one `cat-file --batch`) and every transaction invalidates that snapshot, so an invocation is a handful of git processes however many locks exist; the test suite pins the counts with a shim that counts spawns. Process count is not time: the snapshot is parsed in bash, so work grows linearly with the store, and `list` renders every record without forking. Measured on 500 locks (macOS, bash 5.3, 0.4.0): `check` 0.28 s, `show` 0.25 s, `claim` 0.33 s, `list` 0.58 s; the same store under 0.3.2 took 0.87 s, 0.85 s, 1.0 s and 6.75 s. A store of hundreds of live locks is fine; one of many thousands will feel the snapshot.
 - Every command reads the store once, plans, then commits with expectations. A racer can win in between; the transaction then fails and the command re-plans or reports who won. That is the designed outcome, not a gap.
 - The tests are bounded conformance evidence. Twenty racers and one forced interleaving are what the suite shows; they are not a proof over every schedule.
 

@@ -39,7 +39,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version="$(sed -n "s/^VERSION='\(.*\)'$/\1/p" bin/git-locks)"
+          version="$(sed -n "s/^VERSION='\(.*\)'$/\1/p" bin/git-locks)" # the built script; lib/000-prelude.sh is the source
           [ -n "$version" ] || { echo "no VERSION in bin/git-locks"; exit 1; }
           tag="v${version}"
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null 2>&1 || gh release view "$tag" >/dev/null 2>&1; then
