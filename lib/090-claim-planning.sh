@@ -3,6 +3,7 @@
 BATCH_JOBS=()
 declare -A BATCH_HOLDER=() # job planned in this batch -> holder
 declare -A BUMPED=()       # parent job -> 1 once its family generation is planned in this batch
+declare -A BATCH_PATH=()   # normalised path planned in this batch -> the job claiming it
 CONFLICTS=0
 CLAIM_LINE=''
 TERMINATED_PATHS=0
@@ -23,6 +24,22 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
   local at expires
   now_v at
   expires=$((at + ttl))
+
+  # Paths planned earlier in this batch are not in the snapshot, so the checks below cannot see them: a record
+  # claiming dist/ and another claiming dist/a.js would each plan against a store where the other does not exist,
+  # and the ancestor verify of one would be absorbed by the create of the other. Overlap inside one batch is
+  # therefore decided here, and only between different jobs; a job may hold a prefix and a path under it.
+  local bp bw
+  for bw in "${wanted[@]}"; do
+    for bp in "${!BATCH_PATH[@]}"; do
+      [[ "${BATCH_PATH[${bp}]}" == "${job}" ]] && continue
+      if covers "${bp}" "${bw}" || covers "${bw}" "${bp}"; then
+        duplicate_refusal "${bw}" "${bp}"
+        CONFLICTS=1
+      fi
+    done
+  done
+  for bw in "${wanted[@]}"; do BATCH_PATH["${bw}"]="${job}"; done
 
   # The parent, if any: live and the same holder, whether it exists already or is planned earlier in this batch.
   local pref poid
@@ -248,6 +265,7 @@ claim_reset() { # planning state for one attempt at a claim or a batch
   BATCH_JOBS=()
   BATCH_HOLDER=()
   BUMPED=()
+  BATCH_PATH=()
   CONFLICTS=0
 }
 

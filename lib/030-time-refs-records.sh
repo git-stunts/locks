@@ -83,6 +83,10 @@ normalize_path() { # -> prints the lexical form, or returns 2 with the reason on
 
 is_prefix() { [[ "$1" == */ ]]; } # a normalised path that names everything under it
 
+covers() { # a b -> 0 when a is a prefix lock holding b (never itself)
+  is_prefix "$1" && [[ "$2" == "$1"?* ]]
+}
+
 ancestors_v() { # VAR path: set VAR to the prefixes above a normalised path, shortest first, newline separated (a/b/c.md -> a/ a/b/; a/b/ -> a/; c.md -> nothing)
   local _an_p="$2" _an_acc='' _an_out='' _an_seg
   _an_p="${_an_p%/}"

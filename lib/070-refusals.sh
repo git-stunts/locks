@@ -19,10 +19,14 @@ parent_refusal() { # child parent detail
   printf '{"event":"refused","reason":"parent","job":%s,"parent":%s,"detail":"%s"}\n' "${_j1}" "${_j2}" "$3" >&2
 }
 
-duplicate_refusal() { # path named twice within one plan
-  local _j1
+duplicate_refusal() { # path [via]: the path is claimed twice within one plan, or (via) another record of this batch already covers it
+  local _j1 _jv=''
   json_str _j1 "$1"
-  printf '{"event":"refused","reason":"duplicate","path":%s}\n' "${_j1}" >&2
+  if [[ -n "${2:-}" ]]; then
+    json_str _jv "$2"
+    _jv=",\"via\":${_jv}"
+  fi
+  printf '{"event":"refused","reason":"duplicate","path":%s%s}\n' "${_j1}" "${_jv}" >&2
 }
 
 transaction_refusal() { # git's words, as one line

@@ -387,6 +387,9 @@
             },
             "path": {
               "$ref": "#/$defs/path"
+            },
+            "via": {
+              "$ref": "#/$defs/via"
             }
           },
           "additionalProperties": false
