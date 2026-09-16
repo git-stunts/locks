@@ -4,6 +4,17 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-15
+
+### Fixed
+
+- Acquisition identity survives renewal. 0.3.0 used the record oid as the acquisition's identity, so an `extend` inside a `with` changed the oid and the wrapper's own release then reported "superseded", leaving the lock until expiry. Records now carry an `acquisition` id, minted by a claim and kept by `extend` and by a child admission's rewrite of the parent; `release --acquisition <id>`, `sem release --acquisition <id>` and `with` release by it. `record` stays as the oid of the current record version. Reproduced first: `with` running `extend` inside its command, then a check that the path is free.
+
+### Added
+
+- A second forced interleaving in the suite: a renewal committed between a release's read and its commit; the release re-plans and the renewed lock is gone.
+- README carries measured timings on 500 locks and says plainly that process count is not time.
+
 ## [0.3.0] - 2026-09-15
 
 The correctness release. An outside review of 0.2.1 found five defects under the guarantees and asked three questions; each defect was reproduced as a failing test before it was fixed, and README's "The contract" section carries the answers.
