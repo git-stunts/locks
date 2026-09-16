@@ -6,3 +6,9 @@
 - Keep `README.md` and `CHANGELOG.md` current in the same commit as the change they describe.
 - Commits use conventional-commit subjects (`feat:`, `fix:`, `test:`, `docs:`, `chore:`). No history rewriting on `main`.
 - Configure the hooks once: `git config --local core.hooksPath scripts/hooks`. Pre-commit lints, pre-push runs the tests.
+- Bash rules learned the hard way, each with a commit behind it:
+  - `$(…)` and the tail of a pipeline run in subshells. Nothing set there survives: a memoised cache, an invalidation flag, an array. Helpers that must remember something write into a named variable with `printf -v VAR` and are never called inside `$(…)`; `path_ref VAR path` and `json_str VAR value` are the pattern.
+  - A helper that writes into the caller's variable must not declare a local of the same name, or `printf -v` fills the local and the caller sees nothing (`write_blob` and the test helper `lines` both did this once).
+  - Load the store snapshot once in the parent shell before dispatch; a subshell inherits it, a subshell cannot refresh it for the parent. Invalidate explicitly after any `$(transact …)`.
+  - Never install this tool as a symlink into a checkout you edit. `make install` copies for that reason: a half-fixed branch went live under another project's pre-commit hook on 2026-09-15.
+  - Every git spawn is a test: `test/test.sh` counts them with a shim. Keep one process per protocol per command.
