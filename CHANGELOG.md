@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Changed
+
+- README rewritten as a guided explainer: one running example (alice, bob, one path) followed from claim to semaphore, with real transcripts and five Mermaid figures (rendered and checked) showing the store's refs and blobs as claims, refusals, releases and slots happen. The command reference and install, develop and limits sections stay at the end.
+
 ## [0.2.0] - 2026-09-15
 
 ### Added
