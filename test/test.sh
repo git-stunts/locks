@@ -102,10 +102,10 @@ esac
 
 R="$(mkrepo)"
 cd "${R}" || exit 2
-out="$(git-locks claim --job j1 --holder luma-63 notes/x.md 'briefs/2026-09-15/y z.md' 2>&1)"
+out="$(git-locks claim --job j1 --holder alice notes/x.md 'briefs/2026-09-15/y z.md' 2>&1)"
 rc=$?
 check "claim exits 0" "${rc}" "0"
-contains "claim prints the holder" "${out}" '"holder":"luma-63"'
+contains "claim prints the holder" "${out}" '"holder":"alice"'
 got="$(refs "${R}" | wc -l | tr -d ' ')"
 check "claim writes one job ref and one ref per path" "${got}" "3"
 got="$(refs "${R}" jobs/)"
@@ -114,7 +114,7 @@ check "the job ref exists" "${got}" "refs/locks/jobs/j1"
 out="$(git-locks check notes/x.md 2>&1)"
 rc=$?
 check "check on a held path exits 1" "${rc}" "1"
-contains "check names the holder" "${out}" "luma-63"
+contains "check names the holder" "${out}" "alice"
 contains "check names the job" "${out}" "j1"
 
 out="$(git-locks check notes/free.md 2>&1)"
@@ -129,33 +129,33 @@ out="$(git-locks check ./notes/x.md 2>&1)"
 check "a leading ./ names the same path" "$?" "1"
 
 out="$(git-locks list 2>&1)"
-contains "list shows the holder" "${out}" "luma-63"
+contains "list shows the holder" "${out}" "alice"
 contains "list shows the job" "${out}" "j1"
 contains "list shows the path with the space" "${out}" "briefs/2026-09-15/y z.md"
 
 # ---------------------------------------------------------------- conflict / disjoint / re-claim
 
-out="$(git-locks claim --job j2 --holder luma-aa notes/x.md 2>&1)"
+out="$(git-locks claim --job j2 --holder bob notes/x.md 2>&1)"
 rc=$?
 check "overlapping claim by another job exits 1" "${rc}" "1"
-contains "overlapping claim names the holder" "${out}" "luma-63"
+contains "overlapping claim names the holder" "${out}" "alice"
 contains "overlapping claim names the path" "${out}" "notes/x.md"
 got="$(refs "${R}" jobs/j2)"
 check "a refused claim leaves no job ref behind" "${got}" ""
 
-out="$(git-locks claim --job j2 --holder luma-aa notes/other.md 2>&1)"
+out="$(git-locks claim --job j2 --holder bob notes/other.md 2>&1)"
 check "a disjoint claim by another job exits 0" "$?" "0"
 got="$(refs "${R}" | wc -l | tr -d ' ')"
 check "two jobs, three paths" "${got}" "5"
 
-out="$(git-locks claim --job j1 --holder luma-63 notes/x.md notes/added.md 2>&1)"
+out="$(git-locks claim --job j1 --holder alice notes/x.md notes/added.md 2>&1)"
 check "re-claim by the same job exits 0" "$?" "0"
 git-locks check 'briefs/2026-09-15/y z.md' >/dev/null 2>&1
 check "re-claim frees the path no longer listed" "$?" "0"
 git-locks check notes/added.md >/dev/null 2>&1
 check "re-claim holds the path newly listed" "$?" "1"
 
-out="$(git-locks claim --job j2 --holder luma-aa notes/added.md 2>&1)"
+out="$(git-locks claim --job j2 --holder bob notes/added.md 2>&1)"
 check "the re-claimed path is held against another job" "$?" "1"
 
 # ---------------------------------------------------------------- release
@@ -174,24 +174,24 @@ contains "release of a missing lock says so" "${out}" '"event":"nothing"'
 
 R="$(mkrepo)"
 cd "${R}" || exit 2
-GIT_LOCKS_NOW=1000 git-locks claim --job old --holder luma-aa --ttl 100 notes/e.md >/dev/null 2>&1
+GIT_LOCKS_NOW=1000 git-locks claim --job old --holder bob --ttl 100 notes/e.md >/dev/null 2>&1
 out="$(GIT_LOCKS_NOW=1050 git-locks check notes/e.md 2>&1)"
 check "before expiry the path is held" "$?" "1"
 out="$(GIT_LOCKS_NOW=1200 git-locks check notes/e.md 2>&1)"
 rc=$?
 check "after expiry the path is free" "${rc}" "0"
 contains "after expiry check still names the expired holder" "${out}" '"state":"expired"'
-contains "after expiry check names who held it" "${out}" "luma-aa"
+contains "after expiry check names who held it" "${out}" "bob"
 out="$(GIT_LOCKS_NOW=1200 git-locks list 2>&1)"
 contains "list marks the lock expired" "${out}" '"state":"expired"'
-out="$(GIT_LOCKS_NOW=1200 git-locks claim --job new --holder luma-63 notes/e.md 2>&1)"
+out="$(GIT_LOCKS_NOW=1200 git-locks claim --job new --holder alice notes/e.md 2>&1)"
 check "a claim over an expired lock succeeds" "$?" "0"
 got="$(refs "${R}" jobs/)"
 check "the expired job ref is evicted by the claim" "${got}" "refs/locks/jobs/new"
-out="$(GIT_LOCKS_NOW=1050 git-locks claim --job other --holder luma-aa notes/e.md 2>&1)"
+out="$(GIT_LOCKS_NOW=1050 git-locks claim --job other --holder bob notes/e.md 2>&1)"
 check "the new lock is held again" "$?" "1"
 
-GIT_LOCKS_NOW=1000 git-locks claim --job sweepme --holder luma-aa --ttl 10 notes/s.md >/dev/null 2>&1
+GIT_LOCKS_NOW=1000 git-locks claim --job sweepme --holder bob --ttl 10 notes/s.md >/dev/null 2>&1
 out="$(GIT_LOCKS_NOW=5000 git-locks sweep 2>&1)"
 check "sweep exits 0" "$?" "0"
 contains "sweep names what it removed" "${out}" '"event":"swept","job":"sweepme"'
