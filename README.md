@@ -386,7 +386,7 @@ Output is JSON Lines on every command; there is no text mode.
 
 | Command | Does | Stdout line(s) | Exit |
 |---|---|---|---|
-| `claim --job <id> --holder <name> [--ttl <s>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its record | one `claimed` object with `record`; refusals on stderr | 0 claimed, 1 refused, 2 usage |
+| `claim --job <id> --holder <name> [--ttl <s>] [--note <text>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its record; `--note` is one line saying why, carried on every line that names the lock | one `claimed` object with `record`; refusals on stderr | 0 claimed, 1 refused, 2 usage |
 | `check <path>...` | who holds each path, in argument order | one object per path as it is examined | 0 all free, 1 any held |
 | `list` | every lock, live or expired, with its paths | one object per lock; nothing when empty | 0 |
 | `sweep` | delete expired locks | one `swept` object per lock, as it goes | 0 |
@@ -413,7 +413,7 @@ Output is JSON Lines on every command; there is no text mode.
 
 Every JSON line git-locks writes, on stdout or stderr, matches exactly one definition in [`schema/git-locks.schema.json`](schema/git-locks.schema.json) (JSON Schema 2020-12). `git locks schema` prints that document byte-for-byte, and the test suite validates every line it provokes against it, so the contract cannot drift from the code. Consumers can pin the `$id` URL or the file at a tagged commit.
 
-Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`. A holder is one line of text; any byte but a newline is stored whole and escaped on output. A ttl is a decimal number of seconds; a leading zero is not octal.
+Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`. A holder is one line of text; any byte but a newline is stored whole and escaped on output. A note, given with `--note`, is one line saying why the lock is held; it rides on the claim, `show`, `list`, `check` and refusal lines, so the claimant who loses reads the reason and not only the name. A ttl is a decimal number of seconds; a leading zero is not octal.
 
 `GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests; `GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file>` makes every transaction wait for that file, so tests can force interleavings. Timestamps are epoch seconds.
 

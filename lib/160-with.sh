@@ -9,9 +9,9 @@ acquire_with_wait() { # kind(lock|sem) wait-seconds errfile -> 0 acquired (ACQUI
     if [[ "${kind}" == sem ]]; then
       out="$( (sem_acquire_once "${W_SEM}" "${W_JOB}" "${W_HOLDER}" "${W_TTL}") 2>"${errfile}")"
     elif [[ -n "${W_PARENT}" ]]; then
-      out="$( (cmd_claim --job "${W_JOB}" --holder "${W_HOLDER}" --ttl "${W_TTL}" --parent "${W_PARENT}" -- "${W_PATHS[@]}") 2>"${errfile}")"
+      out="$( (cmd_claim --job "${W_JOB}" --holder "${W_HOLDER}" --ttl "${W_TTL}" --parent "${W_PARENT}" --note "${W_NOTE}" -- "${W_PATHS[@]}") 2>"${errfile}")"
     else
-      out="$( (cmd_claim --job "${W_JOB}" --holder "${W_HOLDER}" --ttl "${W_TTL}" -- "${W_PATHS[@]}") 2>"${errfile}")"
+      out="$( (cmd_claim --job "${W_JOB}" --holder "${W_HOLDER}" --ttl "${W_TTL}" --note "${W_NOTE}" -- "${W_PATHS[@]}") 2>"${errfile}")"
     fi
     rc=$?
     if ((rc == 0)); then
@@ -39,6 +39,7 @@ cmd_with() {
   W_TTL="${DEFAULT_TTL}"
   W_PARENT=''
   W_SEM=''
+  W_NOTE=''
   W_PATHS=()
   local wait=0 command=() seen_dashdash=0 a
   while (($# > 0)); do
@@ -79,6 +80,11 @@ cmd_with() {
         W_SEM="$2"
         shift 2
         ;;
+      --note)
+        [[ $# -ge 2 ]] || usage
+        W_NOTE="$2"
+        shift 2
+        ;;
       --)
         seen_dashdash=1
         shift
@@ -98,6 +104,7 @@ cmd_with() {
   valid_job "${W_JOB}" || fail "job id '${W_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   valid_holder "${W_HOLDER}" || fail 'holder must be one line' 2
   valid_ttl W_TTL "${W_TTL}" || fail '--ttl is a positive number of seconds' 2
+  valid_note "${W_NOTE}" || fail '--note must be one line' 2
   [[ -z "${W_SEM}" ]] || valid_job "${W_SEM}" || fail "semaphore name '${W_SEM}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   [[ -z "${W_PARENT}" ]] || valid_job "${W_PARENT}" || fail "parent id '${W_PARENT}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
 

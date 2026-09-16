@@ -13,8 +13,8 @@ lock_line() {     # oid -> one JSON line for list and show; no fork per line, so
   json_str _j2 "${D_HOLDER}"
   json_str _j3 "$1"
   parent_json pj "$1"
-  printf '{"job":%s,"holder":%s,"state":"%s","claimed":%s,"expires":%s,"remaining":%s%s,"paths":%s,"record":%s,"acquisition":%s}\n' \
-    "${_j1}" "${_j2}" "${D_STATE}" "${claimed:-0}" "${D_EXPIRES}" "${D_REMAINING}" "${pj}" "${jpaths}" "${_j3}" "${_j4}"
+  printf '{"job":%s,"holder":%s%s,"state":"%s","claimed":%s,"expires":%s,"remaining":%s%s,"paths":%s,"record":%s,"acquisition":%s}\n' \
+    "${_j1}" "${_j2}" "${D_NOTE_JSON}" "${D_STATE}" "${claimed:-0}" "${D_EXPIRES}" "${D_REMAINING}" "${pj}" "${jpaths}" "${_j3}" "${_j4}"
 }
 
 cmd_list() {

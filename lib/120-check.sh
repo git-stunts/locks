@@ -18,10 +18,10 @@ cmd_check() {
     json_str _j1 "${D_HOLDER}"
     json_str _j2 "${D_JOB}"
     if [[ "${D_EXPIRES}" -gt "${at}" ]]; then
-      printf '{"path":%s,"state":"held","holder":%s,"job":%s,"expires":%s,"remaining":%s}\n' "${jp}" "${_j1}" "${_j2}" "${D_EXPIRES}" "${D_REMAINING}"
+      printf '{"path":%s,"state":"held","holder":%s%s,"job":%s,"expires":%s,"remaining":%s}\n' "${jp}" "${_j1}" "${D_NOTE_JSON}" "${_j2}" "${D_EXPIRES}" "${D_REMAINING}"
       held=1
     else
-      printf '{"path":%s,"state":"expired","holder":%s,"job":%s,"expires":%s,"remaining":0}\n' "${jp}" "${_j1}" "${_j2}" "${D_EXPIRES}"
+      printf '{"path":%s,"state":"expired","holder":%s%s,"job":%s,"expires":%s,"remaining":0}\n' "${jp}" "${_j1}" "${D_NOTE_JSON}" "${_j2}" "${D_EXPIRES}"
     fi
   done
   return "${held}"

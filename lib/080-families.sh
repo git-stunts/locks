@@ -83,19 +83,21 @@ new_acquisition() { # VAR: a fresh acquisition id. The record oid changes on eve
   printf -v "$1" '%s-%05d-%05d%05d' "${at}" "$$" "${RANDOM}" "${RANDOM}"
 }
 
-record_text() { # VAR job holder claimed expires parent family acquisition paths-newline-separated
+record_text() { # VAR job holder claimed expires parent family acquisition paths-newline-separated [note]
   local body
   body="$(
     printf 'schema: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\n' "${SCHEMA}" "$2" "$3" "$4" "$5"
     [[ -n "$6" ]] && printf 'parent: %s\n' "$6"
-    printf 'family: %s\nacquisition: %s\npaths:\n%s' "$7" "$8" "$9"
+    printf 'family: %s\nacquisition: %s\n' "$7" "$8"
+    [[ -n "${10:-}" ]] && printf 'note: %s\n' "${10}"
+    printf 'paths:\n%s' "$9"
   )"
   printf -v "$1" '%s' "${body}"
 }
 
 bump_parent() {   # parent-job parent-oid -> plans the parent's blob rewrite with family+1 on its job ref and path refs
   ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
-  local pjob="$1" poid="$2" fam newfam claimed expires holder parent paths record newoid p ref have acq
+  local pjob="$1" poid="$2" fam newfam claimed expires holder parent paths record newoid p ref have acq note
   fam="$(field "${poid}" family)"
   acq="$(field "${poid}" acquisition)"
   newfam=$((${fam:-0} + 1))
@@ -104,7 +106,8 @@ bump_parent() {   # parent-job parent-oid -> plans the parent's blob rewrite wit
   expires="$(field "${poid}" expires)"
   parent="$(field "${poid}" parent)"
   paths="$(record_paths "${poid}")"
-  record_text record "${pjob}" "${holder}" "${claimed}" "${expires}" "${parent}" "${newfam}" "${acq}" "${paths}"
+  field_v note "${poid}" note
+  record_text record "${pjob}" "${holder}" "${claimed}" "${expires}" "${parent}" "${newfam}" "${acq}" "${paths}" "${note}"
   write_blob newoid "${record}" || fail 'could not write the parent record'
   local pjref
   pjref="$(job_ref "${pjob}")"

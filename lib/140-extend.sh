@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------- extend
 
 cmd_extend() {
-  local _j1 oid jref at expires record new_oid paths p ref have claimed parent family attempt acq ttl
+  local _j1 oid jref at expires record new_oid paths p ref have claimed parent family attempt acq ttl note
   job_arg "$@"
   valid_ttl ttl "${TTL_ARG}" || fail '--ttl is a positive number of seconds' 2
   jref="$(job_ref "${JOB_ARG}")"
@@ -18,7 +18,8 @@ cmd_extend() {
     parent="$(field "${oid}" parent)"
     family="$(field "${oid}" family)"
     acq="$(field "${oid}" acquisition)"
-    record_text record "${D_JOB}" "${D_HOLDER}" "${claimed}" "${expires}" "${parent}" "${family:-0}" "${acq}" "${paths}"
+    field_v note "${oid}" note
+    record_text record "${D_JOB}" "${D_HOLDER}" "${claimed}" "${expires}" "${parent}" "${family:-0}" "${acq}" "${paths}" "${note}"
     write_blob new_oid "${record}" || fail 'could not write the lock record'
     plan_set "${jref}" "${oid}" "${new_oid}" || fail "${PLAN_CONFLICT}" 1
     while IFS= read -r p; do

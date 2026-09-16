@@ -98,6 +98,9 @@
         "holder": {
           "$ref": "#/$defs/holder"
         },
+        "note": {
+          "$ref": "#/$defs/note"
+        },
         "job": {
           "$ref": "#/$defs/job"
         },
@@ -142,6 +145,11 @@
               "required": [
                 "remaining"
               ]
+            },
+            {
+              "required": [
+                "note"
+              ]
             }
           ]
         }
@@ -177,6 +185,9 @@
         },
         "holder": {
           "$ref": "#/$defs/holder"
+        },
+        "note": {
+          "$ref": "#/$defs/note"
         },
         "state": {
           "enum": [
@@ -236,6 +247,9 @@
         "holder": {
           "$ref": "#/$defs/holder"
         },
+        "note": {
+          "$ref": "#/$defs/note"
+        },
         "claimed": {
           "$ref": "#/$defs/epoch"
         },
@@ -283,6 +297,9 @@
             },
             "holder": {
               "$ref": "#/$defs/holder"
+            },
+            "note": {
+              "$ref": "#/$defs/note"
             },
             "job": {
               "$ref": "#/$defs/job"
@@ -1043,6 +1060,12 @@
         }
       },
       "additionalProperties": false
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\n\\r]*$",
+      "description": "One line saying why the lock is held, given at claim time with --note (or note: in a batch record); absent when none was given. Carried on every line that names the lock."
     }
   }
 }
