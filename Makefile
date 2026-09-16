@@ -13,6 +13,7 @@ test:
 
 install:
 	mkdir -p $(PREFIX)/bin
+	rm -f $(PREFIX)/bin/git-locks
 	install -m 0755 bin/git-locks $(PREFIX)/bin/git-locks
 
 uninstall:
