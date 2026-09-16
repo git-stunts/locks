@@ -94,9 +94,32 @@ cmd_with() {
   ((${#command[@]} > 0)) || usage
   [[ -n "${W_SEM}" || ${#W_PATHS[@]} -gt 0 ]] || usage
   [[ "${wait}" =~ ^[0-9]+$ ]] || fail '--wait is a number of seconds' 2
+  # Validate everything before acquiring anything: the semaphore path does not pass through claim_args or cmd_sem.
+  valid_job "${W_JOB}" || fail "job id '${W_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  valid_holder "${W_HOLDER}" || fail 'holder must be one line' 2
+  valid_ttl W_TTL "${W_TTL}" || fail '--ttl is a positive number of seconds' 2
+  [[ -z "${W_SEM}" ]] || valid_job "${W_SEM}" || fail "semaphore name '${W_SEM}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  [[ -z "${W_PARENT}" ]] || valid_job "${W_PARENT}" || fail "parent id '${W_PARENT}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
 
   local errfile sem_record='' lock_record='' rc
   errfile="$(mktemp "${TMPDIR:-/tmp}/git-locks-with.XXXXXX")" || fail 'cannot create a temporary file'
+
+  # Release exactly the acquisitions this invocation made, never whatever wears the job name now. Armed before the
+  # first acquisition: a signal while waiting for the lock must give back the slot already taken.
+  local status=0
+  with_release_all() {
+    if [[ -n "${lock_record}" ]]; then
+      SNAP_LOADED=0
+      (cmd_release --job "${W_JOB}" --acquisition "${lock_record}") >&2
+    fi
+    if [[ -n "${sem_record}" ]]; then
+      with_release_sem "${sem_record}"
+    fi
+    rm -f "${errfile}"
+    return 0
+  }
+  trap 'with_release_all; exit 130' INT
+  trap 'with_release_all; exit 143' TERM
   if [[ -n "${W_SEM}" ]]; then
     acquire_with_wait sem "${wait}" "${errfile}"
     rc=$?
@@ -120,20 +143,6 @@ cmd_with() {
   fi
   rm -f "${errfile}"
 
-  # Release exactly the acquisitions this invocation made, never whatever wears the job name now.
-  local status=0
-  with_release_all() {
-    if [[ -n "${lock_record}" ]]; then
-      SNAP_LOADED=0
-      (cmd_release --job "${W_JOB}" --acquisition "${lock_record}") >&2
-    fi
-    if [[ -n "${sem_record}" ]]; then
-      with_release_sem "${sem_record}"
-    fi
-    return 0
-  }
-  trap 'with_release_all; exit 130' INT
-  trap 'with_release_all; exit 143' TERM
   "${command[@]}" || status=$?
   trap - INT TERM
   with_release_all

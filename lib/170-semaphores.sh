@@ -29,7 +29,7 @@ sem_refusal() { # name reason [capacity live]
 
 gen_blob() { # VAR: a fresh generation token as a blob
   local at content
-  at="$(now)"
+  now_v at
   content="$(printf 'generation %s %s %s' "${at}" "$$" "${RANDOM}${RANDOM}")"
   write_blob "$1" "${content}"
 }
@@ -53,7 +53,7 @@ sem_read() {      # name -> 0, or 1 when the semaphore does not exist
   SLOT_EXPIRES=()
   SLOT_REMAINING=()
   SEM_LIVE=0
-  at="$(now)"
+  now_v at
   rows="$(refs_under "${NS}/sem/${name}/slots/")"
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
@@ -143,7 +143,7 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
     sem_refusal "${name}" capacity "${SEM_CAP}" "${SEM_LIVE}"
     return 1
   fi
-  at="$(now)"
+  now_v at
   expires=$((at + ttl))
   record="$(printf 'schema: %s\nsemaphore: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\nacquisition: %s' "${SLOT_SCHEMA}" "${name}" "${job}" "${holder}" "${at}" "${expires}" "${acq}")"
   write_blob oid "${record}" || fail 'could not write the slot record'
@@ -286,7 +286,7 @@ cmd_sem() {
         exit 1
       fi
       local at meta gen mref gref content
-      at="$(now)"
+      now_v at
       content="$(printf 'schema: %s\nsemaphore: %s\ncapacity: %s\ncreated: %s' "${SEM_SCHEMA}" "${name}" "${capacity}" "${at}")"
       write_blob meta "${content}" || fail 'could not write the semaphore record'
       gen_blob gen || fail 'could not write the generation token'
@@ -305,7 +305,8 @@ cmd_sem() {
     acquire)
       [[ -n "${job}" && -n "${holder}" ]] || usage
       valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-      [[ "${ttl}" =~ ^[0-9]+$ && "${ttl}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
+      valid_ttl ttl "${ttl}" || fail '--ttl is a positive number of seconds' 2
+      valid_holder "${holder}" || fail 'holder must be one line' 2
       [[ "${wait}" =~ ^[0-9]+$ ]] || fail '--wait is a number of seconds' 2
       W_SEM="${name}"
       W_JOB="${job}"

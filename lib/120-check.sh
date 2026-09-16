@@ -4,7 +4,7 @@ cmd_check() {
   ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   (($# > 0)) || usage
   local at held=0 p n ref cur jp _j1 _j2
-  at="$(now)"
+  now_v at
   for p in "$@"; do
     n="$(normalize_path "${p}")" || exit 2
     path_ref ref "${n}"

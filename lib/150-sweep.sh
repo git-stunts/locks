@@ -3,7 +3,7 @@
 cmd_sweep() {
   (($# == 0)) || usage
   local at ref oid rows rjob rholder rexpires _j1 _j2 attempt done_jobs=() still
-  at="$(now)"
+  now_v at
   rows="$(job_refs)"
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
@@ -18,7 +18,8 @@ cmd_sweep() {
       snapshot
       plan_reset
       still="$(ref_oid "${ref}")"
-      [[ -n "${still}" ]] || break # gone meanwhile
+      [[ -n "${still}" ]] || break          # gone meanwhile
+      [[ "${still}" == "${oid}" ]] || break # replaced or extended meanwhile: that is not the lock we saw expire
       plan_terminate "${rjob}" || fail "${PLAN_CONFLICT}" 1
       if transact; then
         swept=1

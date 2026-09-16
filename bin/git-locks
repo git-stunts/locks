@@ -282,6 +282,15 @@ job_ref() { printf '%s/jobs/%s' "${NS}" "$1"; }
 
 valid_job() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
+valid_holder() { [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one line: the record is line-oriented; any other byte is stored whole and escaped on output
+
+valid_ttl() { # VAR value: VAR = the value as a decimal number of seconds; 1 unless it is digits only and positive (010 is ten, never octal eight)
+  [[ "$2" =~ ^[0-9]+$ ]] || return 1
+  local _vt=$((10#$2))
+  ((_vt > 0)) || return 1
+  printf -v "$1" '%s' "${_vt}"
+}
+
 valid_oid() { [[ "$1" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; }
 
 path_error() { # detail -> a usage error line on stderr (the caller returns 2)
@@ -356,13 +365,14 @@ g() { git --git-dir="${STORE}" "$@"; }
 
 declare -A REF_OID=()  # ref -> oid
 declare -A BLOB=()     # oid -> record text
-declare -A R_FIELDS=() # oid -> "key\x1fvalue\x1e..." for the header lines before paths:
+declare -A R_PARSED=() # oid -> 1 once parsed
+declare -A R_FIELD=()  # "oid key" -> value, for the header lines before paths: (first occurrence wins); values are stored whole, so no byte in one can read as a delimiter
 declare -A R_PATHS=()  # oid -> the path lines, newline separated
 SNAP_LOADED=0
 
-parse_record() { # oid -> fills R_FIELDS[oid] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
-  [[ -n "${R_FIELDS[$1]+x}" ]] && return 0
-  local text="${BLOB[$1]:-}" line fields='' paths='' in_paths=0
+parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
+  [[ -n "${R_PARSED[$1]+x}" ]] && return 0
+  local text="${BLOB[$1]:-}" line key paths='' in_paths=0
   while [[ -n "${text}" ]]; do
     line="${text%%$'\n'*}"
     if [[ "${line}" == "${text}" ]]; then text=''; else text="${text#*$'\n'}"; fi
@@ -371,10 +381,11 @@ parse_record() { # oid -> fills R_FIELDS[oid] and R_PATHS[oid] from BLOB[oid], o
     elif [[ "${line}" == 'paths:' ]]; then
       in_paths=1
     elif [[ "${line}" == *': '* ]]; then
-      fields+="${line%%: *}"$'\x1f'"${line#*: }"$'\x1e'
+      key="${line%%: *}"
+      [[ -n "${R_FIELD["$1 ${key}"]+x}" ]] || R_FIELD["$1 ${key}"]="${line#*: }"
     fi
   done
-  R_FIELDS["$1"]="${fields}"
+  R_PARSED["$1"]=1
   R_PATHS["$1"]="${paths%$'\n'}"
   [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'parse %s\n' "$1" >>"${GIT_LOCKS_TRACE}"
   return 0
@@ -416,7 +427,8 @@ snapshot() {
   fi
   REF_OID=()
   BLOB=()
-  R_FIELDS=()
+  R_PARSED=()
+  R_FIELD=()
   R_PATHS=()
   for ref in "${!refs[@]}"; do REF_OID["${ref}"]="${refs[${ref}]}"; done
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
@@ -445,16 +457,7 @@ ref_oid() { # ref -> oid or empty
 field_v() { # VAR oid key: set VAR to the value of `key:` in the record's header (before paths:), empty when absent; no fork, so the parse memoises in this shell
   ensure_snapshot
   parse_record "$2"
-  local _fv_fields="${R_FIELDS[$2]:-}" _fv_rest # underscored: a local named like the caller's VAR would swallow the printf -v
-  if [[ "${_fv_fields}" == "$3"$'\x1f'* ]]; then
-    _fv_rest="${_fv_fields#"$3"$'\x1f'}"
-  elif [[ "${_fv_fields}" == *$'\x1e'"$3"$'\x1f'* ]]; then
-    _fv_rest="${_fv_fields#*$'\x1e'"$3"$'\x1f'}"
-  else
-    printf -v "$1" ''
-    return 0
-  fi
-  printf -v "$1" '%s' "${_fv_rest%%$'\x1e'*}"
+  printf -v "$1" '%s' "${R_FIELD["$2 $3"]:-}"
 }
 
 field() { # oid key -> the value on stdout; inside $(…) the parse happens in the subshell, so hot paths use field_v
@@ -639,8 +642,8 @@ descendants() {   # job... -> DESC: every job whose parent chain reaches one of 
   local all_jobs=() all_parents=()
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
-    rjob="$(field "${oid}" job)"
-    rparent="$(field "${oid}" parent)"
+    field_v rjob "${oid}" job
+    field_v rparent "${oid}" parent
     all_jobs+=("${rjob}")
     all_parents+=("${rparent}")
   done <<<"${rows}"
@@ -703,7 +706,7 @@ plan_terminate() { # job -> plans the deletion of the job and every descendant; 
 
 new_acquisition() { # VAR: a fresh acquisition id. The record oid changes on every rewrite (renewal, family bump);
   local at          # this id does not, so a caller can name the acquisition it made across renewals.
-  at="$(now)"
+  now_v at
   printf -v "$1" '%s-%05d-%05d%05d' "${at}" "$$" "${RANDOM}" "${RANDOM}"
 }
 
@@ -764,7 +767,7 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
   while IFS= read -r n; do [[ -n "${n}" ]] && wanted+=("${n}"); done <<<"${sorted}"
 
   local at expires
-  at="$(now)"
+  now_v at
   expires=$((at + ttl))
 
   # The parent, if any: live and the same holder, whether it exists already or is planned earlier in this batch.
@@ -831,8 +834,8 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
       }
       continue
     fi
-    rjob="$(field "${cur}" job)"
-    rexp="$(field "${cur}" expires)"
+    field_v rjob "${cur}" job
+    field_v rexp "${cur}" expires
     if [[ "${rjob}" == "${job}" ]]; then
       plan_set "${ref}" "${cur}" "${new_oid}" || {
         duplicate_refusal "${p}"
@@ -873,7 +876,7 @@ plan_claim() {    # job holder ttl parent path... -> plans one claim; sets CLAIM
     path_ref ref "${p}"
     cur="$(ref_oid "${ref}")"
     [[ -z "${cur}" ]] && continue
-    rjob="$(field "${cur}" job)"
+    field_v rjob "${cur}" job
     in_list "${rjob}" "${evict[@]}" || continue
     T_AFTER["${ref}"]="${new_oid}" # planned as a delete by plan_terminate; the path passes to the new lock instead
   done
@@ -968,8 +971,8 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
   done
   [[ -n "${CA_JOB}" && -n "${CA_HOLDER}" ]] || usage
   valid_job "${CA_JOB}" || fail "job id '${CA_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-  [[ "${CA_TTL}" =~ ^[0-9]+$ && "${CA_TTL}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
-  [[ "${CA_HOLDER}" == *$'\n'* ]] && fail 'holder must be one line' 2
+  valid_ttl CA_TTL "${CA_TTL}" || fail '--ttl is a positive number of seconds' 2
+  valid_holder "${CA_HOLDER}" || fail 'holder must be one line' 2
   ((${#CA_PATHS[@]} > 0)) || usage
 }
 
@@ -988,11 +991,12 @@ cmd_batch() {
   local line key val job='' holder='' ttl='' parent='' paths=() in_paths=0 count=0 lines_out=()
   plan_reset
   finish_record() {
-    if [[ -z "${job}" && -z "${holder}" && ${#paths[@]} -eq 0 ]]; then return 0; fi
+    if [[ -z "${job}" && -z "${holder}" && -z "${ttl}" && -z "${parent}" && ${#paths[@]} -eq 0 ]]; then return 0; fi # only a wholly empty record is skipped; one with just parent: or ttl: is malformed
     [[ -n "${job}" && -n "${holder}" && ${#paths[@]} -gt 0 ]] || fail 'batch: every record needs job:, holder: and at least one path under paths:' 2
     valid_job "${job}" || fail "batch: job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
     [[ -z "${ttl}" ]] && ttl="${DEFAULT_TTL}"
-    [[ "${ttl}" =~ ^[0-9]+$ && "${ttl}" -gt 0 ]] || fail 'batch: ttl is a positive number of seconds' 2
+    valid_ttl ttl "${ttl}" || fail 'batch: ttl is a positive number of seconds' 2
+    valid_holder "${holder}" || fail 'batch: holder must be one line' 2
     plan_claim "${job}" "${holder}" "${ttl}" "${parent}" "${paths[@]}"
     lines_out+=("${CLAIM_LINE}")
     count=$((count + 1))
@@ -1129,7 +1133,7 @@ cmd_check() {
   ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   (($# > 0)) || usage
   local at held=0 p n ref cur jp _j1 _j2
-  at="$(now)"
+  now_v at
   for p in "$@"; do
     n="$(normalize_path "${p}")" || exit 2
     path_ref ref "${n}"
@@ -1234,9 +1238,9 @@ cmd_ttl() {
 # ---------------------------------------------------------------- extend
 
 cmd_extend() {
-  local _j1 oid jref at expires record new_oid paths p ref have claimed parent family attempt acq
+  local _j1 oid jref at expires record new_oid paths p ref have claimed parent family attempt acq ttl
   job_arg "$@"
-  [[ "${TTL_ARG}" =~ ^[0-9]+$ && "${TTL_ARG}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
+  valid_ttl ttl "${TTL_ARG}" || fail '--ttl is a positive number of seconds' 2
   jref="$(job_ref "${JOB_ARG}")"
   for ((attempt = 0; attempt < RETRIES; attempt++)); do
     snapshot
@@ -1244,8 +1248,8 @@ cmd_extend() {
     oid="$(ref_oid "${jref}")"
     [[ -n "${oid}" ]] || missing "${JOB_ARG}"
     describe "${oid}"
-    at="$(now)"
-    expires=$((at + TTL_ARG))
+    now_v at
+    expires=$((at + ttl))
     paths="$(record_paths "${oid}")"
     claimed="$(field "${oid}" claimed)"
     parent="$(field "${oid}" parent)"
@@ -1275,7 +1279,7 @@ cmd_extend() {
 cmd_sweep() {
   (($# == 0)) || usage
   local at ref oid rows rjob rholder rexpires _j1 _j2 attempt done_jobs=() still
-  at="$(now)"
+  now_v at
   rows="$(job_refs)"
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
@@ -1290,7 +1294,8 @@ cmd_sweep() {
       snapshot
       plan_reset
       still="$(ref_oid "${ref}")"
-      [[ -n "${still}" ]] || break # gone meanwhile
+      [[ -n "${still}" ]] || break          # gone meanwhile
+      [[ "${still}" == "${oid}" ]] || break # replaced or extended meanwhile: that is not the lock we saw expire
       plan_terminate "${rjob}" || fail "${PLAN_CONFLICT}" 1
       if transact; then
         swept=1
@@ -1408,9 +1413,32 @@ cmd_with() {
   ((${#command[@]} > 0)) || usage
   [[ -n "${W_SEM}" || ${#W_PATHS[@]} -gt 0 ]] || usage
   [[ "${wait}" =~ ^[0-9]+$ ]] || fail '--wait is a number of seconds' 2
+  # Validate everything before acquiring anything: the semaphore path does not pass through claim_args or cmd_sem.
+  valid_job "${W_JOB}" || fail "job id '${W_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  valid_holder "${W_HOLDER}" || fail 'holder must be one line' 2
+  valid_ttl W_TTL "${W_TTL}" || fail '--ttl is a positive number of seconds' 2
+  [[ -z "${W_SEM}" ]] || valid_job "${W_SEM}" || fail "semaphore name '${W_SEM}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  [[ -z "${W_PARENT}" ]] || valid_job "${W_PARENT}" || fail "parent id '${W_PARENT}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
 
   local errfile sem_record='' lock_record='' rc
   errfile="$(mktemp "${TMPDIR:-/tmp}/git-locks-with.XXXXXX")" || fail 'cannot create a temporary file'
+
+  # Release exactly the acquisitions this invocation made, never whatever wears the job name now. Armed before the
+  # first acquisition: a signal while waiting for the lock must give back the slot already taken.
+  local status=0
+  with_release_all() {
+    if [[ -n "${lock_record}" ]]; then
+      SNAP_LOADED=0
+      (cmd_release --job "${W_JOB}" --acquisition "${lock_record}") >&2
+    fi
+    if [[ -n "${sem_record}" ]]; then
+      with_release_sem "${sem_record}"
+    fi
+    rm -f "${errfile}"
+    return 0
+  }
+  trap 'with_release_all; exit 130' INT
+  trap 'with_release_all; exit 143' TERM
   if [[ -n "${W_SEM}" ]]; then
     acquire_with_wait sem "${wait}" "${errfile}"
     rc=$?
@@ -1434,20 +1462,6 @@ cmd_with() {
   fi
   rm -f "${errfile}"
 
-  # Release exactly the acquisitions this invocation made, never whatever wears the job name now.
-  local status=0
-  with_release_all() {
-    if [[ -n "${lock_record}" ]]; then
-      SNAP_LOADED=0
-      (cmd_release --job "${W_JOB}" --acquisition "${lock_record}") >&2
-    fi
-    if [[ -n "${sem_record}" ]]; then
-      with_release_sem "${sem_record}"
-    fi
-    return 0
-  }
-  trap 'with_release_all; exit 130' INT
-  trap 'with_release_all; exit 143' TERM
   "${command[@]}" || status=$?
   trap - INT TERM
   with_release_all
@@ -1489,7 +1503,7 @@ sem_refusal() { # name reason [capacity live]
 
 gen_blob() { # VAR: a fresh generation token as a blob
   local at content
-  at="$(now)"
+  now_v at
   content="$(printf 'generation %s %s %s' "${at}" "$$" "${RANDOM}${RANDOM}")"
   write_blob "$1" "${content}"
 }
@@ -1513,7 +1527,7 @@ sem_read() {      # name -> 0, or 1 when the semaphore does not exist
   SLOT_EXPIRES=()
   SLOT_REMAINING=()
   SEM_LIVE=0
-  at="$(now)"
+  now_v at
   rows="$(refs_under "${NS}/sem/${name}/slots/")"
   while IFS=' ' read -r ref oid; do
     [[ -z "${ref}" ]] && continue
@@ -1603,7 +1617,7 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
     sem_refusal "${name}" capacity "${SEM_CAP}" "${SEM_LIVE}"
     return 1
   fi
-  at="$(now)"
+  now_v at
   expires=$((at + ttl))
   record="$(printf 'schema: %s\nsemaphore: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\nacquisition: %s' "${SLOT_SCHEMA}" "${name}" "${job}" "${holder}" "${at}" "${expires}" "${acq}")"
   write_blob oid "${record}" || fail 'could not write the slot record'
@@ -1746,7 +1760,7 @@ cmd_sem() {
         exit 1
       fi
       local at meta gen mref gref content
-      at="$(now)"
+      now_v at
       content="$(printf 'schema: %s\nsemaphore: %s\ncapacity: %s\ncreated: %s' "${SEM_SCHEMA}" "${name}" "${capacity}" "${at}")"
       write_blob meta "${content}" || fail 'could not write the semaphore record'
       gen_blob gen || fail 'could not write the generation token'
@@ -1765,7 +1779,8 @@ cmd_sem() {
     acquire)
       [[ -n "${job}" && -n "${holder}" ]] || usage
       valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-      [[ "${ttl}" =~ ^[0-9]+$ && "${ttl}" -gt 0 ]] || fail '--ttl is a positive number of seconds' 2
+      valid_ttl ttl "${ttl}" || fail '--ttl is a positive number of seconds' 2
+      valid_holder "${holder}" || fail 'holder must be one line' 2
       [[ "${wait}" =~ ^[0-9]+$ ]] || fail '--wait is a number of seconds' 2
       W_SEM="${name}"
       W_JOB="${job}"
@@ -2143,6 +2158,7 @@ main() {
       exit 0
       ;;
     version | --version)
+      (($# == 0)) || usage
       printf '{"name":"git-locks","version":"%s"}\n' "${VERSION}"
       exit 0
       ;;

@@ -413,7 +413,7 @@ Output is JSON Lines on every command; there is no text mode.
 
 Every JSON line git-locks writes, on stdout or stderr, matches exactly one definition in [`schema/git-locks.schema.json`](schema/git-locks.schema.json) (JSON Schema 2020-12). `git locks schema` prints that document byte-for-byte, and the test suite validates every line it provokes against it, so the contract cannot drift from the code. Consumers can pin the `$id` URL or the file at a tagged commit.
 
-Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`.
+Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`. A holder is one line of text; any byte but a newline is stored whole and escaped on output. A ttl is a decimal number of seconds; a leading zero is not octal.
 
 `GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests; `GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file>` makes every transaction wait for that file, so tests can force interleavings. Timestamps are epoch seconds.
 
