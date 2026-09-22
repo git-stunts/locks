@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Fixed
+
+- Path normalisation preserves literal `*`, `?` and bracket characters instead of expanding them against files in the working tree.
+
 ## [0.7.0] - 2026-09-16
 
 ### Added
