@@ -7,12 +7,14 @@
 # cached read taken under one for-each-ref, not a proof of a consistent cut;
 # every write below carries the expectations that make a stale read fail.
 
-declare -A REF_OID=()  # ref -> oid
-declare -A BLOB=()     # oid -> record text
-declare -A R_PARSED=() # oid -> 1 once parsed
-declare -A R_FIELD=()  # "oid key" -> value, for the header lines before paths: (first occurrence wins); values are stored whole, so no byte in one can read as a delimiter
-declare -A R_PATHS=()  # oid -> the path lines, newline separated
+declare -A REF_OID=()   # ref -> oid
+declare -A BLOB=()      # oid -> record text
+declare -A R_PARSED=()  # oid -> 1 once parsed
+declare -A R_FIELD=()   # "oid key" -> value, for the header lines before paths: (first occurrence wins); values are stored whole, so no byte in one can read as a delimiter
+declare -A R_PATHS=()   # oid -> the path lines, newline separated
+declare -A R_INVALID=() # oid -> structural parse error, retained for doctor
 SNAP_LOADED=0
+DIAGNOSTIC_READ=0
 
 parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
   [[ -n "${R_PARSED[$1]+x}" ]] && return 0
@@ -26,7 +28,13 @@ parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], on
       in_paths=1
     elif [[ "${line}" == *': '* ]]; then
       key="${line%%: *}"
-      [[ -n "${R_FIELD["$1 ${key}"]+x}" ]] || R_FIELD["$1 ${key}"]="${line#*: }"
+      if [[ -n "${R_FIELD["$1 ${key}"]+x}" ]]; then
+        R_INVALID["$1"]="duplicate field ${key}"
+      else
+        R_FIELD["$1 ${key}"]="${line#*: }"
+      fi
+    else
+      R_INVALID["$1"]='invalid header line'
     fi
   done
   R_PARSED["$1"]=1
@@ -74,9 +82,11 @@ snapshot() {
   R_PARSED=()
   R_FIELD=()
   R_PATHS=()
+  R_INVALID=()
   for ref in "${!refs[@]}"; do REF_OID["${ref}"]="${refs[${ref}]}"; done
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
   SNAP_LOADED=1
+  ((DIAGNOSTIC_READ)) || validate_snapshot
   [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'snapshot %s\n' "${#refs[@]}" >>"${GIT_LOCKS_TRACE}"
   test_gate "${GIT_LOCKS_PAUSE_AFTER_READ:-}" # tests force an interleaving between a read and what follows it
 }

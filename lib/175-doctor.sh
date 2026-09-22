@@ -18,8 +18,6 @@ finding() { # check subject detail -> one finding line on stdout
   DOC_FINDINGS=$((DOC_FINDINGS + 1))
 }
 
-is_int() { [[ "$1" =~ ^[0-9]+$ ]]; }
-
 doctor_hash_paths() { # path... -> PATH_HASH for every path, in one git process: each path becomes a file, hash-object hashes them all
   local dir p i=0 files=() todo=() out h rc
   for p in "$@"; do
@@ -48,53 +46,18 @@ doctor_hash_paths() { # path... -> PATH_HASH for every path, in one git process:
   ((i == ${#todo[@]})) || store_error "hash-object returned ${i} hashes for ${#todo[@]} paths"
 }
 
-doctor_lock_record() { # subject oid -> 0 when the record decodes as a lock record, else findings and 1
-  local schema job holder claimed expires acq paths bad=0
-  field_v schema "$2" schema
-  if [[ "${schema}" != "${SCHEMA}" ]]; then
-    finding record-decodes "$1" "record ${2} has schema '${schema}', not ${SCHEMA}"
-    return 1
-  fi
-  field_v job "$2" job
-  valid_job "${job}" || {
-    finding record-decodes "$1" "record ${2} has no valid job id"
-    bad=1
-  }
-  field_v holder "$2" holder
-  [[ -n "${holder}" ]] || {
-    finding record-decodes "$1" "record ${2} has no holder"
-    bad=1
-  }
-  field_v claimed "$2" claimed
-  is_int "${claimed}" || {
-    finding record-decodes "$1" "record ${2} has no numeric claimed"
-    bad=1
-  }
-  field_v expires "$2" expires
-  is_int "${expires}" || {
-    finding record-decodes "$1" "record ${2} has no numeric expires"
-    bad=1
-  }
-  field_v acq "$2" acquisition
-  [[ -n "${acq}" ]] || {
-    finding record-decodes "$1" "record ${2} has no acquisition id"
-    bad=1
-  }
-  record_paths_v paths "$2"
-  [[ -n "${paths}" ]] || {
-    finding record-decodes "$1" "record ${2} lists no paths"
-    bad=1
-  }
-  return "${bad}"
+doctor_lock_record() { # subject oid -> decoded lock or a diagnostic finding
+  validate_record "$2" lock && return 0
+  finding record-decodes "$1" "record ${2}: ${RECORD_ERROR}"
+  return 1
 }
 
 doctor_slot_record() { # subject oid name job -> 0 when the record decodes as a slot of that semaphore for that job
-  local schema v bad=0
-  field_v schema "$2" schema
-  if [[ "${schema}" != "${SLOT_SCHEMA}" ]]; then
-    finding sem-record "$1" "slot record ${2} has schema '${schema}', not ${SLOT_SCHEMA}"
+  local v bad=0
+  validate_record "$2" slot || {
+    finding sem-record "$1" "slot record ${2}: ${RECORD_ERROR}"
     return 1
-  fi
+  }
   field_v v "$2" semaphore
   [[ "${v}" == "$3" ]] || {
     finding sem-record "$1" "slot record ${2} names semaphore '${v}'"
@@ -103,21 +66,6 @@ doctor_slot_record() { # subject oid name job -> 0 when the record decodes as a 
   field_v v "$2" job
   [[ "${v}" == "$4" ]] || {
     finding sem-record "$1" "slot record ${2} names job '${v}'"
-    bad=1
-  }
-  field_v v "$2" holder
-  [[ -n "${v}" ]] || {
-    finding sem-record "$1" "slot record ${2} has no holder"
-    bad=1
-  }
-  field_v v "$2" claimed
-  is_int "${v}" || {
-    finding sem-record "$1" "slot record ${2} has no numeric claimed"
-    bad=1
-  }
-  field_v v "$2" expires
-  is_int "${v}" || {
-    finding sem-record "$1" "slot record ${2} has no numeric expires"
     bad=1
   }
   return "${bad}"
@@ -225,6 +173,7 @@ cmd_doctor() {
       finding parent-missing "${job}" "names parent '${parent}', which has no job ref: a child cannot outlive its parent"
       continue
     fi
+    [[ -n "${JOB_OK[${parent}]+x}" ]] || continue # its decoder already reported the corrupt parent
     field_v pexp "${JOB_OID[${parent}]}" expires
     ((${pexp:-0} > at)) || finding parent-expired "${job}" "parent '${parent}' expired at ${pexp:-0}; sweep removes both"
     field_v holder "${oid}" holder
@@ -249,16 +198,11 @@ cmd_doctor() {
       finding sem-meta "${name}" 'no meta ref: the semaphore has no capacity'
       cap=''
     else
-      field_v rest "${SEM_META[${name}]}" schema
-      if [[ "${rest}" != "${SEM_SCHEMA}" ]]; then
-        finding sem-record "${name}" "meta record ${SEM_META[${name}]} has schema '${rest}', not ${SEM_SCHEMA}"
+      if ! validate_record "${SEM_META[${name}]}" meta; then
+        finding sem-record "${name}" "meta record ${SEM_META[${name}]}: ${RECORD_ERROR}"
         cap=''
       else
         field_v cap "${SEM_META[${name}]}" capacity
-        if ! is_int "${cap}" || ((cap < 1)); then
-          finding sem-record "${name}" "meta record ${SEM_META[${name}]} has capacity '${cap}'"
-          cap=''
-        fi
         field_v rest "${SEM_META[${name}]}" semaphore
         [[ "${rest}" == "${name}" ]] || finding sem-record "${name}" "meta record names semaphore '${rest}'"
       fi
