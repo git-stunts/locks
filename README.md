@@ -216,6 +216,10 @@ When a claim finds an expired lock on a path it wants, it evicts the whole expir
 
 In summary, expiry is a field, not a process. A dead holder's lock is free the moment its time is up, and the next writer removes it as part of taking the path.
 
+## A runnable cooperating-worker example
+
+The [two-worker example](examples/cooperating-workers/README.md) reserves a path set before launching mutation, shows a competing worker who holds it and why, and lets unrelated work finish. It also demonstrates renewal, acquisition-aware cleanup, worker failure and the TTL boundary in an isolated store. The runbook defines an external adoption experiment as unrun. Its controlled flows do not resolve the observation-coherence failures tracked by [#45](https://github.com/git-stunts/locks/issues/45).
+
 ## Families and batches: all or nothing across locks
 
 One transaction per claim already makes a multi-path claim atomic; this section extends that to several locks at once, in two forms that share one mechanism. A child lock is tied to a parent so that the family lives and dies together, and a batch claims several independent locks in one stanza.

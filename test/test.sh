@@ -1571,6 +1571,9 @@ check "sibling prefixes in one batch are not an overlap" "$?" "0"
 lines n "${out}"
 check "and both records claimed" "${n}" "2"
 
+python3 "${HERE}/cooperating-workers.py"
+check "runnable cooperating-worker demo and isolated stress cases" "$?" 0
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"
