@@ -727,6 +727,20 @@ valid "sem delete line" "${out}"
 git-locks sem show batch >/dev/null 2>&1
 check "a deleted semaphore is gone" "$?" "1"
 
+# Decimal capacity must preserve its numeric value in storage and every JSON line.
+for capacity_case in '01:1' '08:8' '010:10'; do
+  capacity_input="${capacity_case%:*}"
+  capacity_want="${capacity_case#*:}"
+  out="$(git-locks sem create "decimal-${capacity_want}" --capacity "${capacity_input}" 2>&1)"
+  check "capacity ${capacity_input} creates a semaphore" "$?" "0"
+  jfields "capacity ${capacity_input} emits decimal ${capacity_want}" "${out}" "capacity=${capacity_want}"
+  valid "capacity ${capacity_input} create line" "${out}"
+  out="$(git-locks sem show "decimal-${capacity_want}" 2>&1)"
+  check "capacity ${capacity_input} can be read" "$?" "0"
+  jfields "capacity ${capacity_input} reads decimal ${capacity_want}" "${out}" "capacity=${capacity_want}"
+  valid "capacity ${capacity_input} show line" "${out}"
+done
+
 # exactly K winners under contention
 git-locks sem create race --capacity 3 >/dev/null 2>&1
 wins=0
