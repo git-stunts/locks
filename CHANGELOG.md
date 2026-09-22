@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Fixed
+
+- Unicode integration tests select an installed UTF-8 locale, keep JSON stdout separate from shell diagnostics, and report an explicit skip when no UTF-8 locale is available.
+
 ## [0.7.0] - 2026-09-16
 
 ### Added
