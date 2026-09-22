@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Documentation
+
+- Lead with cooperative path reservations, explain TTL and launcher admission before the first example, and refresh introductory and wrapper transcripts with acquisition IDs. Clarify linked-worktree logical ownership, release conditions, and Git concurrent-reader visibility (#37).
+
 All notable changes to this project are recorded here. The format follows Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]
