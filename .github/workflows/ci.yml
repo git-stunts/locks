@@ -6,6 +6,56 @@ on:
   pull_request:
 
 jobs:
+  unicode-without-en-us:
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    steps:
+      - name: Install test prerequisites
+        run: |
+          apt-get update
+          apt-get install -y ca-certificates git python3-jsonschema
+      - uses: actions/checkout@v4
+      - name: Confirm the image has C.utf8 but no en_US UTF-8 locale
+        shell: bash
+        run: |
+          set -euo pipefail
+          found_c=0
+          found_en_us=0
+          while IFS= read -r installed; do
+            printf '%s\n' "$installed"
+            case "${installed,,}" in
+              c.utf8 | c.utf-8) found_c=1 ;;
+              en_us.utf8 | en_us.utf-8) found_en_us=1 ;;
+            esac
+          done < <(locale -a)
+          [[ "$found_c" == 1 ]]
+          [[ "$found_en_us" == 0 ]]
+      - name: Reproduce the old merged-stream contamination
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d)"
+          mkdir -p "$probe/home" "$probe/work"
+          git -C "$probe/work" init -q -b main
+          export HOME="$probe/home"
+          export GIT_LOCKS_STORE="$probe/store.git"
+          merged="$(cd "$probe/work" && LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 "$GITHUB_WORKSPACE/bin/git-locks" claim --job unicode-red --holder 'héloïse' 'café/naïve.md' 2>&1)"
+          [[ "$merged" == *setlocale* ]]
+          [[ "$merged" == *'"event":"claimed"'* ]]
+          if python3 -c 'import json, sys; [json.loads(line) for line in sys.stdin if line.strip()]' <<<"$merged"; then
+            echo 'expected the merged warning and JSON stream to fail JSON parsing' >&2
+            exit 1
+          fi
+      - name: Test Unicode output under the installed UTF-8 locale
+        shell: bash
+        run: |
+          git config --global user.email ci@example.invalid
+          git config --global user.name ci
+          bash test/unicode-locale.sh
+          no_locale_output="$(GIT_LOCKS_TEST_LOCALES=$'C\nPOSIX' bash test/unicode-locale.sh)"
+          printf '%s\n' "$no_locale_output"
+          [[ "$no_locale_output" == *'SKIP Unicode claim/list/check integration'* ]]
+
   lint-and-test:
     runs-on: ubuntu-latest
     steps:
@@ -25,7 +75,7 @@ jobs:
           make test
 
   release:
-    needs: lint-and-test
+    needs: [lint-and-test, unicode-without-en-us]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

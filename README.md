@@ -435,11 +435,11 @@ git locks list          # git dispatches `git locks` to git-locks on PATH
 ```sh
 make build              # assemble bin/git-locks from lib/*.sh and schema/git-locks.schema.json
 make lint               # shellcheck with every optional check on, shfmt
-make test               # test/test.sh, pure bash, temporary repositories; needs python3 with jsonschema for the schema checks
+make test               # pure bash, temporary repositories; needs python3 with jsonschema for the schema checks
 git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push tests
 ```
 
-The source is `lib/`, one module per section in numeric order (`000-prelude.sh` through `990-main.sh`); `bin/git-locks` is the build product and is committed, because it is what `make install`, the release asset and a `curl` of the raw file all want: one file, no runtime assembly. Edit under `lib/`, run `make build`, commit both. The suite checks that the committed script is exactly what `lib/` builds, so a `lib/` change without a rebuild fails the pre-push hook and CI. The schema module is generated at build time from `schema/git-locks.schema.json`, so there is one copy of the schema in the repository. Lint runs over the built script rather than the fragments, which do not parse on their own.
+The source is `lib/`, one module per section in numeric order (`000-prelude.sh` through `990-main.sh`); `bin/git-locks` is the build product and is committed, because it is what `make install`, the release asset and a `curl` of the raw file all want: one file, no runtime assembly. Edit under `lib/`, run `make build`, commit both. The suite checks that the committed script is exactly what `lib/` builds, so a `lib/` change without a rebuild fails the pre-push hook and CI. The schema module is generated at build time from `schema/git-locks.schema.json`, so there is one copy of the schema in the repository. Lint runs over the built script rather than the fragments, which do not parse on their own. The Unicode integration test selects an installed UTF-8 locale and checks JSON stdout separately from shell diagnostics; when no UTF-8 locale exists, it reports the skipped integration with the installation prerequisite.
 
 ## Limits, stated
 
