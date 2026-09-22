@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Semaphore capacity is validated as a bounded positive decimal and normalized before storage, arithmetic, and JSON serialization. Leading-zero values such as `01`, `08`, and `010` keep their decimal meaning, including when reading metadata written by older versions. Invalid stored capacities fail with `store-read` (#35).
+
 All notable changes to this project are recorded here. The format follows Keep a Changelog; versions follow SemVer.
 
 ## [Unreleased]

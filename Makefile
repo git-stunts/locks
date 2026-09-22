@@ -14,6 +14,7 @@ lint:
 
 test:
 	bash test/test.sh
+	python3 test/capacity.py
 
 test-docker: # the same suite inside the official bash image, for a wall between the tests and your machine
 	docker run --rm -v "$(CURDIR)":/src -w /src bash:5.2 bash -c 'apk add --no-cache git python3 py3-jsonschema >/dev/null && git config --global user.email t@example.invalid && git config --global user.name t && bash test/test.sh'

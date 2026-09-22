@@ -261,6 +261,8 @@ In summary, "all or nothing" is never a loop with a rollback. It is one stanza, 
 
 A path lock says one holder. Some resources are better described by a number: two GPUs, five build agents. This section shows how git-locks gives a named resource a capacity while keeping the same atomicity, and it needs one new idea, a generation token, that the reader has all the pieces for.
 
+Capacity is a positive decimal integer from `1` through `9223372036854775807`. Leading zeros are accepted and normalized: `--capacity 010` means ten and emits JSON `10`. Reads also normalize leading-zero capacities stored by older versions without rewriting their metadata. Invalid or out-of-range input is refused before semaphore refs are created; invalid stored capacity is a `store-read` error.
+
 A semaphore is three kinds of ref under `refs/locks/sem/<name>/`. `meta` points at a blob holding the capacity. `slots/<job>` is one ref per holder, pointing at a slot record with the holder and an expiry, exactly like a lock record. And `gen` points at a blob whose only purpose is to change: every transaction on the semaphore writes a fresh generation blob and `update`s `gen` from the generation it read. Two acquirers that both read "2 of 3 live" both try to move `gen` from the same old value; git lets exactly one through, and the other re-reads and finds the semaphore full. Here is the example's semaphore, capacity 2, filled by alice and bob, then refused to carol:
 
 ```text
