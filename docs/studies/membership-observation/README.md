@@ -88,6 +88,14 @@ Calibration exits 0 when the fixture is working and explicitly reports `producti
 
 Every full run retains before/committed-after/final raw refs and objects, the injected refs, command stdout/stderr, read order, transaction stdin, and a result ledger. The committed evidence includes the complete 84-case ledger and representative violating/coherent cases, with [runtime and executable hashes](evidence/provenance.json). Dynamic object IDs and acquisition IDs vary between executions; the invariant failures and ref-selection categories are the comparison points.
 
+To verify that the retained evidence is actually committed, run:
+
+```bash
+python3 test/observation/verify-evidence.py
+```
+
+This checks every manifest path against `git ls-files` and hashes its `HEAD` blob with `git show`. It does not accept an ignored or untracked working-tree file as evidence. Raw read-order receipts use `.txt` because the repository ignores `.log` files.
+
 ## Follow-up boundary
 
 [#45](https://github.com/git-stunts/locks/issues/45) requires a justified relationship between membership and the witness checked at commit, plus observation-phase regressions in all three domains. The fix should preserve ordinary paths, stale-generation retries, and independent post-run invariants. It must state supported backend and read-order assumptions and distinguish synthetic evidence from any reproduced live schedule.
