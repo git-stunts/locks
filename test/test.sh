@@ -1571,6 +1571,156 @@ check "sibling prefixes in one batch are not an overlap" "$?" "0"
 lines n "${out}"
 check "and both records claimed" "${n}" "2"
 
+# ---------------------------------------------------------------- malformed authoritative records fail before decisions
+# Removing snapshot validation must turn these structured errors into an unsafe
+# observation or mutation. Literal records are independent of the CLI writer.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+store="${R}/records.git"
+export GIT_LOCKS_STORE="${store}"
+git-locks claim --job held --holder alice x.md >/dev/null
+path_oid="$(printf x.md | git --git-dir="${store}" hash-object --stdin)"
+lock_record=$'schema: git-locks/1\njob: held\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nfamily: 0\nacquisition: original\npaths:\nx.md'
+meta_record=$'schema: git-locks-sem/1\nsemaphore: gpu\ncapacity: 2\ncreated: 1000000'
+slot_record=$'schema: git-locks-slot/1\nsemaphore: gpu\njob: held\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nacquisition: original'
+bad_oid="$(printf 'not a record\n' | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
+git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${bad_oid}"
+before="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+commands=(check list show ttl claim batch release extend sweep with sem)
+for verb in "${commands[@]}"; do
+  case "${verb}" in
+    check) args=(check x.md) ;;
+    list | sweep) args=("${verb}") ;;
+    show | ttl | release) args=("${verb}" --job held) ;;
+    claim) args=(claim --job taker --holder bob x.md) ;;
+    batch) args=(batch) ;;
+    extend) args=(extend --job held --ttl 10) ;;
+    with) args=(with --job taker --holder bob x.md -- touch "${R}/ran") ;;
+    sem) args=(sem create gpu --capacity 1) ;;
+    *) exit 2 ;;
+  esac
+  out="$(printf 'job: taker\nholder: bob\npaths:\nx.md\n' | git-locks "${args[@]}" 2>"${ERR_PRE}")"
+  check "${verb} rejects malformed authority with exit 2" "$?" 2
+  check "${verb} emits no success or path output" "${out}" ''
+  err="$(cat "${ERR_PRE}")"
+  jfields "${verb} reports store-read" "${err}" 'event="error"' 'reason="store-read"'
+  valid "${verb} malformed-record error" "${err}"
+  after="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+  check "${verb} leaves authoritative refs unchanged" "${after}" "${before}"
+done
+check 'with does not execute after corrupt admission' "$([[ -e "${R}/ran" ]] && printf ran || true)" ''
+out="$(git-locks doctor 2>&1)"
+check 'doctor still diagnoses an undecodable lock' "$?" 1
+contains 'doctor preserves record-decodes finding' "${out}" '"check":"record-decodes"'
+
+# A fixed adversarial corpus checks missing, duplicate, unsafe arithmetic, and
+# role-confused fields. Case order is deterministic, seed 33, no random sleeps.
+corruptions=('' '-1' '1+1' '08x' '9223372036854775808' '18446744073709551616' 'a[0]' '1.5')
+case_count=0
+fuzz_state=33
+for role in lock meta slot; do
+  case "${role}" in
+    lock)
+      template="${lock_record}"
+      numeric=(claimed expires family)
+      required=(schema job holder claimed expires acquisition)
+      target=refs/locks/jobs/held
+      ;;
+    meta)
+      template="${meta_record}"
+      numeric=(capacity created)
+      required=(schema semaphore capacity created)
+      target=refs/locks/sem/gpu/meta
+      ;;
+    slot)
+      template="${slot_record}"
+      numeric=(claimed expires)
+      required=(schema semaphore job holder claimed expires acquisition)
+      target=refs/locks/sem/gpu/slots/held
+      ;;
+    *) exit 2 ;;
+  esac
+  good_oid="$(printf '%s\n' "${lock_record}" | git --git-dir="${store}" hash-object -w --stdin)"
+  git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+  git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+  cases=('not a record' "${template/schema: /schema: wrong-}")
+  if [[ "${role}" == lock ]]; then
+    cases+=("${template/$'paths:\nx.md'/paths:}" "${template/x.md//absolute}" "${template/x.md/../escape}")
+  fi
+  for key in "${required[@]}"; do
+    value="${template#*"${key}: "}"
+    value="${value%%$'\n'*}"
+    cases+=("${template/"${key}: ${value}"/"${key}: "}")
+    cases+=("${template/"${key}: ${value}"/}")
+    cases+=("${key}: other"$'\n'"${template}")
+  done
+  for key in "${numeric[@]}"; do
+    value="${template#*"${key}: "}"
+    value="${value%%$'\n'*}"
+    for corrupt in "${corruptions[@]}"; do
+      cases+=("${template/"${key}: ${value}"/"${key}: ${corrupt}"}")
+    done
+  done
+  # Seeded mutations produce digit-prefixed junk, which must never reach
+  # shell arithmetic. The expected outcome is independent of parsed values.
+  for ((sample = 0; sample < 12; sample++)); do
+    fuzz_state=$(((fuzz_state * 1103515245 + 12345) % 2147483648))
+    key="${numeric[$((fuzz_state % ${#numeric[@]}))]}"
+    value="${template#*"${key}: "}"
+    value="${value%%$'\n'*}"
+    cases+=("${template/"${key}: ${value}"/"${key}: ${fuzz_state}x"}")
+  done
+  for record in "${cases[@]}"; do
+    bad_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
+    git --git-dir="${store}" update-ref "${target}" "${bad_oid}"
+    out="$(git-locks check x.md 2>"${ERR_PRE}")"
+    rc=$?
+    err="$(cat "${ERR_PRE}")"
+    case_count=$((case_count + 1))
+    diagnostic="$(git-locks doctor 2>"${ERR_PRE}")"
+    doctor_rc=$?
+    if [[ "${role}" == lock ]]; then finding_kind='record-decodes'; else finding_kind='sem-record'; fi
+    contains "doctor identifies corrupt ${role} case ${case_count}" "${diagnostic}" "\"check\":\"${finding_kind}\""
+    doctor_err="$(cat "${ERR_PRE}")"
+    check "doctor diagnoses ${role} case ${case_count} safely" "${doctor_rc}:${doctor_err}" '1:'
+    check "corrupt ${role} case ${case_count} fails closed" "${rc}:${out}:$([[ "${err}" == *'"reason":"store-read"'* ]] && printf store-read || true)" '2::store-read'
+  done
+  git --git-dir="${store}" update-ref -d "${target}"
+done
+printf '  info record corruption corpus: %s cases, fixed seed 33\n' "${case_count}"
+# Legacy decimal spellings stay readable and serialize as decimal JSON.
+legacy="${lock_record/claimed: 1000000/claimed: 01000000}"
+legacy="${legacy/expires: 1014400/expires: 01014400}"
+legacy="${legacy/family: 0/family: 000}"
+good_oid="$(printf '%s\n' "${legacy}" | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+out="$(git-locks show --job held 2>&1)"
+check 'legacy leading-zero timestamps remain readable' "$?" 0
+jfields 'legacy timestamps emit decimal JSON numbers' "${out}" 'claimed=1000000' 'expires=1014400' 'remaining=14400'
+valid 'legacy timestamp output' "${out}"
+for capacity in 02 9223372036854775807; do
+  legacy="${meta_record/capacity: 2/capacity: ${capacity}}"
+  good_oid="$(printf '%s\n' "${legacy}" | git --git-dir="${store}" hash-object -w --stdin)"
+  git --git-dir="${store}" update-ref refs/locks/sem/gpu/meta "${good_oid}"
+  out="$(git-locks sem show gpu 2>&1)"
+  check "stored capacity ${capacity} remains readable" "$?" 0
+  valid "stored capacity ${capacity} output" "${out}"
+done
+git --git-dir="${store}" update-ref -d refs/locks/sem/gpu/meta
+
+# Directory and semaphore generations can contain arbitrary text, even when
+# all locks have gone. They must not be treated as active lock records.
+git --git-dir="${store}" update-ref -d refs/locks/jobs/held
+git --git-dir="${store}" update-ref -d "refs/locks/paths/${path_oid}"
+git --git-dir="${store}" update-ref refs/locks/dirs/opaque "${bad_oid}"
+git --git-dir="${store}" update-ref refs/locks/sem/gpu/gen "${bad_oid}"
+out="$(git-locks check x.md 2>&1)"
+check 'opaque generation records do not block a free path' "$?" 0
+jfields 'free path stays free beside opaque tokens' "${out}" 'state="free"'
+unset GIT_LOCKS_STORE
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"

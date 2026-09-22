@@ -400,12 +400,14 @@ g() { git --git-dir="${STORE}" "$@"; }
 # cached read taken under one for-each-ref, not a proof of a consistent cut;
 # every write below carries the expectations that make a stale read fail.
 
-declare -A REF_OID=()  # ref -> oid
-declare -A BLOB=()     # oid -> record text
-declare -A R_PARSED=() # oid -> 1 once parsed
-declare -A R_FIELD=()  # "oid key" -> value, for the header lines before paths: (first occurrence wins); values are stored whole, so no byte in one can read as a delimiter
-declare -A R_PATHS=()  # oid -> the path lines, newline separated
+declare -A REF_OID=()   # ref -> oid
+declare -A BLOB=()      # oid -> record text
+declare -A R_PARSED=()  # oid -> 1 once parsed
+declare -A R_FIELD=()   # "oid key" -> value, for the header lines before paths: (first occurrence wins); values are stored whole, so no byte in one can read as a delimiter
+declare -A R_PATHS=()   # oid -> the path lines, newline separated
+declare -A R_INVALID=() # oid -> structural parse error, retained for doctor
 SNAP_LOADED=0
+DIAGNOSTIC_READ=0
 
 parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
   [[ -n "${R_PARSED[$1]+x}" ]] && return 0
@@ -419,7 +421,13 @@ parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], on
       in_paths=1
     elif [[ "${line}" == *': '* ]]; then
       key="${line%%: *}"
-      [[ -n "${R_FIELD["$1 ${key}"]+x}" ]] || R_FIELD["$1 ${key}"]="${line#*: }"
+      if [[ -n "${R_FIELD["$1 ${key}"]+x}" ]]; then
+        R_INVALID["$1"]="duplicate field ${key}"
+      else
+        R_FIELD["$1 ${key}"]="${line#*: }"
+      fi
+    else
+      R_INVALID["$1"]='invalid header line'
     fi
   done
   R_PARSED["$1"]=1
@@ -467,9 +475,11 @@ snapshot() {
   R_PARSED=()
   R_FIELD=()
   R_PATHS=()
+  R_INVALID=()
   for ref in "${!refs[@]}"; do REF_OID["${ref}"]="${refs[${ref}]}"; done
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
   SNAP_LOADED=1
+  ((DIAGNOSTIC_READ)) || validate_snapshot
   [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'snapshot %s\n' "${#refs[@]}" >>"${GIT_LOCKS_TRACE}"
   test_gate "${GIT_LOCKS_PAUSE_AFTER_READ:-}" # tests force an interleaving between a read and what follows it
 }
@@ -567,6 +577,157 @@ write_blob() {  # VAR CONTENT: write CONTENT as a blob, seed the snapshot with i
   ensure_snapshot
   BLOB["${written}"]="$2"$'\n'
   printf -v "$1" '%s' "${written}"
+}
+# ---------------------------------------------------------------- record validation
+# Validate the authority attached to a ref, not every blob: directory and
+# semaphore generation tokens are opaque. Doctor uses the same decoder but
+# reports findings instead of refusing the snapshot.
+
+record_uint() { # VAR text: decimal in the nonnegative signed 64-bit range
+  [[ "$2" =~ ^[0-9]+$ ]] || return 1
+  local digits="$2" limit=9223372036854775808
+  while [[ "${digits}" == 0?* ]]; do digits="${digits#0}"; done
+  ((${#digits} < 19)) || {
+    ((${#digits} == 19)) && [[ "x${digits}" < "x${limit}" ]] || return 1
+  }
+  printf -v "$1" '%s' "${digits}"
+}
+
+RECORD_ERROR=''
+record_invalid() {
+  RECORD_ERROR="$1"
+  return 1
+}
+
+validate_record() { # oid lock|meta|slot: parsed values are safe before arithmetic
+  local oid="$1" role="$2" schema key value numbers paths p
+  parse_record "${oid}"
+  RECORD_ERROR="${R_INVALID[${oid}]:-}"
+  [[ -z "${RECORD_ERROR}" ]] || return 1
+  case "${role}" in
+    lock)
+      schema="${SCHEMA}"
+      numbers='claimed expires family'
+      ;;
+    meta)
+      schema="${SEM_SCHEMA}"
+      numbers='capacity created'
+      ;;
+    slot)
+      schema="${SLOT_SCHEMA}"
+      numbers='claimed expires'
+      ;;
+    *)
+      record_invalid 'unknown record role'
+      return 1
+      ;;
+  esac
+  [[ "${R_FIELD["${oid} schema"]:-}" == "${schema}" ]] || {
+    record_invalid "expected schema ${schema}"
+    return 1
+  }
+  for key in ${numbers}; do
+    value="${R_FIELD["${oid} ${key}"]:-}"
+    # Older lock records may omit family; no membership changes means zero.
+    [[ "${role}" == lock && "${key}" == family && -z "${R_FIELD["${oid} family"]+x}" ]] && value=0
+    record_uint value "${value}" || {
+      record_invalid "invalid ${key}"
+      return 1
+    }
+    [[ "${key}" != capacity || "${value}" != 0 ]] || {
+      record_invalid 'capacity must be positive'
+      return 1
+    }
+    R_FIELD["${oid} ${key}"]="${value}"
+  done
+  if [[ "${role}" != lock ]]; then
+    valid_job "${R_FIELD["${oid} semaphore"]:-}" || {
+      record_invalid 'invalid semaphore'
+      return 1
+    }
+  fi
+  if [[ "${role}" != meta ]]; then
+    valid_job "${R_FIELD["${oid} job"]:-}" || {
+      record_invalid 'invalid job'
+      return 1
+    }
+    valid_holder "${R_FIELD["${oid} holder"]:-}" || {
+      record_invalid 'invalid holder'
+      return 1
+    }
+    valid_holder "${R_FIELD["${oid} acquisition"]:-}" || {
+      record_invalid 'invalid acquisition'
+      return 1
+    }
+  fi
+  if [[ "${role}" == lock ]]; then
+    value="${R_FIELD["${oid} parent"]:-}"
+    [[ -z "${value}" ]] || valid_job "${value}" || {
+      record_invalid 'invalid parent'
+      return 1
+    }
+    valid_note "${R_FIELD["${oid} note"]:-}" || {
+      record_invalid 'invalid note'
+      return 1
+    }
+    paths="${R_PATHS[${oid}]:-}"
+    [[ -n "${paths}" ]] || {
+      record_invalid 'no paths'
+      return 1
+    }
+    while IFS= read -r p; do
+      # Stored paths must already be lexical keys; do not glob or normalize
+      # them against the reader's working directory.
+      case "/${p}/" in
+        //* | *//*/* | */./* | */../*)
+          record_invalid 'invalid stored path'
+          return 1
+          ;;
+        *) ;;
+      esac
+      [[ -n "${p}" ]] || {
+        record_invalid 'empty stored path'
+        return 1
+      }
+    done <<<"${paths}"
+  elif [[ -n "${R_PATHS[${oid}]:-}" ]]; then
+    record_invalid 'unexpected paths'
+    return 1
+  fi
+  return 0
+}
+
+validate_snapshot() {
+  local ref oid role rest name job
+  local -A checked=()
+  for ref in "${!REF_OID[@]}"; do
+    oid="${REF_OID[${ref}]}"
+    case "${ref}" in
+      "${NS}"/jobs/* | "${NS}"/paths/*) role=lock ;;
+      "${NS}"/sem/*/meta) role=meta ;;
+      "${NS}"/sem/*/slots/*) role=slot ;;
+      *) continue ;;
+    esac
+    if [[ -z "${checked["${oid} ${role}"]+x}" ]]; then
+      validate_record "${oid}" "${role}" || store_error "${ref}: record ${oid}: ${RECORD_ERROR}"
+      checked["${oid} ${role}"]=1
+    fi
+    case "${ref}" in
+      "${NS}"/jobs/*)
+        [[ "${R_FIELD["${oid} job"]}" == "${ref#"${NS}"/jobs/}" ]] || store_error "${ref}: record names a different job"
+        ;;
+      "${NS}"/sem/*)
+        rest="${ref#"${NS}"/sem/}"
+        name="${rest%%/*}"
+        [[ "${R_FIELD["${oid} semaphore"]}" == "${name}" ]] || store_error "${ref}: record names a different semaphore"
+        if [[ "${role}" == slot ]]; then
+          job="${rest#*/slots/}"
+          [[ "${R_FIELD["${oid} job"]}" == "${job}" ]] || store_error "${ref}: record names a different job"
+        fi
+        ;;
+      *) ;;
+    esac
+  done
 }
 # ---------------------------------------------------------------- the transition plan
 #
@@ -2111,8 +2272,6 @@ finding() { # check subject detail -> one finding line on stdout
   DOC_FINDINGS=$((DOC_FINDINGS + 1))
 }
 
-is_int() { [[ "$1" =~ ^[0-9]+$ ]]; }
-
 doctor_hash_paths() { # path... -> PATH_HASH for every path, in one git process: each path becomes a file, hash-object hashes them all
   local dir p i=0 files=() todo=() out h rc
   for p in "$@"; do
@@ -2141,53 +2300,18 @@ doctor_hash_paths() { # path... -> PATH_HASH for every path, in one git process:
   ((i == ${#todo[@]})) || store_error "hash-object returned ${i} hashes for ${#todo[@]} paths"
 }
 
-doctor_lock_record() { # subject oid -> 0 when the record decodes as a lock record, else findings and 1
-  local schema job holder claimed expires acq paths bad=0
-  field_v schema "$2" schema
-  if [[ "${schema}" != "${SCHEMA}" ]]; then
-    finding record-decodes "$1" "record ${2} has schema '${schema}', not ${SCHEMA}"
-    return 1
-  fi
-  field_v job "$2" job
-  valid_job "${job}" || {
-    finding record-decodes "$1" "record ${2} has no valid job id"
-    bad=1
-  }
-  field_v holder "$2" holder
-  [[ -n "${holder}" ]] || {
-    finding record-decodes "$1" "record ${2} has no holder"
-    bad=1
-  }
-  field_v claimed "$2" claimed
-  is_int "${claimed}" || {
-    finding record-decodes "$1" "record ${2} has no numeric claimed"
-    bad=1
-  }
-  field_v expires "$2" expires
-  is_int "${expires}" || {
-    finding record-decodes "$1" "record ${2} has no numeric expires"
-    bad=1
-  }
-  field_v acq "$2" acquisition
-  [[ -n "${acq}" ]] || {
-    finding record-decodes "$1" "record ${2} has no acquisition id"
-    bad=1
-  }
-  record_paths_v paths "$2"
-  [[ -n "${paths}" ]] || {
-    finding record-decodes "$1" "record ${2} lists no paths"
-    bad=1
-  }
-  return "${bad}"
+doctor_lock_record() { # subject oid -> decoded lock or a diagnostic finding
+  validate_record "$2" lock && return 0
+  finding record-decodes "$1" "record ${2}: ${RECORD_ERROR}"
+  return 1
 }
 
 doctor_slot_record() { # subject oid name job -> 0 when the record decodes as a slot of that semaphore for that job
-  local schema v bad=0
-  field_v schema "$2" schema
-  if [[ "${schema}" != "${SLOT_SCHEMA}" ]]; then
-    finding sem-record "$1" "slot record ${2} has schema '${schema}', not ${SLOT_SCHEMA}"
+  local v bad=0
+  validate_record "$2" slot || {
+    finding sem-record "$1" "slot record ${2}: ${RECORD_ERROR}"
     return 1
-  fi
+  }
   field_v v "$2" semaphore
   [[ "${v}" == "$3" ]] || {
     finding sem-record "$1" "slot record ${2} names semaphore '${v}'"
@@ -2196,21 +2320,6 @@ doctor_slot_record() { # subject oid name job -> 0 when the record decodes as a 
   field_v v "$2" job
   [[ "${v}" == "$4" ]] || {
     finding sem-record "$1" "slot record ${2} names job '${v}'"
-    bad=1
-  }
-  field_v v "$2" holder
-  [[ -n "${v}" ]] || {
-    finding sem-record "$1" "slot record ${2} has no holder"
-    bad=1
-  }
-  field_v v "$2" claimed
-  is_int "${v}" || {
-    finding sem-record "$1" "slot record ${2} has no numeric claimed"
-    bad=1
-  }
-  field_v v "$2" expires
-  is_int "${v}" || {
-    finding sem-record "$1" "slot record ${2} has no numeric expires"
     bad=1
   }
   return "${bad}"
@@ -2318,6 +2427,7 @@ cmd_doctor() {
       finding parent-missing "${job}" "names parent '${parent}', which has no job ref: a child cannot outlive its parent"
       continue
     fi
+    [[ -n "${JOB_OK[${parent}]+x}" ]] || continue # its decoder already reported the corrupt parent
     field_v pexp "${JOB_OID[${parent}]}" expires
     ((${pexp:-0} > at)) || finding parent-expired "${job}" "parent '${parent}' expired at ${pexp:-0}; sweep removes both"
     field_v holder "${oid}" holder
@@ -2342,16 +2452,11 @@ cmd_doctor() {
       finding sem-meta "${name}" 'no meta ref: the semaphore has no capacity'
       cap=''
     else
-      field_v rest "${SEM_META[${name}]}" schema
-      if [[ "${rest}" != "${SEM_SCHEMA}" ]]; then
-        finding sem-record "${name}" "meta record ${SEM_META[${name}]} has schema '${rest}', not ${SEM_SCHEMA}"
+      if ! validate_record "${SEM_META[${name}]}" meta; then
+        finding sem-record "${name}" "meta record ${SEM_META[${name}]}: ${RECORD_ERROR}"
         cap=''
       else
         field_v cap "${SEM_META[${name}]}" capacity
-        if ! is_int "${cap}" || ((cap < 1)); then
-          finding sem-record "${name}" "meta record ${SEM_META[${name}]} has capacity '${cap}'"
-          cap=''
-        fi
         field_v rest "${SEM_META[${name}]}" semaphore
         [[ "${rest}" == "${name}" ]] || finding sem-record "${name}" "meta record names semaphore '${rest}'"
       fi
@@ -2427,6 +2532,7 @@ main() {
       exit 0
     fi
   done
+  [[ "${cmd}" == doctor ]] && DIAGNOSTIC_READ=1
   resolve_store
   case "${cmd}" in store) ;; *) ensure_snapshot ;; esac # once, in this shell: subshells inherit it instead of re-reading
   "cmd_${cmd}" "$@"
