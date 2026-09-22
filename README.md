@@ -1,56 +1,68 @@
 ---
-title: "git-locks: path locks made of git refs"
+title: "git-locks: cooperative path reservations"
 date: 2026-09-15
 author: James Ross
-description: "How git-locks turns a claim on a file path into a git ref, why that makes locking atomic without a daemon, and what happens when two writers want the same path."
+description: "Cooperative path reservations for parallel workers, backed by Git without a daemon. Understand contention, acquisition identity, and time-bounded ownership."
 tags: [git, locking, bash, concurrency, jsonl]
 draft: false
 status: published
 project: git-stunts/locks
-version: 0.2.0
+version: 0.7.0
 ---
 
-# git-locks: path locks made of git refs
+# git-locks: cooperative path reservations
 
-Pure bash and git. No daemon, no lock files in your worktree, no refs in your project. JSON Lines out. This document teaches how it works by following one example from the first claim to a full semaphore. If you only want the commands, jump to [Commands](#commands).
+Cooperative path reservations for parallel workers, backed by Git without a daemon. A worker reserves the paths it will change; a competing worker gets a refusal naming the holder, job, and reason. Pure Bash and Git, with JSON Lines output and a separate store by default. For a command reference, jump to [Commands](#commands).
 
 ## In sixty seconds
 
-git-locks lets a writer say "I am about to write these paths" and lets everyone else find that out, atomically, using nothing but a git repository as the ledger. A lock is one small text record stored as a git blob; git refs point at it, one ref per locked path and one per job. Claiming is a single `git update-ref` transaction, so a claim on several paths lands whole or not at all, and two claimants racing for one path produce exactly one winner. The loser is told who won. Locks expire, children die with their parents, and a semaphore variant lets up to N holders share a resource. The ledger lives in a separate bare repository under `~/.git-stunts/locks/`, so your project's own refs stay clean.
+git-locks coordinates workers that agree to acquire before changing a path. A claim can reserve several paths together, a trailing slash reserves a prefix, and `--note` explains the work to a competing worker. The default store is a separate bare repository, so the project's own refs stay clean.
 
-That is the whole arc. The rest of this document shows each piece with a real transcript.
+Reservations are cooperative and time-bounded. They do not prevent writes by other programs. `with` acquires, starts a command, and attempts release on exit, but does not renew automatically. Its TTL can expire while the command is still running. Choose a sufficient TTL or arrange explicit renewal; cleanup on exit does not extend the reservation.
+
+Acquire in the launcher that starts the mutation. `check` reports an observation and does not authorize a later write: another worker can claim between the check and the write. `with` supplies that acquire-before-launch ordering for shell commands.
+
+Each writer submits expected ref values in one Git transaction. These writer checks do not provide atomic visibility to concurrent readers: Git documents that a reader may see only some changes from a multi-ref transaction. The cached read is not a consistent snapshot of a single instant. See [Git's update-ref transaction contract](https://git-scm.com/docs/git-update-ref) and the [membership observation investigation](https://github.com/git-stunts/locks/issues/38).
 
 ## The example we will follow
 
-Everything below refers back to this transcript. Two people, alice and bob, work on one repository. Both want to edit `notes/report.md`. Alice claims first. The clock is fixed at `1757980800` (2026-09-15T23:20:00Z) so the numbers stay stable; every line is real output from `git-locks 0.2.0`.
+Alice and Bob want to edit `notes/report.md`. Alice reserves it with a note. Bob's two-path claim is refused, leaving his unrelated path free. Alice then renews and releases the acquisition she originally made. This transcript was run against git-locks 0.7.0 at `01e39c3` in an isolated store, with `GIT_LOCKS_NOW=1757980800` fixing the clock at 2025-09-16T00:00:00Z. Record and acquisition IDs are captured values; a rerun generates new ones. Successful results are on stdout, refusals on stderr.
 
 ```text
-$ git locks claim --job alice-report --holder alice notes/report.md
-{"event":"claimed","job":"alice-report","holder":"alice","claimed":1757980800,"expires":1757995200,"paths":["notes/report.md"]}
+$ git locks claim --job alice-report --holder alice --note 'updating the report' notes/report.md
+{"event":"claimed","job":"alice-report","holder":"alice","note":"updating the report","claimed":1757980800,"expires":1757995200,"paths":["notes/report.md"],"record":"8f61ae62870d65e38b6b822b4c71186f4d5cbc81","acquisition":"1757980800-95407-2444308745"}
 
-$ git locks claim --job bob-report --holder bob notes/report.md
-{"event":"refused","path":"notes/report.md","holder":"alice","job":"alice-report","expires":1757995200}
+$ git locks claim --job bob-report --holder bob notes/report.md notes/other.md
+{"event":"refused","path":"notes/report.md","holder":"alice","note":"updating the report","job":"alice-report","expires":1757995200}
 (exit 1)
 
 $ git locks check notes/report.md notes/other.md
-{"path":"notes/report.md","state":"held","holder":"alice","job":"alice-report","expires":1757995200,"remaining":14400}
+{"path":"notes/report.md","state":"held","holder":"alice","note":"updating the report","job":"alice-report","expires":1757995200,"remaining":14400}
 {"path":"notes/other.md","state":"free"}
 (exit 1)
 
-$ git locks release --job alice-report
+$ git locks extend --job alice-report --ttl 18000
+{"event":"extended","job":"alice-report","expires":1757998800}
+
+$ git locks show --job alice-report
+{"job":"alice-report","holder":"alice","note":"updating the report","state":"live","claimed":1757980800,"expires":1757998800,"remaining":18000,"paths":["notes/report.md"],"record":"13bcecae65ff6128d118ec1c25a9c3ed0ccefee7","acquisition":"1757980800-95407-2444308745"}
+
+$ git locks release --job alice-report --acquisition 1757980800-95407-2444308745
 {"event":"released","job":"alice-report","paths":1}
 
 $ git locks claim --job bob-report --holder bob notes/report.md
-{"event":"claimed","job":"bob-report","holder":"bob","claimed":1757980800,"expires":1757995200,"paths":["notes/report.md"]}
+{"event":"claimed","job":"bob-report","holder":"bob","claimed":1757980800,"expires":1757995200,"paths":["notes/report.md"],"record":"a549af55e7c64fea41f66ca9c0390e9e37f2b792","acquisition":"1757980800-95785-1651320319"}
 ```
 
-Read it once as a story: alice claims, bob is refused and told it is alice who holds the path, `check` says the same thing and adds that fourteen thousand four hundred seconds remain, alice releases, bob claims. Hold onto the refusal line especially. It is the reason the tool exists.
+The job ID is a reusable name. The acquisition ID identifies this reservation's lifetime, while the record ID identifies its current stored version. `show` after renewal confirms Alice's record changed while her acquisition stayed the same. Her `release --acquisition` therefore still released the reservation she made. If another claim had replaced that job's acquisition, her release would have left the replacement alone. `release --record` instead conditions release on one exact version and becomes stale after renewal.
 
-Two foils draw the edges. `notes/other.md` in the `check` call is a path nobody claimed: it reports `free` and does not affect the exit code, which is 1 only because `notes/report.md` is held. And bob's second claim, after the release, is not a retry of the first: the first was refused and left nothing behind, which the next section makes visible.
+Local agent runners, generators, and build processes are candidate integrations for this workflow. The runnable behavior establishes what the tool does; adoption and business demand still need evidence from actual users.
 
 ## The cast: a store, a record, and two kinds of ref
 
 A lock is made of exactly three things, and once you can name them the rest of the tool is arithmetic on them. The store is a git repository that holds nothing but locks. The record is a blob in that repository, a few lines of text. The refs are pointers from stable names to that blob: one named after the job, one named after each locked path. This section introduces each, using alice's claim.
+
+The storage sketches and older mechanism examples below abbreviate object IDs and omit generated record fields. Use the complete introductory transcript and CLI schema for integration payloads.
 
 The store is not your project's repository. By default it is a bare repository at `~/.git-stunts/locks/<absolute path of your repository>`, created the first time you claim, so `refs/locks/` never appears in your project and linked worktrees of one repository share one store. `git locks store` tells you where it resolved:
 
@@ -58,6 +70,8 @@ The store is not your project's repository. By default it is a bare repository a
 $ git locks store
 {"store":"/Users/alice/.git-stunts/locks/Users/alice/work/reports"}
 ```
+
+Linked worktrees share the main repository's default store and the same relative path namespace. Reserving `src/file.ts` in one worktree therefore reserves that logical name in the others, even though each worktree may have a different physical file. This is the implemented coordination policy. Callers needing independent physical-file ownership can select separate stores with `GIT_LOCKS_STORE` or `locks.store`; callers sharing artifacts must deliberately share a store.
 
 Inside that store, alice's claim wrote one blob and two refs. Plain git can show them, which is the point of building on git:
 
@@ -80,7 +94,7 @@ paths:
 notes/report.md
 ```
 
-The load-bearing lines are `holder` and `expires`. `holder` is what a refusal reports, and `expires` is what turns a dead session's lock into a free path four hours later. There is no separate index or counter to keep in sync: the set of live locks is the set of refs, and a path is held exactly when a ref named after it exists and points at an unexpired record.
+The load-bearing lines are `holder` and `expires`. `holder` is what a refusal reports, and `expires` is what turns a dead session's lock into a free path four hours later. Job and path refs identify the record, and prefix checks also consult overlapping reservations. A ref can remain after expiry, so its existence alone does not imply a live reservation.
 
 The diagram below shows the store as a git graph. Read each node as a blob, not a commit, and each branch as a ref: git-locks never makes commits, it moves refs between blobs. After alice's claim, two refs share one blob.
 
@@ -112,7 +126,7 @@ Two refs, one blob. `refs/locks/jobs/alice-report` and `refs/locks/paths/57982dc
 
 In summary, a lock is a blob plus the refs that name it, and everything git-locks reports is read straight off those refs. Nothing else is stored, so nothing else can drift.
 
-> **Intuition to carry forward:** a path is held exactly when a ref named after it exists. Claiming is creating that ref. Everything about atomicity follows from how git creates refs.
+A reservation is live only while its validated record has not expired. A prefix reservation can cover a path without a ref for that exact path. Ref existence alone does not decide whether a path is held.
 
 ## What git already guarantees about refs
 
@@ -220,7 +234,7 @@ In summary, expiry is a field, not a process. A dead holder's lock is free the m
 
 One transaction per claim already makes a multi-path claim atomic; this section extends that to several locks at once, in two forms that share one mechanism. A child lock is tied to a parent so that the family lives and dies together, and a batch claims several independent locks in one stanza.
 
-A child is a claim with `--parent <job>`. Its record gains a `parent:` line, and its transaction gains a `verify` on the parent's job ref, carrying the parent's current blob. The parent must be live and held by the same holder at planning time, and the `verify` makes that true at commit time too: if the parent was released in between, the child's transaction fails. Releasing or sweeping a parent collects every descendant, transitively, and deletes them all in the same transaction, so a child never outlives its parent. The release line lists them as `cascaded`.
+A child is a claim with `--parent <job>`. Its record gains a `parent:` line. Child admission rewrites the parent's record with a bumped family generation and compares against the record it read. The parent must be live and held by the same holder at planning time; the expected record detects an intervening change such as release. The clock is checked at planning time, so this does not recheck expiry at commit or make concurrent reads consistent. Releasing or sweeping a parent collects every descendant, transitively, and deletes them all in the same transaction, so a child never outlives its parent. The release line lists them as `cascaded`.
 
 A batch is `git locks batch` reading records on stdin, each record in the same blank-line-separated form as the blob itself. Every record is planned into one stanza, and a child may name a parent that appears earlier in the same batch. If any path in any record is held, or any parent check fails, the stanza is never sent and nothing is claimed.
 
@@ -314,24 +328,24 @@ In summary, a semaphore is a set of slot refs plus one ref that every writer mus
 
 ## Wrapping a command: claim, run, release
 
-Most callers want the lock only for the duration of one command, and forgetting the release is the common failure. This section shows `with`, which does the three steps and cannot forget the third.
+`with` places acquisition in the command launcher and attempts cleanup when the command exits. Its reservation remains subject to the TTL, process termination, and store errors.
 
-`git locks with --job <id> --holder <name> [--wait <s>] [--sem <name>] <path>... -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
+`git locks with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] <path>... -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
 
 ```text
-$ git locks with --job build --holder alice dist/bundle.js -- sh -c 'echo building'
-{"event":"claimed","job":"build","holder":"alice","claimed":1757980800,"expires":1757995200,"paths":["dist/bundle.js"],"record":"3f1c…"}   (stderr)
-building                                                                                                          (stdout)
-{"event":"released","job":"build","paths":1}                                                                     (stderr)
+$ git locks with --job build --holder alice --ttl 60 dist/bundle.js -- sh -c 'echo building'
+{"event":"claimed","job":"build","holder":"alice","claimed":1757980800,"expires":1757980860,"paths":["dist/bundle.js"],"record":"41072aa71c762bc6c37d8765ccbc1ff592006039","acquisition":"1757980800-95867-1195225591"}
+building
+{"event":"released","job":"build","paths":1}
 ```
 
 `--wait <seconds>` turns a refusal into a retry once a second until the paths are free or the wait runs out; without it, a held path exits 1 immediately and the command never runs.
 
-In summary, `with` is the shape most scripts should use: the lock's lifetime is the command's lifetime, by construction.
+In this transcript, `building` is the command's stdout; both lifecycle JSON lines are on stderr. `with` remembers its acquisition and releases by that identity, including after renewal. A command running longer than `--ttl 60` would outlive this reservation unless it explicitly renewed. An uncatchable kill or a store failure can prevent cleanup; expiry still bounds the reservation.
 
 ## Output: JSON Lines, always
 
-Every example above showed one JSON object per line, and this section states the contract behind that so a consumer can rely on it. There is no plain-text mode. Stdout carries one object per result, written as each result is known; stderr carries refusals and errors as objects; `git locks help` is a `usage` object; `git locks schema` prints the schema as one line. The single exception is a command wrapped by `with`, which owns stdout while git-locks reports around it on stderr.
+The introductory transcript shows complete JSON objects; later mechanism sketches abbreviate fields and IDs. This section states the CLI output contract. There is no plain-text mode. Stdout carries one object per result, written as each result is known; stderr carries refusals and errors as objects; `git locks help` is a `usage` object; `git locks schema` prints the schema as one line. The single exception is a command wrapped by `with`, which owns stdout while git-locks reports around it on stderr.
 
 Each line matches exactly one definition in [`schema/git-locks.schema.json`](schema/git-locks.schema.json), JSON Schema 2020-12. The pretty file is for people; the test suite parses `git locks schema` and asserts it is the same document, and validates every line it provokes against it. Strings are escaped completely: a control character in a holder or a git diagnostic inside a refusal cannot break the consumer's parser, and that is a test. Exit codes: 0 for done or free, 1 for refused or held, 2 for usage or a store that could not be read.
 
@@ -386,7 +400,7 @@ Output is JSON Lines on every command; there is no text mode.
 
 | Command | Does | Stdout line(s) | Exit |
 |---|---|---|---|
-| `claim --job <id> --holder <name> [--ttl <s>] [--note <text>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its record; `--note` is one line saying why, carried on every line that names the lock | one `claimed` object with `record`; refusals on stderr | 0 claimed, 1 refused, 2 usage |
+| `claim --job <id> --holder <name> [--ttl <s>] [--note <text>] <path>...` | atomically lock the paths for the job; re-claiming with the same job replaces its record; `--note` is one line saying why, carried on every line that names the lock | one `claimed` object with `record` and `acquisition`; refusals on stderr | 0 claimed, 1 refused, 2 usage |
 | `check <path>...` | who holds each path, in argument order; a path under a live prefix, or a prefix with a live lock under it, is held `via` that other path | one object per path as it is examined | 0 all free, 1 any held |
 | `list` | every lock, live or expired, with its paths | one object per lock; nothing when empty | 0 |
 | `sweep` | delete expired locks | one `swept` object per lock, as it goes | 0 |
@@ -396,7 +410,7 @@ Output is JSON Lines on every command; there is no text mode.
 | `extend --job <id> --ttl <s>` | move the expiry to now + ttl, paths unchanged, atomically | one `extended` object | 0, 1 if no such lock |
 | `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder (verified inside the transaction); the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
 | `batch < records` | claim several locks in one transaction, or none; records are blank-line separated `job:`, `holder:`, `ttl:`, `parent:`, then `paths:` with one path per line | one `claimed` object per record | 0, 1 if any is refused, 2 on a malformed record |
-| `release --job <id> [--record <oid>] [--job <id>...]` | release the jobs and all their descendants in one transaction; `--record` releases only that acquisition | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
+| `release --job <id> [--record <oid> OR --acquisition <id>] [--job <id>...]` | release the jobs and descendants; `--acquisition` survives renewal, while `--record` requires the exact stored version; the conditions are mutually exclusive | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
 | `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] <path>... -- <cmd>...` | claim, run the command, release; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
