@@ -1,0 +1,12 @@
+specimen_revision=fe7cdb588ee16f0d90350865344e0b007bf4ffa0
+binary_git_blob=ff0444627cb9239b1a582ecfc9645fe22b68e611
+generator_git_blob=2d934e9942ecd7aa2f080d93b7cb4e36b95688d8
+bash=5.3.9(1)-release
+mode=full
+repetitions=3
+git version 2.54.0 (Apple Git-157)
+Darwin 25.6.0 arm64
+started_utc=2026-09-22T16:28:15Z
+scratch=/tmp/locks-churn-measurement.trLdeM/locks-churn-matrix.rBBi2T
+Synthetic loose-object/ref fixtures; acquisition ids deterministic. Setup, inventory and cleanup excluded from timing. Filesystem caches not cleared. elapsed_us uses Bash EPOCHREALTIME around native time plus the CLI; max RSS is the native per-command resource report, not aggregate concurrent memory.
+completed_utc=2026-09-22T16:32:56Z

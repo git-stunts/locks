@@ -454,3 +454,5 @@ The source is `lib/`, one module per section in numeric order (`000-prelude.sh` 
 ## License
 
 Apache 2.0. See `LICENSE` and `NOTICE`.
+
+Historical directory-token measurements have a calibrated generator and an informational runner in [`scripts/benchmark-directory-tokens.sh`](scripts/benchmark-directory-tokens.sh). See the [benchmark protocol](docs/benchmarks/directory-tokens.md) for fixture semantics, resource bounds, and reproducible commands. Timings are not CI gates.
