@@ -943,6 +943,7 @@ bump_parent() {   # parent-job parent-oid -> plans the parent's blob rewrite wit
   local pjob="$1" poid="$2" fam newfam claimed expires holder parent paths record newoid p ref have acq note
   fam="$(field "${poid}" family)"
   acq="$(field "${poid}" acquisition)"
+  [[ "${fam}" != 9223372036854775807 ]] || store_error "parent ${pjob}: family generation is exhausted"
   newfam=$((${fam:-0} + 1))
   holder="$(field "${poid}" holder)"
   claimed="$(field "${poid}" claimed)"

@@ -1710,6 +1710,21 @@ for capacity in 02 9223372036854775807; do
 done
 git --git-dir="${store}" update-ref -d refs/locks/sem/gpu/meta
 
+# A valid maximum generation can be read, but advancing it must fail before
+# the child or a wrapped negative generation reaches any authoritative ref.
+record="${lock_record/family: 0/family: 9223372036854775807}"
+good_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+before="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+out="$(git-locks claim --job child --holder alice --parent held child.md 2>"${ERR_PRE}")"
+check 'child admission refuses an exhausted family generation' "$?" 2
+check 'exhausted family admission prints no success' "${out}" ''
+err="$(cat "${ERR_PRE}")"
+jfields 'exhausted family admission is a store-read error' "${err}" 'event="error"' 'reason="store-read"'
+after="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+check 'exhausted family admission preserves all refs' "${after}" "${before}"
+
 # Directory and semaphore generations can contain arbitrary text, even when
 # all locks have gone. They must not be treated as active lock records.
 git --git-dir="${store}" update-ref -d refs/locks/jobs/held
