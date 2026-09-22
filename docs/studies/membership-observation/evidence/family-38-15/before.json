@@ -1,0 +1,9 @@
+{
+  "objects": {
+    "a645845b1d4cec45b09cf5bdbb19f710e905c895": "schema: git-locks/1\njob: p6899\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nfamily: 0\nacquisition: 1000000-71777-1867300132\npaths:\nparent.md\n"
+  },
+  "refs": {
+    "refs/locks/jobs/p6899": "a645845b1d4cec45b09cf5bdbb19f710e905c895",
+    "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "a645845b1d4cec45b09cf5bdbb19f710e905c895"
+  }
+}

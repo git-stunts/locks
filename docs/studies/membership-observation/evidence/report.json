@@ -1,0 +1,2452 @@
+{
+  "calibration": [
+    {
+      "deliberately_bad_violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c6899",
+          "parent": "p6899"
+        }
+      ],
+      "domain": "family",
+      "healthy_violations": [],
+      "kind": "hand-constructed-oracle-input"
+    },
+    {
+      "deliberately_bad_violations": [
+        {
+          "capacity": 1,
+          "invariant": "semaphore-capacity",
+          "live": 2,
+          "semaphore": "gpu"
+        }
+      ],
+      "domain": "semaphore",
+      "healthy_violations": [],
+      "kind": "hand-constructed-oracle-input"
+    },
+    {
+      "deliberately_bad_violations": [
+        {
+          "invariant": "prefix-exclusivity",
+          "jobs": [
+            "c6899",
+            "covering"
+          ],
+          "paths": [
+            "d6899/child.md",
+            "d6899/"
+          ]
+        }
+      ],
+      "domain": "prefix",
+      "healthy_violations": [],
+      "kind": "hand-constructed-oracle-input"
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 1,
+      "mask": 14,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "after",
+        "refs/locks/sem/gpu/slots/c6899": "before"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 0,
+      "violations": []
+    }
+  ],
+  "cases": 84,
+  "live_git_race_reproduced": false,
+  "observation": "synthetic-per-ref-before-after",
+  "production_safety": "FAIL",
+  "results": [
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c6899",
+          "parent": "p6899"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 4,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 5,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 6,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c6899",
+          "parent": "p6899"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 7,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 8,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 9,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 10,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c6899",
+          "parent": "p6899"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 11,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 12,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 13,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 14,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c6899",
+          "parent": "p6899"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/jobs/p6899": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p6899"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 15,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "before",
+        "refs/locks/sem/gpu/slots/c6899": "before"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "after",
+        "refs/locks/sem/gpu/slots/c6899": "before"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": [
+        {
+          "capacity": 1,
+          "invariant": "semaphore-capacity",
+          "live": 2,
+          "semaphore": "gpu"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "before",
+        "refs/locks/sem/gpu/slots/c6899": "after"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "after",
+        "refs/locks/sem/gpu/slots/c6899": "after"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "before",
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "after",
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 0,
+      "injected_read": 1,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "prefix-exclusivity",
+          "jobs": [
+            "c6899",
+            "z6899"
+          ],
+          "paths": [
+            "d6899/child.md",
+            "d6899/"
+          ]
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "before",
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "after",
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "before",
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 4,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "after",
+        "refs/locks/jobs/c6899": "before",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 0,
+      "injected_read": 1,
+      "mask": 5,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "prefix-exclusivity",
+          "jobs": [
+            "c6899",
+            "z6899"
+          ],
+          "paths": [
+            "d6899/child.md",
+            "d6899/"
+          ]
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "before",
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 6,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "after",
+        "refs/locks/jobs/c6899": "after",
+        "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z6899",
+        "--holder",
+        "bob",
+        "d6899/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 7,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 38,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c8059",
+          "parent": "p8059"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 4,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 5,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 6,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c8059",
+          "parent": "p8059"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 7,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 8,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 9,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 10,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c8059",
+          "parent": "p8059"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 11,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 12,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 13,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 14,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c8059",
+          "parent": "p8059"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/jobs/p8059": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p8059"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 15,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "before",
+        "refs/locks/sem/gpu/slots/c8059": "before"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "after",
+        "refs/locks/sem/gpu/slots/c8059": "before"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": [
+        {
+          "capacity": 1,
+          "invariant": "semaphore-capacity",
+          "live": 2,
+          "semaphore": "gpu"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "before",
+        "refs/locks/sem/gpu/slots/c8059": "after"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "after",
+        "refs/locks/sem/gpu/slots/c8059": "after"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "before",
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "after",
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 0,
+      "injected_read": 1,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "prefix-exclusivity",
+          "jobs": [
+            "c8059",
+            "z8059"
+          ],
+          "paths": [
+            "d8059/child.md",
+            "d8059/"
+          ]
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "before",
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "after",
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "before",
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 4,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "after",
+        "refs/locks/jobs/c8059": "before",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 0,
+      "injected_read": 1,
+      "mask": 5,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "prefix-exclusivity",
+          "jobs": [
+            "c8059",
+            "z8059"
+          ],
+          "paths": [
+            "d8059/child.md",
+            "d8059/"
+          ]
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "before",
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 6,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/bbf6905444361e0cfe529abfb01a9ad467af336f": "after",
+        "refs/locks/jobs/c8059": "after",
+        "refs/locks/paths/4c35ac718d55331e9b0eef30b25a559526495bf6": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z8059",
+        "--holder",
+        "bob",
+        "d8059/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 7,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 1701,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c5916",
+          "parent": "p5916"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 4,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 5,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 6,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c5916",
+          "parent": "p5916"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "before"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 7,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 8,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 9,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 10,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c5916",
+          "parent": "p5916"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "before",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 11,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 12,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "before",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 13,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 2,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 14,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "family-parent",
+          "job": "c5916",
+          "parent": "p5916"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/jobs/p5916": "after",
+        "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+        "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+      },
+      "command": [
+        "release",
+        "--job",
+        "p5916"
+      ],
+      "domain": "family",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 15,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "before",
+        "refs/locks/sem/gpu/slots/c5916": "before"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "after",
+        "refs/locks/sem/gpu/slots/c5916": "before"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 0,
+      "injected_read": 2,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": [
+        {
+          "capacity": 1,
+          "invariant": "semaphore-capacity",
+          "live": 2,
+          "semaphore": "gpu"
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "before",
+        "refs/locks/sem/gpu/slots/c5916": "after"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/sem/gpu/gen": "after",
+        "refs/locks/sem/gpu/slots/c5916": "after"
+      },
+      "command": [
+        "sem",
+        "acquire",
+        "gpu",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob"
+      ],
+      "domain": "semaphore",
+      "exit": 1,
+      "injected_read": 2,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "real",
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "before",
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 0,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "after",
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 0,
+      "injected_read": 1,
+      "mask": 1,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "prefix-exclusivity",
+          "jobs": [
+            "c5916",
+            "z5916"
+          ],
+          "paths": [
+            "d5916/child.md",
+            "d5916/"
+          ]
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "before",
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 2,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "after",
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "before"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 3,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "before",
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 4,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected",
+        "real"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "after",
+        "refs/locks/jobs/c5916": "before",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 0,
+      "injected_read": 1,
+      "mask": 5,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 1,
+      "violations": [
+        {
+          "invariant": "prefix-exclusivity",
+          "jobs": [
+            "c5916",
+            "z5916"
+          ],
+          "paths": [
+            "d5916/child.md",
+            "d5916/"
+          ]
+        }
+      ]
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "before",
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 6,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 0,
+      "violations": []
+    },
+    {
+      "changed": {
+        "refs/locks/dirs/3a7f82e712dd0fa159a0d93d34e95ff5861a5b33": "after",
+        "refs/locks/jobs/c5916": "after",
+        "refs/locks/paths/82882b5602629d6aee3563746af423c8ec6350da": "after"
+      },
+      "command": [
+        "claim",
+        "--job",
+        "z5916",
+        "--holder",
+        "bob",
+        "d5916/"
+      ],
+      "domain": "prefix",
+      "exit": 1,
+      "injected_read": 1,
+      "mask": 7,
+      "observation": "synthetic-per-ref-before-after",
+      "reads": [
+        "injected"
+      ],
+      "seed": 20260922,
+      "transactions": 0,
+      "violations": []
+    }
+  ],
+  "violating_cases": 21
+}

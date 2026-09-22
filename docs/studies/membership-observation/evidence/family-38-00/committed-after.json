@@ -1,0 +1,12 @@
+{
+  "objects": {
+    "33b5ca2fdfe4682808a82b1e57e7925191e3faf8": "schema: git-locks/1\njob: c6899\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nparent: p6899\nfamily: 0\nacquisition: 1000000-65855-3133206299\npaths:\nchild.md\n",
+    "57bb60ad60200db3b5958f7bcc0395eade9c098e": "schema: git-locks/1\njob: p6899\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nfamily: 1\nacquisition: 1000000-65718-0420903726\npaths:\nparent.md\n"
+  },
+  "refs": {
+    "refs/locks/jobs/c6899": "33b5ca2fdfe4682808a82b1e57e7925191e3faf8",
+    "refs/locks/jobs/p6899": "57bb60ad60200db3b5958f7bcc0395eade9c098e",
+    "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "33b5ca2fdfe4682808a82b1e57e7925191e3faf8",
+    "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "57bb60ad60200db3b5958f7bcc0395eade9c098e"
+  }
+}

@@ -1,0 +1,1 @@
+{"event":"refused","reason":"capacity","semaphore":"gpu","capacity":1,"live":1}

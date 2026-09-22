@@ -1,0 +1,1 @@
+{"event":"refused","path":"d6899/","holder":"alice","job":"c6899","via":"d6899/child.md","expires":1014400}
