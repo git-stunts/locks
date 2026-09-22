@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Fixed
+
+- Parent acquisition replacement (#34) now refuses while any descendants remain stored, including expired descendants. This applies to the same holder, changed holders, reparenting and batches. Renew parents with `extend`, or release/sweep descendants before replacing them. Leaf replacement followed by new child admission remains supported. Admission rejects self-parenting and indirect cycles, verifies observed ancestor records in its transaction, and reports schema-valid `parent` refusals with `cycle` or `descendants` detail. Regression tests cover unchanged refs on refusal, renewal/recreation, both child-admission race directions and 192 seeded operations against an independent family model.
+
 ## [0.7.0] - 2026-09-16
 
 ### Added

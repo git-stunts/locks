@@ -1571,6 +1571,10 @@ check "sibling prefixes in one batch are not an overlap" "$?" "0"
 lines n "${out}"
 check "and both records claimed" "${n}" "2"
 
+# Family replacement coverage shares this suite's isolated HOME and helpers.
+# shellcheck source=test/family-replacement.sh
+source "${HERE}/family-replacement.sh"
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"
