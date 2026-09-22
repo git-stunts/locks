@@ -1609,7 +1609,9 @@ for verb in "${commands[@]}"; do
   after="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
   check "${verb} leaves authoritative refs unchanged" "${after}" "${before}"
 done
-check 'with does not execute after corrupt admission' "$([[ -e "${R}/ran" ]] && printf ran || true)" ''
+ran=''
+if [[ -e "${R}/ran" ]]; then ran=yes; fi
+check 'with does not execute after corrupt admission' "${ran}" ''
 out="$(git-locks doctor 2>&1)"
 check 'doctor still diagnoses an undecodable lock' "$?" 1
 contains 'doctor preserves record-decodes finding' "${out}" '"check":"record-decodes"'
@@ -1684,7 +1686,9 @@ for role in lock meta slot; do
     contains "doctor identifies corrupt ${role} case ${case_count}" "${diagnostic}" "\"check\":\"${finding_kind}\""
     doctor_err="$(cat "${ERR_PRE}")"
     check "doctor diagnoses ${role} case ${case_count} safely" "${doctor_rc}:${doctor_err}" '1:'
-    check "corrupt ${role} case ${case_count} fails closed" "${rc}:${out}:$([[ "${err}" == *'"reason":"store-read"'* ]] && printf store-read || true)" '2::store-read'
+    error_kind=''
+    if [[ "${err}" == *'"reason":"store-read"'* ]]; then error_kind='store-read'; fi
+    check "corrupt ${role} case ${case_count} fails closed" "${rc}:${out}:${error_kind}" '2::store-read'
   done
   git --git-dir="${store}" update-ref -d "${target}"
 done
