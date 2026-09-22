@@ -62,7 +62,7 @@ Local agent runners, generators, and build processes are candidate integrations 
 
 A lock is made of exactly three things, and once you can name them the rest of the tool is arithmetic on them. The store is a git repository that holds nothing but locks. The record is a blob in that repository, a few lines of text. The refs are pointers from stable names to that blob: one named after the job, one named after each locked path. This section introduces each, using alice's claim.
 
-The storage sketches and older mechanism examples below abbreviate object IDs and omit generated record fields. Use the complete introductory transcript and CLI schema for integration payloads.
+The storage sketches and older mechanism examples below abbreviate object IDs and omit generated record fields and directory-generation bookkeeping. Use the complete introductory transcript and CLI schema for integration payloads.
 
 The store is not your project's repository. By default it is a bare repository at `~/.git-stunts/locks/<absolute path of your repository>`, created the first time you claim, so `refs/locks/` never appears in your project and linked worktrees of one repository share one store. `git locks store` tells you where it resolved:
 
@@ -73,7 +73,7 @@ $ git locks store
 
 Linked worktrees share the main repository's default store and the same relative path namespace. Reserving `src/file.ts` in one worktree therefore reserves that logical name in the others, even though each worktree may have a different physical file. This is the implemented coordination policy. Callers needing independent physical-file ownership can select separate stores with `GIT_LOCKS_STORE` or `locks.store`; callers sharing artifacts must deliberately share a store.
 
-Inside that store, alice's claim wrote one blob and two refs. Plain git can show them, which is the point of building on git:
+In this simplified view, Alice's reservation has a job ref and a path ref pointing at the same record. Prefix coordination also writes directory token refs, omitted from this sketch. Plain Git can inspect the store:
 
 ```text
 $ git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" for-each-ref
