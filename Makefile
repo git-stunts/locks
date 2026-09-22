@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 # lib/*.sh are fragments of one script and only lint as the whole they build into (bin/git-locks).
-SCRIPTS := bin/git-locks test/test.sh scripts/hooks/pre-commit scripts/hooks/pre-push scripts/build.sh
+SCRIPTS := bin/git-locks test/test.sh test/family-replacement.sh scripts/hooks/pre-commit scripts/hooks/pre-push scripts/build.sh
 PREFIX ?= $(HOME)/.local
 
 .PHONY: build lint test test-docker install uninstall

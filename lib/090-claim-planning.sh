@@ -2,12 +2,59 @@
 
 BATCH_JOBS=()
 declare -A BATCH_HOLDER=() # job planned in this batch -> holder
+declare -A BATCH_PARENT=() # job planned in this batch -> parent
 declare -A BUMPED=()       # parent job -> 1 once its family generation is planned in this batch
 declare -A BATCH_PATH=()   # normalised path planned in this batch -> the job claiming it
 CONFLICTS=0
 CLAIM_LINE=''
 TERMINATED_PATHS=0
 TERMINATED_CASCADE='[]'
+
+plan_family() { # job parent -> refuse replacement with descendants or a cyclic proposed ancestry
+  local job="$1" parent="$2" ancestor="$2" ref oid next rows child child_parent
+  local seen=("${job}")
+  while [[ -n "${ancestor}" ]]; do
+    if in_list "${ancestor}" "${seen[@]}"; then
+      parent_refusal "${job}" "${parent}" cycle
+      return 1
+    fi
+    seen+=("${ancestor}")
+    if [[ -n "${BATCH_PARENT[${ancestor}]+x}" ]]; then
+      ancestor="${BATCH_PARENT[${ancestor}]}"
+      continue
+    fi
+    ref="$(job_ref "${ancestor}")"
+    oid="$(ref_oid "${ref}")"
+    # Ancestry decisions must survive concurrent reparenting of any ancestor,
+    # not only the direct parent's generation bump. Earlier batch transitions
+    # already carry the same expectation; a verify preserves those writes.
+    plan_set "${ref}" "${oid}" '=' || fail "${PLAN_CONFLICT}" 1
+    [[ -n "${oid}" ]] || break # the direct-parent check explains missing parents
+    field_v next "${oid}" parent
+    ancestor="${next}"
+  done
+
+  # A stored child binds this acquisition even after expiry, until release or
+  # sweep removes it. Finding one direct child suffices to rule out replacement
+  # of a whole descendant tree. The job update's CAS below binds absence to its
+  # family generation, which each concurrent child admission moves.
+  rows="$(job_refs)"
+  while IFS=' ' read -r ref oid; do
+    [[ -n "${ref}" ]] || continue
+    field_v child_parent "${oid}" parent
+    if [[ "${child_parent}" == "${job}" ]]; then
+      parent_refusal "${job}" "${job}" descendants
+      return 1
+    fi
+  done <<<"${rows}"
+  for child in "${!BATCH_PARENT[@]}"; do
+    if [[ "${BATCH_PARENT[${child}]}" == "${job}" ]]; then
+      parent_refusal "${job}" "${job}" descendants
+      return 1
+    fi
+  done
+  return 0
+}
 
 plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets CLAIM_LINE/CLAIM_OID; CONFLICTS=1 on refusal
   ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
@@ -41,10 +88,17 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
   done
   for bw in "${wanted[@]}"; do BATCH_PATH["${bw}"]="${job}"; done
 
+  if [[ -n "${parent}" ]]; then
+    valid_job "${parent}" || fail "parent id '${parent}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
+  fi
+  if ! plan_family "${job}" "${parent}"; then
+    CONFLICTS=1
+    return 0
+  fi
+
   # The parent, if any: live and the same holder, whether it exists already or is planned earlier in this batch.
   local pref poid
   if [[ -n "${parent}" ]]; then
-    valid_job "${parent}" || fail "parent id '${parent}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
     if in_list "${parent}" "${BATCH_JOBS[@]}"; then
       if [[ "${BATCH_HOLDER[${parent}]}" != "${holder}" ]]; then
         parent_refusal "${job}" "${parent}" holder
@@ -228,6 +282,7 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
 
   BATCH_JOBS+=("${job}")
   BATCH_HOLDER["${job}"]="${holder}"
+  BATCH_PARENT["${job}"]="${parent}"
   local jpaths _j1 _j2 _j3 _j4 pj='' nj=''
   json_paths jpaths < <(printf '%s\n' "${wanted[@]}")
   json_str _j1 "${job}"
@@ -264,6 +319,7 @@ claim_reset() { # planning state for one attempt at a claim or a batch
   plan_reset
   BATCH_JOBS=()
   BATCH_HOLDER=()
+  BATCH_PARENT=()
   BUMPED=()
   BATCH_PATH=()
   CONFLICTS=0
