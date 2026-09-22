@@ -28,7 +28,7 @@ bash scripts/benchmark-directory-tokens.sh run /tmp/locks-churn-quick quick
 bash scripts/benchmark-directory-tokens.sh run /tmp/locks-churn-results
 ```
 
-Output directories must not exist. The fixture command refuses existing stores and bounds its input to 10,000 work units. The large matrix processes one store at a time in a private temporary directory, then removes that store. The planned peak footprint is below 200 MiB, including temporary input files, loose objects, and refs. The runner records the working footprint after the setup transaction, before deleting setup inputs, and refuses a footprint above 200 MiB. A failed run retains raw command output, metrics, partial CSVs, and its current temporary store for diagnosis.
+Output directories must not exist. The fixture command refuses existing stores and bounds its input to 10,000 work units. The large matrix processes one store at a time in a private temporary directory, then removes that store. The planned peak footprint is below 200 MiB, including temporary input files, loose objects, and refs. The runner checks the working footprint after the setup transaction, before deleting setup inputs, and reports an excess above 200 MiB. This check happens after allocation; it is not a preventive disk quota. A failed run retains raw command output, metrics, partial CSVs, and its current temporary store for diagnosis.
 
 `environment.txt` identifies the measured revision, binary and generator blob IDs, Bash/Git/platform versions, and repetition count. `fixtures.csv` records setup time separately, ref/record/object counts, and allocated store KiB before and after operations, plus the observed setup working footprint. `observations.csv` retains every raw duration, native maximum RSS report, exit code, and stdout line count. Native resource reports are retained under `raw/`; `summary.csv` contains minimum, median, and maximum durations.
 
@@ -37,3 +37,5 @@ Output directories must not exist. The fixture command refuses existing stores a
 Filesystem caches are not cleared. Setup and ref verification warm filesystem metadata, so these are repeated local observations on a shared host, not cold-storage measurements. `elapsed_us` uses Bash's wall clock around native time and the CLI; it includes the time wrapper. Native maximum RSS is a per-command resource report, not total concurrent process memory. Three repetitions support bounded descriptive comparisons, not a latency SLA or confidence interval.
 
 The fixture equivalence check covers reachable record semantics at small scale. Synthetic setup does not measure the cost of thousands of actual CLI claim/release invocations, historical transaction interleavings, or token reclamation. The benchmark adds no timing threshold and proposes no retention-policy change.
+
+The completed native macOS study and retained observations are in the [2026-09-22 results](directory-tokens-results.md).

@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Added
 
-- A calibrated historical directory-token benchmark (#39), comparing released prefix churn, repeated reuse, and live-lock controls. Small real-CLI calibration runs in the suite; large timing runs are informational.
+- A calibrated historical directory-token benchmark (#39), comparing released prefix churn, repeated reuse, and live-lock controls. Small real-CLI calibration runs in the suite; large timing runs are informational. The retained macOS study contains 135 observations and reports multi-second reads of a released wide-10k store, with host-drift and synthetic-fixture limits.
 
 ## [0.7.0] - 2026-09-16
 
