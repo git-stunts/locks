@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Added
+
+- A controlled membership-observation study (#38) enumerates mixed before/after refs for families, semaphore slots and prefix descendants. Real Git transactions leave independent invariant violations in 21 of 84 synthetic cases. The fixture retains exact observations and transaction receipts, calibrates its independent oracle, and returns exit 1 when it exposes a safety failure. No live Git race is claimed and no production fix is included; #45 tracks the unresolved correctness work.
+
 ## [0.7.0] - 2026-09-16
 
 ### Added

@@ -1,0 +1,1 @@
+{"event":"acquired","semaphore":"gpu","job":"z6899","holder":"bob","claimed":1000000,"expires":1014400,"live":1,"capacity":1,"record":"1eee8997e1fb251d9aee0c1557dffe2aaa3c3705","acquisition":"1000000-72967-0367710226"}
