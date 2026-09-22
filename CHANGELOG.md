@@ -4,6 +4,10 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Added
+
+- A runnable cooperating-worker example (#40) acquires a path set in the mutation launcher, shows holder/note contention, allows unrelated work, and demonstrates renewal, superseded cleanup, failure cleanup and non-renewing TTL expiry. JSON receipts and behavior tests cover the golden path, an existing-output edge, and two concurrent isolated runs. The runbook distinguishes these controlled flows from unresolved #45 coherence work and defines external adoption validation as an unrun experiment.
+
 ## [0.7.0] - 2026-09-16
 
 ### Added
