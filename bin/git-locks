@@ -320,7 +320,11 @@ normalize_path() { # -> prints the lexical form, or returns 2 with the reason on
     path_error 'a path with a newline is not supported'
     return 2
   }
-  read -r -a raw_parts <<<"${p}"
+  [[ -n "${p}" ]] || { # before the split: bash < 4.4 calls an empty array unbound under set -u
+    path_error 'an empty path'
+    return 2
+  }
+  read -r -a raw_parts <<<"${p}" # split on / without globbing: * ? [ ] are bytes of the name
   for part in "${raw_parts[@]}"; do
     [[ -z "${part}" || "${part}" == '.' ]] && continue
     [[ "${part}" == '..' ]] && {
