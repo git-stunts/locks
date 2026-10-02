@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Path normalisation preserves literal `*`, `?` and bracket characters instead of expanding them against files in the working tree.
 - Unicode integration tests select an installed UTF-8 locale (probing for one where there is no `locale` command, as on musl), keep JSON stdout separate from shell diagnostics, and report an explicit skip when no UTF-8 locale is available; `GIT_LOCKS_TEST_REQUIRE_UTF8=1`, set in CI, turns that skip into a failure.
 
 ## [0.7.0] - 2026-09-16

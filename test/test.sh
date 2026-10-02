@@ -1474,6 +1474,14 @@ jfields "list shows the prefix with its slash" "${out}" 'paths=["dir/"]'
 git-locks release --job n >/dev/null 2>&1
 out="$(git-locks claim --job root --holder alice '/' 2>&1)"
 check "a bare slash is an empty path, refused" "$?" "2"
+# An empty argument is a usage error with the JSON reason on every supported bash (4.0 to 4.3 treat an
+# empty array expanded under set -u as unbound, so a split that yields no fields must not reach one).
+err="$(git-locks claim --job empty-path --holder alice '' 2>&1 >/dev/null)"
+check "an empty path is refused as usage" "$?" "2"
+contains "and the refusal says it is empty" "${err}" '"detail":"an empty path"'
+err="$(git-locks check '' 2>&1 >/dev/null)"
+check "check refuses an empty path as usage" "$?" "2"
+contains "and check says it is empty" "${err}" '"detail":"an empty path"'
 
 # with, the case in the issue: with --job build dist/ -- make protects everything under dist/.
 out="$(git-locks with --job build --holder alice dist/ -- git-locks check dist/a.js 2>/dev/null)"
