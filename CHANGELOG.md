@@ -4,6 +4,9 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Added
+
+- A controlled membership-observation study (#38) enumerates mixed before/after refs for families, semaphore slots and prefix descendants. Real Git transactions leave independent invariant violations in 21 of 84 synthetic cases. The fixture retains exact observations and transaction receipts, calibrates its independent oracle, and returns exit 1 when it exposes a safety failure; any harness fault, anticipated or not, exits 2. The ordinary test suite runs the oracle calibration and verifies the committed receipt hashes. No live Git race is claimed and no production fix is included; #45 tracks the unresolved correctness work.
 ### Changed
 
 - **Breaking:** re-claiming a parent's acquisition while any of its descendants remain stored, expired ones included, now exits 1 with a `parent` refusal whose detail is `descendants`. Before, a same-holder re-claim replaced the parent and left its children pointing at a superseded acquisition. Scripts that renew a parent by claiming it again must switch to `extend`, or release or sweep the descendants first (#34).

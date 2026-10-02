@@ -1,0 +1,97 @@
+[
+  {
+    "deliberately_bad_violations": [
+      {
+        "invariant": "family-parent",
+        "job": "c6899",
+        "parent": "p6899"
+      }
+    ],
+    "domain": "family",
+    "healthy_violations": [],
+    "kind": "hand-constructed-oracle-input"
+  },
+  {
+    "deliberately_bad_violations": [
+      {
+        "capacity": 1,
+        "invariant": "semaphore-capacity",
+        "live": 2,
+        "semaphore": "gpu"
+      }
+    ],
+    "domain": "semaphore",
+    "healthy_violations": [],
+    "kind": "hand-constructed-oracle-input"
+  },
+  {
+    "deliberately_bad_violations": [
+      {
+        "invariant": "prefix-exclusivity",
+        "jobs": [
+          "c6899",
+          "covering"
+        ],
+        "paths": [
+          "d6899/child.md",
+          "d6899/"
+        ]
+      }
+    ],
+    "domain": "prefix",
+    "healthy_violations": [],
+    "kind": "hand-constructed-oracle-input"
+  },
+  {
+    "changed": {
+      "refs/locks/jobs/c6899": "before",
+      "refs/locks/jobs/p6899": "after",
+      "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+      "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+    },
+    "command": [
+      "release",
+      "--job",
+      "p6899"
+    ],
+    "domain": "family",
+    "exit": 0,
+    "injected_read": 1,
+    "mask": 14,
+    "observation": "synthetic-per-ref-before-after",
+    "reads": [
+      "injected",
+      "real"
+    ],
+    "seed": 38,
+    "transactions": 1,
+    "violations": []
+  },
+  {
+    "changed": {
+      "refs/locks/sem/gpu/gen": "after",
+      "refs/locks/sem/gpu/slots/c6899": "before"
+    },
+    "command": [
+      "sem",
+      "acquire",
+      "gpu",
+      "--job",
+      "z6899",
+      "--holder",
+      "bob"
+    ],
+    "domain": "semaphore",
+    "exit": 1,
+    "injected_read": 1,
+    "mask": 1,
+    "observation": "synthetic-per-ref-before-after",
+    "reads": [
+      "injected",
+      "real"
+    ],
+    "seed": 38,
+    "transactions": 0,
+    "violations": []
+  }
+]

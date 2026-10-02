@@ -1,0 +1,34 @@
+{
+  "changed": {
+    "refs/locks/sem/gpu/gen": "after",
+    "refs/locks/sem/gpu/slots/c6899": "before"
+  },
+  "command": [
+    "sem",
+    "acquire",
+    "gpu",
+    "--job",
+    "z6899",
+    "--holder",
+    "bob"
+  ],
+  "domain": "semaphore",
+  "exit": 0,
+  "injected_read": 2,
+  "mask": 1,
+  "observation": "synthetic-per-ref-before-after",
+  "reads": [
+    "real",
+    "injected"
+  ],
+  "seed": 38,
+  "transactions": 1,
+  "violations": [
+    {
+      "capacity": 1,
+      "invariant": "semaphore-capacity",
+      "live": 2,
+      "semaphore": "gpu"
+    }
+  ]
+}

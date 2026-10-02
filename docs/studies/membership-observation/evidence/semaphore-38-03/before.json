@@ -1,0 +1,10 @@
+{
+  "objects": {
+    "70dcc0aa3669c035ba93ca2c3a57e358b6bcdcc9": "generation 1000000 73510 492926171\n",
+    "cdf44de3eba0e9ea943f0378c493f82ea467da90": "schema: git-locks-sem/1\nsemaphore: gpu\ncapacity: 1\ncreated: 1000000\n"
+  },
+  "refs": {
+    "refs/locks/sem/gpu/gen": "70dcc0aa3669c035ba93ca2c3a57e358b6bcdcc9",
+    "refs/locks/sem/gpu/meta": "cdf44de3eba0e9ea943f0378c493f82ea467da90"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "objects": {
+    "21a54be03b2af9d2d8de086f84c2533647e267b2": "schema: git-locks/1\njob: unrelated\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nfamily: 0\nacquisition: 1000000-74307-1493129927\npaths:\noutside.md\n"
+  },
+  "refs": {
+    "refs/locks/jobs/unrelated": "21a54be03b2af9d2d8de086f84c2533647e267b2",
+    "refs/locks/paths/47d6eb1ca50557ab8a92e6ba51b93c86a74ee404": "21a54be03b2af9d2d8de086f84c2533647e267b2"
+  }
+}
