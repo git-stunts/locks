@@ -1,0 +1,6 @@
+start
+create refs/locks/paths/1b83db463a41a8a9c0046855447e179df6c7d72a 1032ea70340a9c6adc39c38d07bd7090c65ffd29
+create refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a 1032ea70340a9c6adc39c38d07bd7090c65ffd29
+create refs/locks/jobs/z6899 1032ea70340a9c6adc39c38d07bd7090c65ffd29
+prepare
+commit
