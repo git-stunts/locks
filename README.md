@@ -339,7 +339,7 @@ building
 {"event":"released","job":"build","paths":1}
 ```
 
-`--wait <seconds>` turns a refusal into a retry once a second until the paths are free or the wait runs out; without it, a held path exits 1 immediately and the command never runs.
+`--wait <seconds>` turns a refusal into a retry once a second until the requested paths and, if `--sem` is given, a semaphore slot are available or the wait runs out; without it, a held path or a full semaphore exits 1 immediately and the command never runs.
 
 In this transcript, `building` is the command's stdout; both lifecycle JSON lines are on stderr. `with` remembers its acquisition and releases by that identity, including after renewal. A command running longer than `--ttl 60` would outlive this reservation unless it explicitly renewed. An uncatchable kill or a store failure can prevent cleanup; expiry still bounds the reservation.
 
@@ -411,7 +411,7 @@ Output is JSON Lines on every command; there is no text mode.
 | `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder when planned, and its record unchanged at commit (the clock is not rechecked); the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
 | `batch < records` | claim several locks in one transaction, or none; records are blank-line separated `job:`, `holder:`, `ttl:`, `parent:`, then `paths:` with one path per line | one `claimed` object per record | 0, 1 if any is refused, 2 on a malformed record |
 | `release --job <id> [--record <oid> OR --acquisition <id>] [--job <id>...]` | release the jobs and descendants; `--acquisition` survives renewal, while `--record` requires the exact stored version; give one condition per job (if both are given, both must match) | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
-| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] [--note <text>] <path>... -- <cmd>...` | claim, run the command, release by the acquisition it made; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
+| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <cmd>...` | claim, run the command, release by the acquisition it made; `--wait` retries once a second until the requested paths and, if `--sem` is given, a semaphore slot are available or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
 | `doctor` | read-only invariant check of the store; nothing is repaired | one `finding` object per broken invariant as it is found, then one `doctor` object with the basis (refs, records, clock), the checks run and the verdict | 0 healthy, 1 with findings, 2 if the store cannot be read |

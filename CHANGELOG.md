@@ -8,6 +8,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 - Lead with cooperative path reservations, explain TTL and launcher admission before the first example, and refresh introductory and wrapper transcripts with acquisition IDs. Clarify linked-worktree logical ownership, release conditions, and Git concurrent-reader visibility (#37).
 - Stop overstating child admission: the parent's liveness and holder are checked at planning time, and the transaction compares the parent's record rather than sending a `verify` line. Mark the claim stanza as simplified (it omits the ancestor-prefix verify and the directory token), note that directory token refs outlive a release, and list `--note` and `--parent` on `with` (#37).
+- State that `with --wait` also waits for a semaphore slot when `--sem` is given, and list `--sem` and the optional paths in the `with` command-table row (#37).
 
 ## [0.7.0] - 2026-09-16
 
