@@ -6,6 +6,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Added
 
+- A calibrated historical directory-token benchmark (#39), comparing released prefix churn, repeated reuse, and live-lock controls. Small real-CLI calibration runs in the suite; large timing runs are informational. The retained macOS run contains 135 observations, including multi-second reads of a released wide-10k store, but it coincided with host memory and disk exhaustion and is kept as a record, not a baseline. The runner ignores inherited `GIT_LOCKS_TRACE`, `GIT_LOCKS_PAUSE_*`, and `GIT_LOCKS_HOME` so test hooks cannot reach timed commands.
 - A runnable cooperating-worker example (#40) acquires a path set in the mutation launcher, shows holder/note contention, allows unrelated work, and demonstrates renewal, superseded cleanup, failure cleanup and non-renewing TTL expiry. JSON receipts and behavior tests cover the golden path, agreement with the retained recorded run, an existing-output edge, a stopped run leaving no worker processes, and two concurrent isolated runs. The runbook distinguishes these controlled flows from unresolved #45 coherence work and defines external adoption validation as an unrun experiment.
 
 ### Changed
