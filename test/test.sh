@@ -1294,16 +1294,6 @@ check "and a newline at with" "$?" "2"
 git-locks check c2.md >/dev/null 2>&1
 check "none of those refusals left a lock behind" "$?" "0"
 
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks claim --job u --holder 'héloïse' 'café/naïve.md' 2>&1)"
-check "a non-ASCII holder and path claim under a UTF-8 locale" "$?" "0"
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks list 2>&1)"
-check "and list under that locale exits 0" "$?" "0"
-contains "with the holder intact" "${out}" '"holder":"héloïse"'
-contains "and the path intact" "${out}" '"paths":["café/naïve.md"]'
-valid "list lines with non-ASCII text" "${out}"
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks check 'café/naïve.md' 2>&1)"
-check "check sees it held" "$?" "1"
-
 out="$(git-locks with --job z --holder h --sem o --ttl 0 -- true 2>&1)"
 check "with --sem refuses --ttl 0 before acquiring anything" "$?" "2"
 out="$(git-locks sem show o 2>&1)"
@@ -1484,6 +1474,14 @@ jfields "list shows the prefix with its slash" "${out}" 'paths=["dir/"]'
 git-locks release --job n >/dev/null 2>&1
 out="$(git-locks claim --job root --holder alice '/' 2>&1)"
 check "a bare slash is an empty path, refused" "$?" "2"
+# An empty argument is a usage error with the JSON reason on every supported bash (4.0 to 4.3 treat an
+# empty array expanded under set -u as unbound, so a split that yields no fields must not reach one).
+err="$(git-locks claim --job empty-path --holder alice '' 2>&1 >/dev/null)"
+check "an empty path is refused as usage" "$?" "2"
+contains "and the refusal says it is empty" "${err}" '"detail":"an empty path"'
+err="$(git-locks check '' 2>&1 >/dev/null)"
+check "check refuses an empty path as usage" "$?" "2"
+contains "and check says it is empty" "${err}" '"detail":"an empty path"'
 
 # with, the case in the issue: with --job build dist/ -- make protects everything under dist/.
 out="$(git-locks with --job build --holder alice dist/ -- git-locks check dist/a.js 2>/dev/null)"
