@@ -1610,6 +1610,8 @@ check "sibling prefixes in one batch are not an overlap" "$?" "0"
 lines n "${out}"
 check "and both records claimed" "${n}" "2"
 
+python3 "${HERE}/cooperating-workers.py"
+check "runnable cooperating-worker demo and isolated stress cases" "$?" 0
 # ---------------------------------------------------------------- #38: the membership observation study's own harness
 # The full study exits 1 while it exposes a production failure (#45), so it is not run here. These cases check
 # that the harness can still tell its verdicts apart: 0 PASS, 1 FAIL, 2 the experiment itself broke.
