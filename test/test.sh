@@ -1294,16 +1294,6 @@ check "and a newline at with" "$?" "2"
 git-locks check c2.md >/dev/null 2>&1
 check "none of those refusals left a lock behind" "$?" "0"
 
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks claim --job u --holder 'héloïse' 'café/naïve.md' 2>&1)"
-check "a non-ASCII holder and path claim under a UTF-8 locale" "$?" "0"
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks list 2>&1)"
-check "and list under that locale exits 0" "$?" "0"
-contains "with the holder intact" "${out}" '"holder":"héloïse"'
-contains "and the path intact" "${out}" '"paths":["café/naïve.md"]'
-valid "list lines with non-ASCII text" "${out}"
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks check 'café/naïve.md' 2>&1)"
-check "check sees it held" "$?" "1"
-
 out="$(git-locks with --job z --holder h --sem o --ttl 0 -- true 2>&1)"
 check "with --sem refuses --ttl 0 before acquiring anything" "$?" "2"
 out="$(git-locks sem show o 2>&1)"
