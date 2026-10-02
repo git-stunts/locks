@@ -1,0 +1,27 @@
+{
+  "changed": {
+    "refs/locks/dirs/1b83db463a41a8a9c0046855447e179df6c7d72a": "before",
+    "refs/locks/jobs/c6899": "before",
+    "refs/locks/paths/593d8373f5ee9200667683d1fef95ccdd9a8d7ee": "before"
+  },
+  "command": [
+    "claim",
+    "--job",
+    "z6899",
+    "--holder",
+    "bob",
+    "d6899/"
+  ],
+  "domain": "prefix",
+  "exit": 1,
+  "injected_read": 1,
+  "mask": 0,
+  "observation": "synthetic-per-ref-before-after",
+  "reads": [
+    "injected",
+    "real"
+  ],
+  "seed": 38,
+  "transactions": 1,
+  "violations": []
+}

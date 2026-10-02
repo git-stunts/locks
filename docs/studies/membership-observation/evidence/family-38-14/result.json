@@ -1,0 +1,31 @@
+{
+  "changed": {
+    "refs/locks/jobs/c6899": "before",
+    "refs/locks/jobs/p6899": "after",
+    "refs/locks/paths/a5ebebe3ae94634c6b2d92cd7780568808528f9d": "after",
+    "refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9": "after"
+  },
+  "command": [
+    "release",
+    "--job",
+    "p6899"
+  ],
+  "domain": "family",
+  "exit": 0,
+  "injected_read": 2,
+  "mask": 14,
+  "observation": "synthetic-per-ref-before-after",
+  "reads": [
+    "real",
+    "injected"
+  ],
+  "seed": 38,
+  "transactions": 1,
+  "violations": [
+    {
+      "invariant": "family-parent",
+      "job": "c6899",
+      "parent": "p6899"
+    }
+  ]
+}

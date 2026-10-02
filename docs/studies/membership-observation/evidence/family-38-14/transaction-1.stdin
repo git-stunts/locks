@@ -1,0 +1,5 @@
+start
+delete refs/locks/jobs/p6899 52270478c4699b5f5b11555ff9656b55d0d44700
+delete refs/locks/paths/cced43569853e52bd80802cb39d057c3f9e9c9e9 52270478c4699b5f5b11555ff9656b55d0d44700
+prepare
+commit

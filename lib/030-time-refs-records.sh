@@ -56,7 +56,7 @@ normalize_path() { # -> prints the lexical form, or returns 2 with the reason on
   # removed; absolute paths and .. segments are refused; case, symlinks and hard
   # links are NOT resolved. A trailing / is kept: dir/ is a prefix that covers
   # every path under it; dir is the directory entry itself, a different key.
-  local p="$1" part parts=() IFS='/' prefix=''
+  local p="$1" part parts=() raw_parts=() IFS='/' prefix=''
   [[ "${p}" == */ ]] && prefix='/'
   [[ "${p}" == /* ]] && {
     path_error "${p}: paths are repo-relative"
@@ -66,7 +66,12 @@ normalize_path() { # -> prints the lexical form, or returns 2 with the reason on
     path_error 'a path with a newline is not supported'
     return 2
   }
-  for part in ${p}; do
+  [[ -n "${p}" ]] || { # before the split: bash < 4.4 calls an empty array unbound under set -u
+    path_error 'an empty path'
+    return 2
+  }
+  read -r -a raw_parts <<<"${p}" # split on / without globbing: * ? [ ] are bytes of the name
+  for part in "${raw_parts[@]}"; do
     [[ -z "${part}" || "${part}" == '.' ]] && continue
     [[ "${part}" == '..' ]] && {
       path_error "${p}: no .. components"

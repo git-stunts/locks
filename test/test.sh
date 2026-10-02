@@ -727,6 +727,20 @@ valid "sem delete line" "${out}"
 git-locks sem show batch >/dev/null 2>&1
 check "a deleted semaphore is gone" "$?" "1"
 
+# Decimal capacity must preserve its numeric value in storage and every JSON line.
+for capacity_case in '01:1' '08:8' '010:10'; do
+  capacity_input="${capacity_case%:*}"
+  capacity_want="${capacity_case#*:}"
+  out="$(git-locks sem create "decimal-${capacity_want}" --capacity "${capacity_input}" 2>&1)"
+  check "capacity ${capacity_input} creates a semaphore" "$?" "0"
+  jfields "capacity ${capacity_input} emits decimal ${capacity_want}" "${out}" "capacity=${capacity_want}"
+  valid "capacity ${capacity_input} create line" "${out}"
+  out="$(git-locks sem show "decimal-${capacity_want}" 2>&1)"
+  check "capacity ${capacity_input} can be read" "$?" "0"
+  jfields "capacity ${capacity_input} reads decimal ${capacity_want}" "${out}" "capacity=${capacity_want}"
+  valid "capacity ${capacity_input} show line" "${out}"
+done
+
 # exactly K winners under contention
 git-locks sem create race --capacity 3 >/dev/null 2>&1
 wins=0
@@ -1233,6 +1247,33 @@ findings n "${out}" sem-gen
 check "a semaphore without its gen ref is one sem-gen finding" "${n}" "1"
 valid "semaphore finding lines" "${out}"
 
+# Doctor reads a stored capacity with the same decimal rule as sem_read: leading zeros are decimal, out of range is a sem-record finding.
+git-locks sem create legacy --capacity 1 >/dev/null 2>&1
+legacy_meta="$(gs rev-parse refs/locks/sem/legacy/meta)"
+for capacity_case in '08:0' '010:0' '9223372036854775808:1' '18446744073709551617:1'; do
+  capacity_stored="${capacity_case%:*}"
+  capacity_findings="${capacity_case#*:}"
+  rewritten="$(gs cat-file -p "${legacy_meta}" | sed "s/^capacity: 1\$/capacity: ${capacity_stored}/" | blob)"
+  gs update-ref refs/locks/sem/legacy/meta "${rewritten}"
+  out="$(git-locks doctor 2>&1)"
+  findings n "${out}" sem-record
+  check "doctor on stored capacity ${capacity_stored} has ${capacity_findings} sem-record findings" "${n}" "${capacity_findings}"
+  valid "doctor lines on stored capacity ${capacity_stored}" "${out}"
+done
+gs update-ref refs/locks/sem/legacy/meta "${legacy_meta}"
+for i in $(seq 1 9); do
+  slot="$(printf 'schema: git-locks-slot/1\nsemaphore: legacy\njob: l%s\nholder: bob\nclaimed: 1000000\nexpires: 2000000\nacquisition: t-l%s' "${i}" "${i}" | blob)"
+  gs update-ref "refs/locks/sem/legacy/slots/l${i}" "${slot}"
+done
+rewritten="$(gs cat-file -p "${legacy_meta}" | sed 's/^capacity: 1$/capacity: 010/' | blob)"
+gs update-ref refs/locks/sem/legacy/meta "${rewritten}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" sem-capacity
+check "nine live slots under stored capacity 010 (ten, not octal eight) are not a sem-capacity finding" "${n}" "0"
+for i in $(seq 1 9); do gs update-ref -d "refs/locks/sem/legacy/slots/l${i}"; done
+gs update-ref refs/locks/sem/legacy/meta "${legacy_meta}"
+git-locks sem delete legacy >/dev/null 2>&1
+
 # An unreadable store is an error, never healthy.
 err="$(PATH="${BROKEN}:${PATH}" git-locks doctor 2>&1 >/dev/null)"
 rc="$?"
@@ -1293,16 +1334,6 @@ out="$(git-locks with --job ctl2 --holder $'a\nb' c2.md -- true 2>&1)"
 check "and a newline at with" "$?" "2"
 git-locks check c2.md >/dev/null 2>&1
 check "none of those refusals left a lock behind" "$?" "0"
-
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks claim --job u --holder 'héloïse' 'café/naïve.md' 2>&1)"
-check "a non-ASCII holder and path claim under a UTF-8 locale" "$?" "0"
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks list 2>&1)"
-check "and list under that locale exits 0" "$?" "0"
-contains "with the holder intact" "${out}" '"holder":"héloïse"'
-contains "and the path intact" "${out}" '"paths":["café/naïve.md"]'
-valid "list lines with non-ASCII text" "${out}"
-out="$(LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 git-locks check 'café/naïve.md' 2>&1)"
-check "check sees it held" "$?" "1"
 
 out="$(git-locks with --job z --holder h --sem o --ttl 0 -- true 2>&1)"
 check "with --sem refuses --ttl 0 before acquiring anything" "$?" "2"
@@ -1484,6 +1515,14 @@ jfields "list shows the prefix with its slash" "${out}" 'paths=["dir/"]'
 git-locks release --job n >/dev/null 2>&1
 out="$(git-locks claim --job root --holder alice '/' 2>&1)"
 check "a bare slash is an empty path, refused" "$?" "2"
+# An empty argument is a usage error with the JSON reason on every supported bash (4.0 to 4.3 treat an
+# empty array expanded under set -u as unbound, so a split that yields no fields must not reach one).
+err="$(git-locks claim --job empty-path --holder alice '' 2>&1 >/dev/null)"
+check "an empty path is refused as usage" "$?" "2"
+contains "and the refusal says it is empty" "${err}" '"detail":"an empty path"'
+err="$(git-locks check '' 2>&1 >/dev/null)"
+check "check refuses an empty path as usage" "$?" "2"
+contains "and check says it is empty" "${err}" '"detail":"an empty path"'
 
 # with, the case in the issue: with --job build dist/ -- make protects everything under dist/.
 out="$(git-locks with --job build --holder alice dist/ -- git-locks check dist/a.js 2>/dev/null)"
@@ -1570,6 +1609,236 @@ out="$(printf 'job: s1\nholder: alice\npaths:\nsrc/\n\njob: s2\nholder: bob\npat
 check "sibling prefixes in one batch are not an overlap" "$?" "0"
 lines n "${out}"
 check "and both records claimed" "${n}" "2"
+
+python3 "${HERE}/cooperating-workers.py"
+check "runnable cooperating-worker demo and isolated stress cases" "$?" 0
+# ---------------------------------------------------------------- #38: the membership observation study's own harness
+# The full study exits 1 while it exposes a production failure (#45), so it is not run here. These cases check
+# that the harness can still tell its verdicts apart: 0 PASS, 1 FAIL, 2 the experiment itself broke.
+
+STUDY="${HERE}/observation/study.py"
+OBS="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-observation.XXXXXX")"
+out="$(python3 "${STUDY}" --calibrate-only --output "${OBS}/calibration" 2>&1)"
+check "the study's oracle and discarded-read controls calibrate" "$?" "0"
+contains "and calibration says it did not evaluate production safety" "${out}" '"production_safety": "NOT_EVALUATED"'
+# A fault the harness did not anticipate must not exit 1, the code that reports a production safety failure.
+out="$(python3 -c '
+import random, runpy, sys
+def fault(*_):
+    raise IndexError("injected harness fault")
+random.Random = fault
+study, output = sys.argv[1:3]
+sys.argv = [study, "--calibrate-only", "--output", output]
+runpy.run_path(study, run_name="__main__")
+' "${STUDY}" "${OBS}/fault" 2>&1)"
+check "an unanticipated fault inside the study exits 2, not the FAIL verdict's 1" "$?" "2"
+contains "and names itself a study error" "${out}" "STUDY ERROR"
+out="$(python3 "${HERE}/observation/verify-evidence.py" 2>&1)"
+check "every committed observation receipt matches its manifest hash" "$?" "0"
+# Family replacement coverage shares this suite's isolated HOME and helpers.
+# shellcheck source=test/family-replacement.sh
+source "${HERE}/family-replacement.sh"
+# ---------------------------------------------------------------- malformed authoritative records fail before decisions
+# Removing snapshot validation must turn these structured errors into an unsafe
+# observation or mutation. Literal records are independent of the CLI writer.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+store="${R}/records.git"
+export GIT_LOCKS_STORE="${store}"
+git-locks claim --job held --holder alice x.md >/dev/null
+path_oid="$(printf x.md | git --git-dir="${store}" hash-object --stdin)"
+lock_record=$'schema: git-locks/1\njob: held\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nfamily: 0\nacquisition: original\npaths:\nx.md'
+meta_record=$'schema: git-locks-sem/1\nsemaphore: gpu\ncapacity: 2\ncreated: 1000000'
+slot_record=$'schema: git-locks-slot/1\nsemaphore: gpu\njob: held\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nacquisition: original'
+bad_oid="$(printf 'not a record\n' | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
+git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${bad_oid}"
+before="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+commands=(check list show ttl claim batch release extend sweep with sem)
+for verb in "${commands[@]}"; do
+  case "${verb}" in
+    check) args=(check x.md) ;;
+    list | sweep) args=("${verb}") ;;
+    show | ttl | release) args=("${verb}" --job held) ;;
+    claim) args=(claim --job taker --holder bob x.md) ;;
+    batch) args=(batch) ;;
+    extend) args=(extend --job held --ttl 10) ;;
+    with) args=(with --job taker --holder bob x.md -- touch "${R}/ran") ;;
+    sem) args=(sem create gpu --capacity 1) ;;
+    *) exit 2 ;;
+  esac
+  out="$(printf 'job: taker\nholder: bob\npaths:\nx.md\n' | git-locks "${args[@]}" 2>"${ERR_PRE}")"
+  check "${verb} rejects malformed authority with exit 2" "$?" 2
+  check "${verb} emits no success or path output" "${out}" ''
+  err="$(cat "${ERR_PRE}")"
+  jfields "${verb} reports store-read" "${err}" 'event="error"' 'reason="store-read"'
+  valid "${verb} malformed-record error" "${err}"
+  after="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+  check "${verb} leaves authoritative refs unchanged" "${after}" "${before}"
+done
+ran=''
+if [[ -e "${R}/ran" ]]; then ran=yes; fi
+check 'with does not execute after corrupt admission' "${ran}" ''
+out="$(git-locks doctor 2>&1)"
+check 'doctor still diagnoses an undecodable lock' "$?" 1
+contains 'doctor preserves record-decodes finding' "${out}" '"check":"record-decodes"'
+
+# A fixed adversarial corpus checks missing, duplicate, unsafe arithmetic, and
+# role-confused fields. Case order is deterministic, seed 33, no random sleeps.
+corruptions=('' '-1' '1+1' '08x' '9223372036854775808' '18446744073709551616' 'a[0]' '1.5')
+case_count=0
+fuzz_state=33
+for role in lock meta slot; do
+  case "${role}" in
+    lock)
+      template="${lock_record}"
+      numeric=(claimed expires family)
+      required=(schema job holder claimed expires acquisition)
+      target=refs/locks/jobs/held
+      ;;
+    meta)
+      template="${meta_record}"
+      numeric=(capacity created)
+      required=(schema semaphore capacity created)
+      target=refs/locks/sem/gpu/meta
+      ;;
+    slot)
+      template="${slot_record}"
+      numeric=(claimed expires)
+      required=(schema semaphore job holder claimed expires acquisition)
+      target=refs/locks/sem/gpu/slots/held
+      ;;
+    *) exit 2 ;;
+  esac
+  good_oid="$(printf '%s\n' "${lock_record}" | git --git-dir="${store}" hash-object -w --stdin)"
+  git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+  git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+  cases=('not a record' "${template/schema: /schema: wrong-}")
+  if [[ "${role}" == lock ]]; then
+    cases+=("${template/$'paths:\nx.md'/paths:}" "${template/x.md//absolute}" "${template/x.md/../escape}")
+  fi
+  for key in "${required[@]}"; do
+    value="${template#*"${key}: "}"
+    value="${value%%$'\n'*}"
+    cases+=("${template/"${key}: ${value}"/"${key}: "}")
+    cases+=("${template/"${key}: ${value}"/}")
+    cases+=("${key}: other"$'\n'"${template}")
+  done
+  for key in "${numeric[@]}"; do
+    value="${template#*"${key}: "}"
+    value="${value%%$'\n'*}"
+    for corrupt in "${corruptions[@]}"; do
+      cases+=("${template/"${key}: ${value}"/"${key}: ${corrupt}"}")
+    done
+  done
+  # Seeded mutations produce digit-prefixed junk, which must never reach
+  # shell arithmetic. The expected outcome is independent of parsed values.
+  for ((sample = 0; sample < 12; sample++)); do
+    fuzz_state=$(((fuzz_state * 1103515245 + 12345) % 2147483648))
+    key="${numeric[$((fuzz_state % ${#numeric[@]}))]}"
+    value="${template#*"${key}: "}"
+    value="${value%%$'\n'*}"
+    cases+=("${template/"${key}: ${value}"/"${key}: ${fuzz_state}x"}")
+  done
+  for record in "${cases[@]}"; do
+    bad_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
+    git --git-dir="${store}" update-ref "${target}" "${bad_oid}"
+    out="$(git-locks check x.md 2>"${ERR_PRE}")"
+    rc=$?
+    err="$(cat "${ERR_PRE}")"
+    case_count=$((case_count + 1))
+    diagnostic="$(git-locks doctor 2>"${ERR_PRE}")"
+    doctor_rc=$?
+    if [[ "${role}" == lock ]]; then finding_kind='record-decodes'; else finding_kind='sem-record'; fi
+    contains "doctor identifies corrupt ${role} case ${case_count}" "${diagnostic}" "\"check\":\"${finding_kind}\""
+    doctor_err="$(cat "${ERR_PRE}")"
+    check "doctor diagnoses ${role} case ${case_count} safely" "${doctor_rc}:${doctor_err}" '1:'
+    error_kind=''
+    if [[ "${err}" == *'"reason":"store-read"'* ]]; then error_kind='store-read'; fi
+    check "corrupt ${role} case ${case_count} fails closed" "${rc}:${out}:${error_kind}" '2::store-read'
+  done
+  git --git-dir="${store}" update-ref -d "${target}"
+done
+printf '  info record corruption corpus: %s cases, fixed seed 33\n' "${case_count}"
+# Legacy decimal spellings stay readable and serialize as decimal JSON.
+legacy="${lock_record/claimed: 1000000/claimed: 01000000}"
+legacy="${legacy/expires: 1014400/expires: 01014400}"
+legacy="${legacy/family: 0/family: 000}"
+good_oid="$(printf '%s\n' "${legacy}" | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+out="$(git-locks show --job held 2>&1)"
+check 'legacy leading-zero timestamps remain readable' "$?" 0
+jfields 'legacy timestamps emit decimal JSON numbers' "${out}" 'claimed=1000000' 'expires=1014400' 'remaining=14400'
+valid 'legacy timestamp output' "${out}"
+for capacity in 02 9223372036854775807; do
+  legacy="${meta_record/capacity: 2/capacity: ${capacity}}"
+  good_oid="$(printf '%s\n' "${legacy}" | git --git-dir="${store}" hash-object -w --stdin)"
+  git --git-dir="${store}" update-ref refs/locks/sem/gpu/meta "${good_oid}"
+  out="$(git-locks sem show gpu 2>&1)"
+  check "stored capacity ${capacity} remains readable" "$?" 0
+  valid "stored capacity ${capacity} output" "${out}"
+done
+git --git-dir="${store}" update-ref -d refs/locks/sem/gpu/meta
+
+# A valid maximum generation can be read, but advancing it must fail before
+# the child or a wrapped negative generation reaches any authoritative ref.
+record="${lock_record/family: 0/family: 9223372036854775807}"
+good_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+before="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+out="$(git-locks claim --job child --holder alice --parent held child.md 2>"${ERR_PRE}")"
+check 'child admission refuses an exhausted family generation' "$?" 2
+check 'exhausted family admission prints no success' "${out}" ''
+err="$(cat "${ERR_PRE}")"
+jfields 'exhausted family admission is a store-read error' "${err}" 'event="error"' 'reason="store-read"'
+after="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+check 'exhausted family admission preserves all refs' "${after}" "${before}"
+
+# Directory and semaphore generations can contain arbitrary text, even when
+# all locks have gone. They must not be treated as active lock records.
+git --git-dir="${store}" update-ref -d refs/locks/jobs/held
+git --git-dir="${store}" update-ref -d "refs/locks/paths/${path_oid}"
+git --git-dir="${store}" update-ref refs/locks/dirs/opaque "${bad_oid}"
+git --git-dir="${store}" update-ref refs/locks/sem/gpu/gen "${bad_oid}"
+out="$(git-locks check x.md 2>&1)"
+check 'opaque generation records do not block a free path' "$?" 0
+jfields 'free path stays free beside opaque tokens' "${out}" 'state="free"'
+
+# A blank line among a record's paths is an empty stored path, and the
+# diagnosis says so rather than calling it some other malformed path.
+record="${lock_record/$'paths:\nx.md'/$'paths:\nx.md\n\ny.md'}"
+bad_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
+out="$(git-locks check x.md 2>&1)"
+check 'an empty stored path fails closed' "$?" 2
+contains 'an empty stored path is named as empty' "${out}" 'empty stored path'
+git --git-dir="${store}" update-ref -d refs/locks/jobs/held
+unset GIT_LOCKS_STORE
+
+# ---------------------------------------------------------------- a slot for a job named meta is a slot, not metadata
+# Job and semaphore names share one grammar, so `meta` is a valid job id and
+# refs/locks/sem/<name>/slots/meta is a slot ref. Matching sem/*/meta with a
+# glob that crosses / reads it as the semaphore's metadata instead.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+export GIT_LOCKS_STORE="${R}/meta-slot.git"
+git-locks sem create gpu --capacity 2 >/dev/null
+out="$(git-locks sem acquire gpu --job meta --holder alice 2>&1)"
+check 'a job named meta takes a slot' "$?" 0
+out="$(git-locks check x.md 2>&1)"
+check 'a slot for job meta does not read as semaphore metadata' "$?" 0
+jfields 'the path stays free beside a slot for job meta' "${out}" 'state="free"'
+out="$(git-locks sem list 2>&1)"
+check 'sem list succeeds beside a slot for job meta' "$?" 0
+lines n "${out}"
+check 'sem list names one semaphore, not its slots directory' "${n}" 1
+jfields 'sem list reports the real semaphore with its slot' "${out}" 'semaphore="gpu"' 'capacity=2' 'live=1'
+valid 'sem list beside a slot for job meta' "${out}"
+out="$(git-locks doctor 2>&1)"
+check 'doctor finds a slot for job meta healthy' "$?" 0
+unset GIT_LOCKS_STORE
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then

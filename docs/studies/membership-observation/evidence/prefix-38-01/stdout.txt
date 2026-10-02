@@ -1,0 +1,1 @@
+{"event":"claimed","job":"z6899","holder":"bob","claimed":1000000,"expires":1014400,"paths":["d6899/"],"record":"9ec88e08651bdd5989a4a95eaa5c77f90e2716bf","acquisition":"1000000-74546-1136417607"}
