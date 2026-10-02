@@ -216,10 +216,6 @@ When a claim finds an expired lock on a path it wants, it evicts the whole expir
 
 In summary, expiry is a field, not a process. A dead holder's lock is free the moment its time is up, and the next writer removes it as part of taking the path.
 
-## A runnable cooperating-worker example
-
-The [two-worker example](examples/cooperating-workers/README.md) reserves a path set before launching mutation, shows a competing worker who holds it and why, and lets unrelated work finish. It also demonstrates renewal, acquisition-aware cleanup, worker failure and the TTL boundary in an isolated store. The runbook defines an external adoption experiment as unrun. Its controlled flows do not resolve the observation-coherence failures tracked by [#45](https://github.com/git-stunts/locks/issues/45).
-
 ## Families and batches: all or nothing across locks
 
 One transaction per claim already makes a multi-path claim atomic; this section extends that to several locks at once, in two forms that share one mechanism. A child lock is tied to a parent so that the family lives and dies together, and a batch claims several independent locks in one stanza.
@@ -320,7 +316,7 @@ In summary, a semaphore is a set of slot refs plus one ref that every writer mus
 
 Most callers want the lock only for the duration of one command, and forgetting the release is the common failure. This section shows `with`, which does the three steps and cannot forget the third.
 
-`git locks with --job <id> --holder <name> [--wait <s>] [--sem <name>] <path>... -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
+`git locks with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--note <text>] <path>... -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
 
 ```text
 $ git locks with --job build --holder alice dist/bundle.js -- sh -c 'echo building'
@@ -332,6 +328,10 @@ building                                                                        
 `--wait <seconds>` turns a refusal into a retry once a second until the paths are free or the wait runs out; without it, a held path exits 1 immediately and the command never runs.
 
 In summary, `with` is the shape most scripts should use: the lock's lifetime is the command's lifetime, by construction.
+
+## A runnable cooperating-worker example
+
+The [two-worker example](examples/cooperating-workers/README.md) reserves a path set before launching mutation, shows a competing worker who holds it and why, and lets unrelated work finish. It also demonstrates renewal, acquisition-aware cleanup, worker failure and the TTL boundary in an isolated store. The runbook defines an external adoption experiment as unrun. Its controlled flows do not resolve the observation-coherence failures tracked by [#45](https://github.com/git-stunts/locks/issues/45).
 
 ## Output: JSON Lines, always
 
@@ -401,7 +401,7 @@ Output is JSON Lines on every command; there is no text mode.
 | `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder (verified inside the transaction); the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
 | `batch < records` | claim several locks in one transaction, or none; records are blank-line separated `job:`, `holder:`, `ttl:`, `parent:`, then `paths:` with one path per line | one `claimed` object per record | 0, 1 if any is refused, 2 on a malformed record |
 | `release --job <id> [--record <oid>] [--job <id>...]` | release the jobs and all their descendants in one transaction; `--record` releases only that acquisition | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
-| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] <path>... -- <cmd>...` | claim, run the command, release; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
+| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] <path>... -- <cmd>...` | claim, run the command, release; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
 | `doctor` | read-only invariant check of the store; nothing is repaired | one `finding` object per broken invariant as it is found, then one `doctor` object with the basis (refs, records, clock), the checks run and the verdict | 0 healthy, 1 with findings, 2 if the store cannot be read |

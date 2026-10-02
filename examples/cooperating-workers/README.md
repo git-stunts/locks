@@ -81,7 +81,7 @@ The Python test requires the same `jsonschema` dependency as the existing suite;
 
 The oracle parses the real command receipts and validates lifecycle JSON against the public schema. It checks acquisition before mutation, both reserved paths, refusal holder/note, absence of Bob's blocked mutation marker, unrelated progress during Alice's acquisition, renewal identity, release after renewal, superseded cleanup, status-17 cleanup, simulated expiry, and final store health.
 
-The golden run uses an output path containing spaces. An existing-directory case checks preservation of a sentinel file. Two complete demonstrations then run concurrently with separate stores and both must satisfy the same behavioral assertions. That is bounded stress of this example and its isolation, not arbitrary-schedule fuzzing or evidence of external adoption.
+The golden run uses an output path containing spaces, and its receipt set and transcript must still match [recorded-run.json](recorded-run.json), whose records must remain schema-valid. An existing-directory case checks preservation of a sentinel file. A demonstration stopped while Alice's worker is gated must leave no launcher or worker process behind. Two complete demonstrations then run concurrently with separate stores and both must satisfy the same behavioral assertions. That is bounded stress of this example and its isolation, not arbitrary-schedule fuzzing or evidence of external adoption.
 
 ## Adoption experiment, not yet run
 
