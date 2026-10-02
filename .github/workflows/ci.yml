@@ -11,9 +11,11 @@ jobs:
     container: ubuntu:24.04
     steps:
       - name: Install test prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install -y ca-certificates git python3-jsonschema
+          apt-get install -y --no-install-recommends ca-certificates git python3-jsonschema
       - uses: actions/checkout@v4
       - name: Confirm the image has C.utf8 but no en_US UTF-8 locale
         shell: bash
@@ -48,11 +50,13 @@ jobs:
           fi
       - name: Test Unicode output under the installed UTF-8 locale
         shell: bash
+        env:
+          GIT_LOCKS_TEST_REQUIRE_UTF8: "1"
         run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci
           bash test/unicode-locale.sh
-          no_locale_output="$(GIT_LOCKS_TEST_LOCALES=$'C\nPOSIX' bash test/unicode-locale.sh)"
+          no_locale_output="$(GIT_LOCKS_TEST_REQUIRE_UTF8=0 GIT_LOCKS_TEST_LOCALES=$'C\nPOSIX' bash test/unicode-locale.sh)"
           printf '%s\n' "$no_locale_output"
           [[ "$no_locale_output" == *'SKIP Unicode claim/list/check integration'* ]]
 
@@ -69,6 +73,8 @@ jobs:
       - name: Lint
         run: make lint
       - name: Test
+        env:
+          GIT_LOCKS_TEST_REQUIRE_UTF8: "1"
         run: |
           git config --global user.email ci@example.invalid
           git config --global user.name ci
