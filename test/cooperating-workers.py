@@ -2,19 +2,53 @@
 """Behavior tests for the runnable demo, using its real launchers and Git store."""
 
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import tempfile
+import time
 
 import jsonschema
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = ROOT / "examples/cooperating-workers/demo.sh"
+RECORDED = ROOT / "examples/cooperating-workers/recorded-run.json"
 SCHEMA = jsonschema.Draft202012Validator(json.loads((ROOT / "schema/git-locks.schema.json").read_text()))
 
 
 def lines(root, name):
     return [json.loads(line) for line in (root / "receipts" / name).read_text().splitlines() if line.strip()]
+
+
+def start_demo(output):
+    # Its own session, so a stop reaches the background launchers and gated workers too.
+    return subprocess.Popen(["bash", str(DEMO), str(output)], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+
+
+def group_alive(pgid):
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:  # macOS: only exited members awaiting their reaper remain
+        return False
+    return True
+
+
+def stop_demo(proc):
+    # Kill the whole session: the launcher's background workers outlive a kill of bash alone.
+    if group_alive(proc.pid):
+        os.killpg(proc.pid, signal.SIGKILL)
+    proc.wait()
+
+
+def finish_demo(proc, timeout):
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    finally:
+        stop_demo(proc)
+    return stdout, stderr
 
 
 def verify(root):
@@ -62,30 +96,63 @@ def verify(root):
     assert (receipts / "source-revision.txt").read_text().strip()
 
 
+def verify_recorded(root, stdout):
+    # The retained run must still describe what the demo emits today.
+    recorded = json.loads(RECORDED.read_text())
+    records = recorded["cli_records"]
+    assert sorted(records) == sorted(p.name for p in (root / "receipts").glob("*.jsonl")), "recorded receipt set drifted"
+    for batch in records.values():
+        for record in batch:
+            SCHEMA.validate(record)
+    assert sum(len(batch) for batch in records.values()) == recorded["schema_validated_records"]
+    assert recorded["transcript"][:-1] == stdout.splitlines()[:-1], "recorded transcript drifted"
+
+
 def run(output):
-    result = subprocess.run(["bash", str(DEMO), str(output)], cwd=ROOT, text=True, capture_output=True, timeout=45)
-    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+    proc = start_demo(output)
+    stdout, stderr = finish_demo(proc, 45)
+    assert proc.returncode == 0, (proc.returncode, stdout, stderr)
     verify(output)
+    return stdout
+
+
+def stopped_demo_leaves_no_workers(output):
+    # A stop while Alice is gated must not orphan her launcher and worker.
+    proc = start_demo(output)
+    try:
+        ready = output / "gates" / "build.ready"
+        deadline = time.monotonic() + 30
+        while not ready.exists():
+            assert proc.poll() is None and time.monotonic() < deadline, "demo never gated its first worker"
+            time.sleep(0.02)
+    finally:
+        stop_demo(proc)
+    deadline = time.monotonic() + 5
+    while group_alive(proc.pid) and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert not group_alive(proc.pid), "stopped demo left worker processes running"
 
 
 with tempfile.TemporaryDirectory(prefix="git-locks-demo-tests-") as tmp:
     scratch = Path(tmp)
-    run(scratch / "golden path with spaces")
+    golden = scratch / "golden path with spaces"
+    verify_recorded(golden, run(golden))
     # Existing caller-owned output is rejected before anything is overwritten.
     occupied = scratch / "occupied"
     occupied.mkdir()
     (occupied / "sentinel").write_text("keep me")
-    result = subprocess.run(["bash", str(DEMO), str(occupied)], text=True, capture_output=True, timeout=10)
+    result = subprocess.run(["bash", str(DEMO), str(occupied)], text=True, capture_output=True, timeout=10, check=False)
     assert result.returncode == 2 and (occupied / "sentinel").read_text() == "keep me"
     assert sorted(p.name for p in occupied.iterdir()) == ["sentinel"]
+    stopped_demo_leaves_no_workers(scratch / "stopped")
     # Two complete demonstrations overlap in time but use separate stores.
-    runs = []
-    for index in range(2):
-        output = scratch / f"parallel-{index}"
-        proc = subprocess.Popen(["bash", str(DEMO), str(output)], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        runs.append((proc, output))
-    for proc, output in runs:
-        stdout, stderr = proc.communicate(timeout=60)
-        assert proc.returncode == 0, (proc.returncode, stdout, stderr)
-        verify(output)
-    print("cooperating-worker demo: golden path, lifecycle edges, failure/expiry/supersession and 2 concurrent isolated runs passed")
+    runs = [(start_demo(scratch / f"parallel-{index}"), scratch / f"parallel-{index}") for index in range(2)]
+    try:
+        for proc, output in runs:
+            stdout, stderr = proc.communicate(timeout=60)
+            assert proc.returncode == 0, (proc.returncode, stdout, stderr)
+            verify(output)
+    finally:
+        for proc, _ in runs:
+            stop_demo(proc)
+    print("cooperating-worker demo: golden path, recorded run, lifecycle edges, failure/expiry/supersession, stop cleanup and 2 concurrent isolated runs passed")
