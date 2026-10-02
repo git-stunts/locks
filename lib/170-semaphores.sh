@@ -5,6 +5,10 @@
 # acquirers who both counted "n of N live" contend on one compare-and-swap and
 # exactly one commits. The other re-reads.
 
+valid_capacity() { # VAR value: record_uint (leading zeros are decimal, never octal; signed 64-bit range), and positive
+  record_uint "$1" "$2" && [[ "${!1}" != 0 ]]
+}
+
 sem_meta_ref() { printf '%s/sem/%s/meta' "${NS}" "$1"; }
 sem_gen_ref() { printf '%s/sem/%s/gen' "${NS}" "$1"; }
 sem_slot_ref() { printf '%s/sem/%s/slots/%s' "${NS}" "$1" "$2"; }
@@ -43,6 +47,7 @@ sem_read() {      # name -> 0, or 1 when the semaphore does not exist
   SEM_META_OID="$(ref_oid "${mref}")"
   [[ -n "${SEM_META_OID}" ]] || return 1
   SEM_CAP="$(field "${SEM_META_OID}" capacity)"
+  valid_capacity SEM_CAP "${SEM_CAP}" || store_error "semaphore ${name} has an invalid capacity"
   gref="$(sem_gen_ref "${name}")"
   SEM_GEN_OID="$(ref_oid "${gref}")"
   SLOT_JOBS=()
@@ -280,7 +285,7 @@ cmd_sem() {
   done
   case "${verb}" in
     create)
-      [[ "${capacity}" =~ ^[0-9]+$ && "${capacity}" -gt 0 ]] || fail '--capacity is a positive number' 2
+      valid_capacity capacity "${capacity}" || fail '--capacity is a decimal integer from 1 through 9223372036854775807' 2
       if sem_read "${name}"; then
         sem_refusal "${name}" exists
         exit 1

@@ -6,6 +6,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Semaphore capacity is validated as a bounded positive decimal and normalized before storage, arithmetic, and JSON serialization. Leading-zero values such as `01`, `08`, and `010` keep their decimal meaning, including when reading metadata written by older versions. Invalid stored capacities fail with `store-read` (#35).
+- `doctor` reads a stored semaphore capacity with the same decimal rule. Before, a legacy `08` printed a bash arithmetic error, `010` was compared as octal eight (so nine live slots were a false `sem-capacity` finding), and a capacity past 2^64 wrapped around to a small number instead of being a `sem-record` finding.
 - Validate authoritative lock and semaphore records before normal reads or planning (#33). Corrupt records now produce a structured `store-read` error with exit 2 before any success output or mutation. Doctor shares the decoder and safely reports malformed numeric fields; generation tokens remain opaque. Stored decimal fields normalize leading zeros and reject values outside the nonnegative signed 64-bit range. Child admission refuses a parent whose family generation cannot advance without overflow.
 - `sem list` no longer reads the slot of a job named `meta` as a second semaphore. It matched any ref ending in `/meta`, so `refs/locks/sem/gpu/slots/meta` printed a `gpu/slots` line with an empty capacity, which is not valid JSON. Snapshot validation splits semaphore refs the same way, so such a slot is validated as a slot rather than as metadata.
 - Path normalisation preserves literal `*`, `?` and bracket characters instead of expanding them against files in the working tree.
