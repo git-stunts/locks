@@ -1610,6 +1610,9 @@ check "sibling prefixes in one batch are not an overlap" "$?" "0"
 lines n "${out}"
 check "and both records claimed" "${n}" "2"
 
+# Family replacement coverage shares this suite's isolated HOME and helpers.
+# shellcheck source=test/family-replacement.sh
+source "${HERE}/family-replacement.sh"
 # ---------------------------------------------------------------- malformed authoritative records fail before decisions
 # Removing snapshot validation must turn these structured errors into an unsafe
 # observation or mutation. Literal records are independent of the CLI writer.

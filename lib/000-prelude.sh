@@ -84,8 +84,10 @@ usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent 
        git locks help | schema
 
 claim    lock the paths for the job, atomically; re-claiming with the same job replaces its path set and
-         its record; --parent makes it a child: the parent must be live and held by the same holder, and the
-         child is released or swept with it. The claim line carries the record id of this acquisition.
+         its record, but is refused while the job has stored descendants (renew a parent with extend);
+         --parent makes it a child: the parent must be live, held by the same holder and not the job itself
+         or one of its descendants, and the child is released or swept with it. The claim line carries the
+         record id of this acquisition.
          --note is one line saying why, carried on every line that names the lock: a refusal reads
          'held by alice: building the release bundle' instead of just 'held by alice'. A path ending
          in / is a prefix: dist/ covers every path under it and is covered by any lock under it

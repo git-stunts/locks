@@ -4,8 +4,13 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** re-claiming a parent's acquisition while any of its descendants remain stored, expired ones included, now exits 1 with a `parent` refusal whose detail is `descendants`. Before, a same-holder re-claim replaced the parent and left its children pointing at a superseded acquisition. Scripts that renew a parent by claiming it again must switch to `extend`, or release or sweep the descendants first (#34).
+
 ### Fixed
 
+- Parent acquisition replacement (#34) now refuses while any descendants remain stored, including expired descendants. This applies to the same holder, changed holders, reparenting and batches. Renew parents with `extend`, or release/sweep descendants before replacing them. Leaf replacement followed by new child admission remains supported. Admission rejects self-parenting and indirect cycles, verifies observed ancestor records in its transaction, and reports schema-valid `parent` refusals with `cycle` or `descendants` detail. The `claim` help text and the README command table state both rules. Regression tests cover unchanged refs and the reported `detail` on refusal, renewal/recreation, both child-admission race directions with their final records, and 192 seeded operations whose outcomes and refusal reasons are checked against an independent family model.
 - Semaphore capacity is validated as a bounded positive decimal and normalized before storage, arithmetic, and JSON serialization. Leading-zero values such as `01`, `08`, and `010` keep their decimal meaning, including when reading metadata written by older versions. Invalid stored capacities fail with `store-read` (#35).
 - `doctor` reads a stored semaphore capacity with the same decimal rule. Before, a legacy `08` printed a bash arithmetic error, `010` was compared as octal eight (so nine live slots were a false `sem-capacity` finding), and a capacity past 2^64 wrapped around to a small number instead of being a `sem-record` finding.
 - Validate authoritative lock and semaphore records before normal reads or planning (#33). Corrupt records now produce a structured `store-read` error with exit 2 before any success output or mutation. Doctor shares the decoder and safely reports malformed numeric fields; generation tokens remain opaque. Stored decimal fields normalize leading zeros and reject values outside the nonnegative signed 64-bit range. Child admission refuses a parent whose family generation cannot advance without overflow.
