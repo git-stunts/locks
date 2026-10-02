@@ -124,7 +124,7 @@ Two refs, one blob. `refs/locks/jobs/alice-report` and `refs/locks/paths/57982dc
 | job ref | `refs/locks/jobs/<job>` | find a lock by the job that owns it: release, extend, show |
 | path ref | `refs/locks/paths/<hash of path>` | find who holds a path: check, refuse |
 
-In summary, a lock is a blob plus the refs that name it, and everything git-locks reports is read straight off those refs. Nothing else is stored, so nothing else can drift.
+In summary, a lock is a blob plus the refs that name it, and everything git-locks reports is read straight off those refs. The only other refs are directory tokens, which serialise prefix races and never decide who holds a path.
 
 A reservation is live only while its validated record has not expired. A prefix reservation can cover a path without a ref for that exact path. Ref existence alone does not decide whether a path is held.
 
@@ -134,7 +134,7 @@ Before the tool can refuse bob, git has to make refusing possible, and it does s
 
 The first property is that a ref update can be conditional. `update-ref` takes an old value alongside the new one, and if the ref does not currently hold that old value, the update fails. A `create` is the special case where the expected old value is "nothing": it fails if the ref already exists. That is a compare-and-swap, and git takes a lock file on the ref while it checks, so two processes cannot both pass.
 
-The second property is that several ref updates can be one transaction. On stdin, `start`, then any number of `create`, `update`, `delete` and `verify` lines, then `prepare` and `commit`. Every line is checked before any is applied, and if one fails, none are applied. This is the exact stanza alice's claim sent, reconstructed from the code path in `bin/git-locks`:
+The second property is that several ref updates can be one transaction. On stdin, `start`, then any number of `create`, `update`, `delete` and `verify` lines, then `prepare` and `commit`. Every line is checked before any is applied, and if one fails, none are applied. This is the core of the stanza alice's claim sent, reconstructed from the code path in `bin/git-locks`; the real stanza also carries a `verify` that no prefix lock exists on `notes/` and a `create` of the directory token for `notes/`, omitted here:
 
 ```text
 start
@@ -190,7 +190,7 @@ When bob runs `claim`, the tool first hashes `notes/report.md`, finds `refs/lock
 
 Had the ref not existed when bob read, but been created by alice a millisecond later, bob's transaction would have failed instead, and the tool would then read the ref and print the same refusal line. Two different code paths, one contract: a refusal names the holder. The store afterwards is unchanged by bob, which is why the git graph after bob's attempt is Figure 1 again with nothing added.
 
-The other outcome in the example is `release`. Alice's release is also one transaction, this time `delete` lines, each carrying the blob it expects the ref to hold. If some other process had replaced the path ref in the meantime, alice's delete of that ref would fail rather than remove someone else's lock. After the release the store is empty, and bob's second claim is a fresh Figure 1 with his names in it.
+The other outcome in the example is `release`. Alice's release is also one transaction, this time `delete` lines, each carrying the blob it expects the ref to hold. If some other process had replaced the path ref in the meantime, alice's delete of that ref would fail rather than remove someone else's lock. After the release no job or path ref remains (the directory token for `notes/` stays, still pointing at the old record but deciding nothing), and bob's second claim is a fresh Figure 1 with his names in it.
 
 ```mermaid
 gitGraph
@@ -264,7 +264,7 @@ Releasing `build` deletes the refs of every lock whose parent chain reaches it, 
 
 | Form | Guarantee | Verified by |
 |---|---|---|
-| `claim --parent` | parent live and same holder at commit time | a `verify` line on the parent's ref |
+| `claim --parent` | parent live and same holder when planned, and its record unchanged at commit | an `update` of the parent's refs to a family-bumped record, from the record it read |
 | `release`, `sweep` of a parent | every descendant goes with it | one transaction of `delete` lines |
 | `batch` | all records claimed or none | one stanza for every record |
 | `release --job a --job b` | both families released or neither | one stanza |
@@ -330,7 +330,7 @@ In summary, a semaphore is a set of slot refs plus one ref that every writer mus
 
 `with` places acquisition in the command launcher and attempts cleanup when the command exits. Its reservation remains subject to the TTL, process termination, and store errors.
 
-`git locks with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] <path>... -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
+`git locks with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
 
 ```text
 $ git locks with --job build --holder alice --ttl 60 dist/bundle.js -- sh -c 'echo building'
@@ -408,10 +408,10 @@ Output is JSON Lines on every command; there is no text mode.
 | `show --job <id>` | one lock in full, with `remaining` seconds | one object, same shape as a `list` line | 0, 1 if no such lock |
 | `ttl --job <id>` | the seconds a lock has left | one `{job, expires, remaining}` object | 0, 1 if no such lock |
 | `extend --job <id> --ttl <s>` | move the expiry to now + ttl, paths unchanged, atomically | one `extended` object | 0, 1 if no such lock |
-| `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder (verified inside the transaction); the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
+| `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder when planned, and its record unchanged at commit (the clock is not rechecked); the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
 | `batch < records` | claim several locks in one transaction, or none; records are blank-line separated `job:`, `holder:`, `ttl:`, `parent:`, then `paths:` with one path per line | one `claimed` object per record | 0, 1 if any is refused, 2 on a malformed record |
-| `release --job <id> [--record <oid> OR --acquisition <id>] [--job <id>...]` | release the jobs and descendants; `--acquisition` survives renewal, while `--record` requires the exact stored version; the conditions are mutually exclusive | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
-| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] <path>... -- <cmd>...` | claim, run the command, release; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
+| `release --job <id> [--record <oid> OR --acquisition <id>] [--job <id>...]` | release the jobs and descendants; `--acquisition` survives renewal, while `--record` requires the exact stored version; give one condition per job (if both are given, both must match) | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
+| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--parent <id>] [--note <text>] <path>... -- <cmd>...` | claim, run the command, release by the acquisition it made; `--wait` retries once a second until the paths are free or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
 | `doctor` | read-only invariant check of the store; nothing is repaired | one `finding` object per broken invariant as it is found, then one `doctor` object with the basis (refs, records, clock), the checks run and the verdict | 0 healthy, 1 with findings, 2 if the store cannot be read |
