@@ -31,7 +31,7 @@ test-observation-calibration:
 	python3 test/observation/study.py --calibrate-only --output "$(OBSERVATION_OUT)-calibration"
 
 test-docker: # the same suite inside the official bash image, for a wall between the tests and your machine
-	docker run --rm -v "$(CURDIR)":/src -w /src bash:5.2 bash -c 'apk add --no-cache git python3 py3-jsonschema >/dev/null && git config --global user.email t@example.invalid && git config --global user.name t && git config --global --add safe.directory /src && bash test/test.sh && python3 test/capacity.py && bash test/literal-paths.sh && bash test/unicode-locale.sh && bash test/unicode-locale-calibration.sh'
+	docker run --rm -v "$(CURDIR)":/src -w /src bash:5.2 bash -c 'apk add --no-cache git python3 py3-jsonschema time >/dev/null && git config --global user.email t@example.invalid && git config --global user.name t && git config --global --add safe.directory /src && bash test/test.sh && python3 test/capacity.py && bash test/literal-paths.sh && bash test/unicode-locale.sh && bash test/unicode-locale-calibration.sh && bash test/directory-token-churn.sh'
 
 install:
 	mkdir -p $(PREFIX)/bin
