@@ -12,7 +12,7 @@ declare -A BLOB=()      # oid -> record text
 declare -A R_PARSED=()  # oid -> 1 once parsed
 declare -A R_FIELD=()   # "oid key" -> value, for the header lines before paths: (first occurrence wins); values are stored whole, so no byte in one can read as a delimiter
 declare -A R_PATHS=()   # oid -> the path lines, newline separated
-declare -A R_INVALID=() # oid -> structural parse error, retained for doctor
+declare -A R_INVALID=() # oid -> structural parse error (duplicate field, header line without ': '); validate_record reports it
 SNAP_LOADED=0
 DIAGNOSTIC_READ=0
 

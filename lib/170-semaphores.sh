@@ -222,8 +222,8 @@ cmd_sem() {
       local rows ref oid
       rows="$(refs_under "${NS}/sem/")"
       while IFS=' ' read -r ref oid; do
-        [[ "${ref}" == */meta ]] || continue
         name="${ref#"${NS}"/sem/}"
+        [[ "${name#*/}" == meta ]] || continue # not */meta: that also matches the slot of a job named meta
         name="${name%/meta}"
         sem_read "${name}" || continue
         sem_show_line "${name}"

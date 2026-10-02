@@ -7,6 +7,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 ### Fixed
 
 - Validate authoritative lock and semaphore records before normal reads or planning (#33). Corrupt records now produce a structured `store-read` error with exit 2 before any success output or mutation. Doctor shares the decoder and safely reports malformed numeric fields; generation tokens remain opaque. Stored decimal fields normalize leading zeros and reject values outside the nonnegative signed 64-bit range. Child admission refuses a parent whose family generation cannot advance without overflow.
+- `sem list` no longer reads the slot of a job named `meta` as a second semaphore. It matched any ref ending in `/meta`, so `refs/locks/sem/gpu/slots/meta` printed a `gpu/slots` line with an empty capacity, which is not valid JSON. Snapshot validation splits semaphore refs the same way, so such a slot is validated as a slot rather than as metadata.
 
 ## [0.7.0] - 2026-09-16
 

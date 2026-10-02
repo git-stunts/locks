@@ -1738,6 +1738,39 @@ git --git-dir="${store}" update-ref refs/locks/sem/gpu/gen "${bad_oid}"
 out="$(git-locks check x.md 2>&1)"
 check 'opaque generation records do not block a free path' "$?" 0
 jfields 'free path stays free beside opaque tokens' "${out}" 'state="free"'
+
+# A blank line among a record's paths is an empty stored path, and the
+# diagnosis says so rather than calling it some other malformed path.
+record="${lock_record/$'paths:\nx.md'/$'paths:\nx.md\n\ny.md'}"
+bad_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
+git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
+out="$(git-locks check x.md 2>&1)"
+check 'an empty stored path fails closed' "$?" 2
+contains 'an empty stored path is named as empty' "${out}" 'empty stored path'
+git --git-dir="${store}" update-ref -d refs/locks/jobs/held
+unset GIT_LOCKS_STORE
+
+# ---------------------------------------------------------------- a slot for a job named meta is a slot, not metadata
+# Job and semaphore names share one grammar, so `meta` is a valid job id and
+# refs/locks/sem/<name>/slots/meta is a slot ref. Matching sem/*/meta with a
+# glob that crosses / reads it as the semaphore's metadata instead.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+export GIT_LOCKS_STORE="${R}/meta-slot.git"
+git-locks sem create gpu --capacity 2 >/dev/null
+out="$(git-locks sem acquire gpu --job meta --holder alice 2>&1)"
+check 'a job named meta takes a slot' "$?" 0
+out="$(git-locks check x.md 2>&1)"
+check 'a slot for job meta does not read as semaphore metadata' "$?" 0
+jfields 'the path stays free beside a slot for job meta' "${out}" 'state="free"'
+out="$(git-locks sem list 2>&1)"
+check 'sem list succeeds beside a slot for job meta' "$?" 0
+lines n "${out}"
+check 'sem list names one semaphore, not its slots directory' "${n}" 1
+jfields 'sem list reports the real semaphore with its slot' "${out}" 'semaphore="gpu"' 'capacity=2' 'live=1'
+valid 'sem list beside a slot for job meta' "${out}"
+out="$(git-locks doctor 2>&1)"
+check 'doctor finds a slot for job meta healthy' "$?" 0
 unset GIT_LOCKS_STORE
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"

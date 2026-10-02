@@ -96,6 +96,10 @@ validate_record() { # oid lock|meta|slot: parsed values are safe before arithmet
       return 1
     }
     while IFS= read -r p; do
+      [[ -n "${p}" ]] || {
+        record_invalid 'empty stored path'
+        return 1
+      }
       # Stored paths must already be lexical keys; do not glob or normalize
       # them against the reader's working directory.
       case "/${p}/" in
@@ -105,10 +109,6 @@ validate_record() { # oid lock|meta|slot: parsed values are safe before arithmet
           ;;
         *) ;;
       esac
-      [[ -n "${p}" ]] || {
-        record_invalid 'empty stored path'
-        return 1
-      }
     done <<<"${paths}"
   elif [[ -n "${R_PATHS[${oid}]:-}" ]]; then
     record_invalid 'unexpected paths'
@@ -124,8 +124,16 @@ validate_snapshot() {
     oid="${REF_OID[${ref}]}"
     case "${ref}" in
       "${NS}"/jobs/* | "${NS}"/paths/*) role=lock ;;
-      "${NS}"/sem/*/meta) role=meta ;;
-      "${NS}"/sem/*/slots/*) role=slot ;;
+      "${NS}"/sem/*)
+        # Split at the first / after the name: a glob such as sem/*/meta
+        # would also match the slot ref of a job named meta.
+        rest="${ref#"${NS}"/sem/}"
+        case "${rest#*/}" in
+          meta) role=meta ;;
+          slots/*) role=slot ;;
+          *) continue ;;
+        esac
+        ;;
       *) continue ;;
     esac
     if [[ -z "${checked["${oid} ${role}"]+x}" ]]; then
