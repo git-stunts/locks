@@ -1,0 +1,8 @@
+{
+  "bash": "GNU bash, version 5.3.9(1)-release (aarch64-apple-darwin24.6.0)",
+  "binary_sha256": "fc686ce320cdebba1420f2bb6e7d56f2cd79c1e40ecdd7b31178a9d2cf27aae3",
+  "fixture_sha256": "c27436023ac521ef47ce3a5154b434b425ef088038cc04a2ef58d2b0cebb7941",
+  "git": "git version 2.54.0 (Apple Git-157)",
+  "python": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "shim_sha256": "99aebd2f43376bfe9d1020b0b598913e1a899296fdb1a201aceb16d677542262"
+}

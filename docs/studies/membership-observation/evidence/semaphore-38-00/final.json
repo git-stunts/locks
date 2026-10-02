@@ -1,0 +1,12 @@
+{
+  "objects": {
+    "c17481df65ade87fa801c7ab3eeba865037a5589": "schema: git-locks-slot/1\nsemaphore: gpu\njob: c6899\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nacquisition: 1000000-72305-0869712983\n",
+    "cdf44de3eba0e9ea943f0378c493f82ea467da90": "schema: git-locks-sem/1\nsemaphore: gpu\ncapacity: 1\ncreated: 1000000\n",
+    "dcd43b0cab59681f39b173e0c006f2b8d4ad09a9": "generation 1000000 72305 325615531\n"
+  },
+  "refs": {
+    "refs/locks/sem/gpu/gen": "dcd43b0cab59681f39b173e0c006f2b8d4ad09a9",
+    "refs/locks/sem/gpu/meta": "cdf44de3eba0e9ea943f0378c493f82ea467da90",
+    "refs/locks/sem/gpu/slots/c6899": "c17481df65ade87fa801c7ab3eeba865037a5589"
+  }
+}

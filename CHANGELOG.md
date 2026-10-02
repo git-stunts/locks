@@ -4,11 +4,28 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
-### Documentation
+### Added
 
-- Lead with cooperative path reservations, explain TTL and launcher admission before the first example, and refresh introductory and wrapper transcripts with acquisition IDs. Clarify linked-worktree logical ownership, release conditions, and Git concurrent-reader visibility (#37).
-- Stop overstating child admission: the parent's liveness and holder are checked at planning time, and the transaction compares the parent's record rather than sending a `verify` line. Mark the claim stanza as simplified (it omits the ancestor-prefix verify and the directory token), note that directory token refs outlive a release, and list `--note` and `--parent` on `with` (#37).
-- State that `with --wait` also waits for a semaphore slot when `--sem` is given, and list `--sem` and the optional paths in the `with` command-table row (#37).
+- A runnable cooperating-worker example (#40) acquires a path set in the mutation launcher, shows holder/note contention, allows unrelated work, and demonstrates renewal, superseded cleanup, failure cleanup and non-renewing TTL expiry. JSON receipts and behavior tests cover the golden path, agreement with the retained recorded run, an existing-output edge, a stopped run leaving no worker processes, and two concurrent isolated runs. The runbook distinguishes these controlled flows from unresolved #45 coherence work and defines external adoption validation as an unrun experiment.
+
+### Changed
+
+- **Breaking:** re-claiming a parent's acquisition while any of its descendants remain stored, expired ones included, now exits 1 with a `parent` refusal whose detail is `descendants`. Before, a same-holder re-claim replaced the parent and left its children pointing at a superseded acquisition. Scripts that renew a parent by claiming it again must switch to `extend`, or release or sweep the descendants first (#34).
+- The README leads with cooperative path reservations, explains TTL and launcher admission before the first example, and refreshes introductory and wrapper transcripts with acquisition IDs. It clarifies linked-worktree logical ownership, release conditions, and Git concurrent-reader visibility (#37).
+
+### Fixed
+
+- The README no longer overstates child admission: the parent's liveness and holder are checked at planning time, and the transaction compares the parent's record rather than sending a `verify` line. The claim stanza is marked as simplified (it omits the ancestor-prefix verify and the directory token), directory token refs are noted to outlive a release, and `with` lists `--note` and `--parent` (#37).
+- The README states that `with --wait` also waits for a semaphore slot when `--sem` is given, and the `with` command-table row lists `--sem` and the optional paths (#37).
+- The README's `with` synopses now list every option the command accepts, including `--note` and `--ttl`, which the example uses.
+- A controlled membership-observation study (#38) enumerates mixed before/after refs for families, semaphore slots and prefix descendants. Real Git transactions leave independent invariant violations in 21 of 84 synthetic cases. The fixture retains exact observations and transaction receipts, calibrates its independent oracle, and returns exit 1 when it exposes a safety failure; any harness fault, anticipated or not, exits 2. The ordinary test suite runs the oracle calibration and verifies the committed receipt hashes. No live Git race is claimed and no production fix is included; #45 tracks the unresolved correctness work.
+- Parent acquisition replacement (#34) now refuses while any descendants remain stored, including expired descendants. This applies to the same holder, changed holders, reparenting and batches. Renew parents with `extend`, or release/sweep descendants before replacing them. Leaf replacement followed by new child admission remains supported. Admission rejects self-parenting and indirect cycles, verifies observed ancestor records in its transaction, and reports schema-valid `parent` refusals with `cycle` or `descendants` detail. The `claim` help text and the README command table state both rules. Regression tests cover unchanged refs and the reported `detail` on refusal, renewal/recreation, both child-admission race directions with their final records, and 192 seeded operations whose outcomes and refusal reasons are checked against an independent family model.
+- Semaphore capacity is validated as a bounded positive decimal and normalized before storage, arithmetic, and JSON serialization. Leading-zero values such as `01`, `08`, and `010` keep their decimal meaning, including when reading metadata written by older versions. Invalid stored capacities fail with `store-read` (#35).
+- `doctor` reads a stored semaphore capacity with the same decimal rule. Before, a legacy `08` printed a bash arithmetic error, `010` was compared as octal eight (so nine live slots were a false `sem-capacity` finding), and a capacity past 2^64 wrapped around to a small number instead of being a `sem-record` finding.
+- Validate authoritative lock and semaphore records before normal reads or planning (#33). Corrupt records now produce a structured `store-read` error with exit 2 before any success output or mutation. Doctor shares the decoder and safely reports malformed numeric fields; generation tokens remain opaque. Stored decimal fields normalize leading zeros and reject values outside the nonnegative signed 64-bit range. Child admission refuses a parent whose family generation cannot advance without overflow.
+- `sem list` no longer reads the slot of a job named `meta` as a second semaphore. It matched any ref ending in `/meta`, so `refs/locks/sem/gpu/slots/meta` printed a `gpu/slots` line with an empty capacity, which is not valid JSON. Snapshot validation splits semaphore refs the same way, so such a slot is validated as a slot rather than as metadata.
+- Path normalisation preserves literal `*`, `?` and bracket characters instead of expanding them against files in the working tree.
+- Unicode integration tests select an installed UTF-8 locale (probing for one where there is no `locale` command, as on musl), keep JSON stdout separate from shell diagnostics, and report an explicit skip when no UTF-8 locale is available; `GIT_LOCKS_TEST_REQUIRE_UTF8=1`, set in CI, turns that skip into a failure.
 
 ## [0.7.0] - 2026-09-16
 
