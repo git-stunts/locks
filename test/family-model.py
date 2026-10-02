@@ -1,8 +1,9 @@
 """Seeded CLI histories with an independent public-state oracle.
 
 The model stores only holder, parent and acquisition identity. Ref bytes must
-remain identical after refusal; successful commands must match the model's
-whole job set. Removing replacement/cycle checks breaks the fixed seeds.
+remain identical after refusal, refusals must name the model's reason, and
+successful commands must match the model's whole job set. Removing either the
+descendants check or the cycle check breaks the fixed seeds.
 """
 
 import json
@@ -40,22 +41,35 @@ for seed in (34, 1701, 20260922):
             op = rng.randrange(8)
             before = refs()
             if op < 6:
-                # A child is never transferable to a replacement acquisition.
-                allowed = not any(p == job for _, p in jobs.values())
-                if parent:
-                    allowed &= parent in jobs and jobs.get(parent, (None,))[0] == holder
+                # Refusal reasons in the order the public contract reports them:
+                # a cycle, then descendants (a child is never transferable to a
+                # replacement acquisition), then the proposed parent itself.
+                reason = None
                 ancestor, seen = parent, {job}
                 while ancestor:
                     if ancestor in seen:
-                        allowed = False
+                        reason = "cycle"
                         break
                     seen.add(ancestor)
                     ancestor = jobs.get(ancestor, ("", ""))[1]
+                if reason is None and any(p == job for _, p in jobs.values()):
+                    reason = "descendants"
+                if reason is None and parent and parent not in jobs:
+                    reason = "missing"
+                if reason is None and parent and jobs[parent][0] != holder:
+                    reason = "holder"
+                allowed = reason is None
                 args = ["claim", "--job", job, "--holder", holder]
                 if parent:
                     args += ["--parent", parent]
                 result = call(*args, f"{job}.md")
                 expected = 0 if allowed else 1
+                if not allowed:
+                    # The exit status alone cannot tell a cycle from descendants or a planning conflict.
+                    refusal = json.loads(result.stderr) if result.returncode == 1 else {}
+                    assert refusal.get("reason") == "parent" and refusal.get("detail") == reason, (
+                        seed, step, job, parent, holder, reason, result.stderr
+                    )
                 if allowed:
                     jobs[job] = (holder, parent)
                     claimed = json.loads(result.stdout)
@@ -85,4 +99,4 @@ for seed in (34, 1701, 20260922):
             assert actual == jobs, (seed, step, "family differs from model", actual, jobs)
             assert {r["job"]: r["acquisition"] for r in records} == acquisitions, (seed, step, "acquisition changed")
             assert all(r["state"] == "live" and r["paths"] == [f'{r["job"]}.md'] for r in records), (seed, step, "path or liveness")
-    print(f"seed {seed}: 64 operations matched public state, acquisition identity and refusal ref immutability")
+    print(f"seed {seed}: 64 operations matched public state, acquisition identity, refusal reasons and refusal ref immutability")

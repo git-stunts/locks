@@ -31,6 +31,8 @@ check "invalid parent input preserves every ref" "${got}" "${before}"
 for parent in P C G; do
   out="$(git-locks claim --job P --holder alice --parent "${parent}" p.md 2>&1)"
   check "replacement under ${parent} refuses a family cycle" "$?" 1
+  # P has descendants too, so the exit status alone cannot tell a cycle refusal from a descendants one.
+  jfields "replacement under ${parent} names the cycle" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' "parent=\"${parent}\"" 'detail="cycle"'
   got="$(family_refs)"
   check "refused cycle under ${parent} preserves every ref" "${got}" "${before}"
 done
@@ -62,6 +64,7 @@ family_fresh=0
 check "recreated parent starts a fresh acquisition" "${family_fresh}" 1
 out="$(git-locks claim --job P --holder bob --parent P p.md 2>&1)"
 check "leaf replacement cannot parent itself" "$?" 1
+jfields "self-parent refusal names the cycle" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' 'parent="P"' 'detail="cycle"'
 valid "self-parent refusal" "${out}"
 family_ok recreation
 
@@ -70,6 +73,7 @@ git-locks claim --job C --holder bob --parent P --ttl 1 c.md >/dev/null
 before="$(family_refs)"
 out="$(GIT_LOCKS_NOW=1000002 git-locks claim --job P --holder bob p.md 2>&1)"
 check "expired stored descendants still prevent parent replacement" "$?" 1
+jfields "expired-descendant refusal names descendants" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' 'parent="P"' 'detail="descendants"'
 got="$(family_refs)"
 check "expired-descendant refusal preserves every ref" "${got}" "${before}"
 GIT_LOCKS_NOW=1000002 git-locks sweep >/dev/null
@@ -87,6 +91,7 @@ family_ok batch
 before="$(family_refs)"
 out="$(printf 'job: P\nholder: bob\npaths:\np.md\n\njob: C\nholder: bob\nparent: P\npaths:\nc.md\n' | git-locks batch 2>&1)"
 check "batch cannot replace a parent with stored descendants" "$?" 1
+jfields "refused batch replacement names descendants" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' 'parent="P"' 'detail="descendants"'
 got="$(family_refs)"
 check "refused batch replacement preserves every ref" "${got}" "${before}"
 
@@ -95,15 +100,17 @@ git-locks claim --job P --holder alice p.md >/dev/null
 before="$(family_refs)"
 out="$(printf 'job: C\nholder: alice\nparent: P\npaths:\nc.md\n\njob: P\nholder: alice\npaths:\np.md\n' | git-locks batch 2>&1)"
 check "batch cannot replace a parent after planning its child" "$?" 1
+jfields "refused earlier-child batch names descendants" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' 'parent="P"' 'detail="descendants"'
 got="$(family_refs)"
 check "refused earlier-child batch preserves every ref" "${got}" "${before}"
 out="$(printf 'job: C\nholder: alice\nparent: P\npaths:\nc.md\n\njob: P\nholder: alice\nparent: C\npaths:\np.md\n' | git-locks batch 2>&1)"
 check "batch cannot cycle through an earlier planned child" "$?" 1
+jfields "refused batch cycle names the cycle" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' 'parent="C"' 'detail="cycle"'
 got="$(family_refs)"
 check "refused batch cycle preserves every ref" "${got}" "${before}"
 
 # Both admitted changes use real Git transactions. Pauses only choose the
-# schedule, and assertions inspect statuses, identities and final refs.
+# schedule, and assertions inspect statuses, refusal details and final records.
 FAMILY_OUT="$(mktemp "${TMPDIR:-/tmp}/git-locks-family-out.XXXXXX")"
 for first in replacement child; do
   R="$(mkrepo)"
@@ -126,6 +133,22 @@ for first in replacement child; do
   : >"${GATE}"
   wait "${family_pid}"
   check "paused ${first} re-plans and refuses after its competing commit" "$?" 1
+  out="$(cat "${FAMILY_OUT}")"
+  if [[ "${first}" == replacement ]]; then
+    # Re-planned against the admitted child, not a transaction refusal after exhausted retries.
+    jfields "paused replacement refuses for the admitted child" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' 'parent="P"' 'detail="descendants"'
+    out="$(git-locks show --job P)"
+    jfields "the parent keeps the acquisition the child joined" "${out}" 'holder="alice"'
+    out="$(git-locks show --job C)"
+    jfields "the admitted child stays under the parent" "${out}" 'holder="alice"' 'parent="P"'
+  else
+    # Re-planned against bob's replacement, which no longer shares alice's holder.
+    jfields "paused child admission refuses under the replaced parent" "${out}" 'event="refused"' 'reason="parent"' 'job="C"' 'parent="P"' 'detail="holder"'
+    out="$(git-locks show --job P)"
+    jfields "the replacement acquisition holds the parent" "${out}" 'holder="bob"'
+    out="$(git-locks show --job C 2>&1)"
+    check "the refused child was never admitted" "$?" 1
+  fi
   family_ok "${first} race"
 done
 
