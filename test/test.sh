@@ -1247,6 +1247,33 @@ findings n "${out}" sem-gen
 check "a semaphore without its gen ref is one sem-gen finding" "${n}" "1"
 valid "semaphore finding lines" "${out}"
 
+# Doctor reads a stored capacity with the same decimal rule as sem_read: leading zeros are decimal, out of range is a sem-record finding.
+git-locks sem create legacy --capacity 1 >/dev/null 2>&1
+legacy_meta="$(gs rev-parse refs/locks/sem/legacy/meta)"
+for capacity_case in '08:0' '010:0' '9223372036854775808:1' '18446744073709551617:1'; do
+  capacity_stored="${capacity_case%:*}"
+  capacity_findings="${capacity_case#*:}"
+  rewritten="$(gs cat-file -p "${legacy_meta}" | sed "s/^capacity: 1\$/capacity: ${capacity_stored}/" | blob)"
+  gs update-ref refs/locks/sem/legacy/meta "${rewritten}"
+  out="$(git-locks doctor 2>&1)"
+  findings n "${out}" sem-record
+  check "doctor on stored capacity ${capacity_stored} has ${capacity_findings} sem-record findings" "${n}" "${capacity_findings}"
+  valid "doctor lines on stored capacity ${capacity_stored}" "${out}"
+done
+gs update-ref refs/locks/sem/legacy/meta "${legacy_meta}"
+for i in $(seq 1 9); do
+  slot="$(printf 'schema: git-locks-slot/1\nsemaphore: legacy\njob: l%s\nholder: bob\nclaimed: 1000000\nexpires: 2000000\nacquisition: t-l%s' "${i}" "${i}" | blob)"
+  gs update-ref "refs/locks/sem/legacy/slots/l${i}" "${slot}"
+done
+rewritten="$(gs cat-file -p "${legacy_meta}" | sed 's/^capacity: 1$/capacity: 010/' | blob)"
+gs update-ref refs/locks/sem/legacy/meta "${rewritten}"
+out="$(git-locks doctor 2>&1)"
+findings n "${out}" sem-capacity
+check "nine live slots under stored capacity 010 (ten, not octal eight) are not a sem-capacity finding" "${n}" "0"
+for i in $(seq 1 9); do gs update-ref -d "refs/locks/sem/legacy/slots/l${i}"; done
+gs update-ref refs/locks/sem/legacy/meta "${legacy_meta}"
+git-locks sem delete legacy >/dev/null 2>&1
+
 # An unreadable store is an error, never healthy.
 err="$(PATH="${BROKEN}:${PATH}" git-locks doctor 2>&1 >/dev/null)"
 rc="$?"

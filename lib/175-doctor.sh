@@ -255,7 +255,7 @@ cmd_doctor() {
         cap=''
       else
         field_v cap "${SEM_META[${name}]}" capacity
-        if ! is_int "${cap}" || ((cap < 1)); then
+        if ! valid_capacity cap "${cap}"; then # the reading sem_read applies: leading zeros are decimal, never octal
           finding sem-record "${name}" "meta record ${SEM_META[${name}]} has capacity '${cap}'"
           cap=''
         fi
