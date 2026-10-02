@@ -115,7 +115,8 @@ FAMILY_OUT="$(mktemp "${TMPDIR:-/tmp}/git-locks-family-out.XXXXXX")"
 for first in replacement child; do
   R="$(mkrepo)"
   cd "${R}" || exit 2
-  git-locks claim --job P --holder alice p.md >/dev/null
+  out="$(git-locks claim --job P --holder alice p.md)"
+  jstr family_acq "${out}" acquisition
   GATE="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-family-gate.XXXXXX")/go"
   if [[ "${first}" == replacement ]]; then
     GIT_LOCKS_PAUSE_BEFORE_COMMIT="${GATE}" git-locks claim --job P --holder bob p.md >"${FAMILY_OUT}" 2>&1 &
@@ -138,7 +139,7 @@ for first in replacement child; do
     # Re-planned against the admitted child, not a transaction refusal after exhausted retries.
     jfields "paused replacement refuses for the admitted child" "${out}" 'event="refused"' 'reason="parent"' 'job="P"' 'parent="P"' 'detail="descendants"'
     out="$(git-locks show --job P)"
-    jfields "the parent keeps the acquisition the child joined" "${out}" 'holder="alice"'
+    jfields "the parent keeps the acquisition the child joined" "${out}" 'holder="alice"' "acquisition=\"${family_acq}\""
     out="$(git-locks show --job C)"
     jfields "the admitted child stays under the parent" "${out}" 'holder="alice"' 'parent="P"'
   else
