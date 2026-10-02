@@ -38,4 +38,4 @@ Filesystem caches are not cleared. Setup and ref verification warm filesystem me
 
 The fixture equivalence check covers reachable record semantics at small scale. Synthetic setup does not measure the cost of thousands of actual CLI claim/release invocations, historical transaction interleavings, or token reclamation. The benchmark adds no timing threshold and proposes no retention-policy change.
 
-The completed native macOS study and retained observations are in the [2026-09-22 results](directory-tokens-results.md).
+The first native macOS run and its retained observations are in the [2026-09-22 results](directory-tokens-results.md). That run was resource-confounded by host memory and disk exhaustion, so its latencies are not a representative baseline.

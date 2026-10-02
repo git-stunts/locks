@@ -6,7 +6,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Added
 
-- A calibrated historical directory-token benchmark (#39), comparing released prefix churn, repeated reuse, and live-lock controls. Small real-CLI calibration runs in the suite; large timing runs are informational. The retained macOS study contains 135 observations and reports multi-second reads of a released wide-10k store, with host-drift and synthetic-fixture limits.
+- A calibrated historical directory-token benchmark (#39), comparing released prefix churn, repeated reuse, and live-lock controls. Small real-CLI calibration runs in the suite; large timing runs are informational. The retained macOS run contains 135 observations, including multi-second reads of a released wide-10k store, but it coincided with host memory and disk exhaustion and is kept as a record, not a baseline. The runner ignores inherited `GIT_LOCKS_TRACE`, `GIT_LOCKS_PAUSE_*`, and `GIT_LOCKS_HOME` so test hooks cannot reach timed commands.
 
 ## [0.7.0] - 2026-09-16
 
