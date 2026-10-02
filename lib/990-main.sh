@@ -36,6 +36,7 @@ main() {
       exit 0
     fi
   done
+  [[ "${cmd}" == doctor ]] && DIAGNOSTIC_READ=1
   resolve_store
   case "${cmd}" in store) ;; *) ensure_snapshot ;; esac # once, in this shell: subshells inherit it instead of re-reading
   "cmd_${cmd}" "$@"

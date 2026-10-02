@@ -365,9 +365,11 @@
               "enum": [
                 "missing",
                 "expired",
-                "holder"
+                "holder",
+                "cycle",
+                "descendants"
               ],
-              "description": "Why the parent cannot be used: no such lock, it has expired, or it belongs to another holder."
+              "description": "Why admission is refused: the proposed parent is missing, expired, held by someone else, or creates a cycle; descendants means this job already has children and its acquisition cannot be replaced."
             }
           },
           "additionalProperties": false
