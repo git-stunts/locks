@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Independent small-store calibration before the informational large benchmark.
 set -euo pipefail
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_LOCKS_TRACE GIT_LOCKS_PAUSE_AFTER_READ GIT_LOCKS_PAUSE_BEFORE_COMMIT GIT_LOCKS_HOME
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/locks-churn-calibration.XXXXXX")"
 trap 'rm -rf "${TMP}"' EXIT
@@ -125,9 +125,13 @@ if bash "${BENCH}" verify "${TMP}/missing.git" 0 0 >"${TMP}/out" 2>"${TMP}/err";
   exit 1
 fi
 printf 'ok missing store fails the fixture gate\n'
-if bash "${BENCH}" run "${TMP}/quick-results" quick >"${TMP}/out" 2>"${TMP}/err"; then
+# A caller's git-locks test hooks must not reach timed commands: a trace adds I/O, a pause gate would hang.
+# TMPDIR keeps a failed run's retained scratch store under this test's cleanup.
+if GIT_LOCKS_TRACE="${TMP}/inherited-trace" TMPDIR="${TMP}" bash "${BENCH}" run "${TMP}/quick-results" quick >"${TMP}/out" 2>"${TMP}/err"; then
   rows="$(wc -l <"${TMP}/quick-results/observations.csv" | tr -d ' ')"
   assert 'quick matrix retains all 25 raw observations' "${rows}" 26
+  [[ -e "${TMP}/inherited-trace" ]] && got=traced || got=clean
+  assert 'quick matrix ignores an inherited GIT_LOCKS_TRACE' "${got}" clean
 else
   printf 'FAIL quick matrix must run calibrated command paths\n' >&2
   cat "${TMP}/err" >&2

@@ -4,6 +4,8 @@
 set -euo pipefail
 export LC_ALL=C
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
+# git-locks test hooks: an inherited trace adds I/O to timed commands, a pause gate hangs them.
+unset GIT_LOCKS_TRACE GIT_LOCKS_PAUSE_AFTER_READ GIT_LOCKS_PAUSE_BEFORE_COMMIT GIT_LOCKS_HOME
 BENCH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 fail() {
