@@ -60,12 +60,29 @@ finish() {
   return 0
 }
 
+installed_locales() { # print `locale -a`; without it (musl ships none), the common UTF-8 names this bash accepts
+  local listed candidate length
+  # shellcheck disable=SC2016 # the probe's ${#s} expands in the child bash, not here
+  local probe='s=é; printf %s "${#s}"'
+  if listed="$(locale -a 2>/dev/null)" && [[ -n "${listed}" ]]; then
+    printf '%s\n' "${listed}"
+    return 0
+  fi
+  for candidate in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
+    # One character, not two bytes, and no setlocale warning: the locale exists and is UTF-8.
+    length="$(LC_ALL="${candidate}" LANG="${candidate}" "${BASH}" -c "${probe}" 2>&1)" || continue
+    if [[ "${length}" == 1 ]]; then
+      printf '%s\n' "${candidate}"
+    fi
+  done
+}
+
 select_utf8_locale() { # VAR [locale-a output]: prefer C, then en_US, then any installed UTF-8 locale
   local output_name="$1" available line normalized en_us='' fallback=''
   if (($# > 1)); then
     available="$2"
   else
-    available="$(locale -a 2>/dev/null)" || return 1
+    available="$(installed_locales)"
   fi
   while IFS= read -r line; do
     [[ -n "${line}" ]] || continue
@@ -123,6 +140,13 @@ else
   select_utf8_locale UTF8_LOCALE && locale_available=1
 fi
 if ((locale_available == 0)); then
+  if [[ "${GIT_LOCKS_TEST_REQUIRE_UTF8:-0}" == 1 ]]; then
+    FAIL=$((FAIL + 1))
+    FAILED+=("Unicode integration requires a UTF-8 locale")
+    printf '  FAIL Unicode integration requires a UTF-8 locale: GIT_LOCKS_TEST_REQUIRE_UTF8=1 and none is installed\n'
+    finish
+    exit $?
+  fi
   SKIP=$((SKIP + 1))
   printf '  SKIP Unicode claim/list/check integration: install a UTF-8 locale to run it\n'
   finish
