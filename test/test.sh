@@ -1571,6 +1571,30 @@ check "sibling prefixes in one batch are not an overlap" "$?" "0"
 lines n "${out}"
 check "and both records claimed" "${n}" "2"
 
+# ---------------------------------------------------------------- #38: the membership observation study's own harness
+# The full study exits 1 while it exposes a production failure (#45), so it is not run here. These cases check
+# that the harness can still tell its verdicts apart: 0 PASS, 1 FAIL, 2 the experiment itself broke.
+
+STUDY="${HERE}/observation/study.py"
+OBS="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-observation.XXXXXX")"
+out="$(python3 "${STUDY}" --calibrate-only --output "${OBS}/calibration" 2>&1)"
+check "the study's oracle and discarded-read controls calibrate" "$?" "0"
+contains "and calibration says it did not evaluate production safety" "${out}" '"production_safety": "NOT_EVALUATED"'
+# A fault the harness did not anticipate must not exit 1, the code that reports a production safety failure.
+out="$(python3 -c '
+import random, runpy, sys
+def fault(*_):
+    raise IndexError("injected harness fault")
+random.Random = fault
+study, output = sys.argv[1:3]
+sys.argv = [study, "--calibrate-only", "--output", output]
+runpy.run_path(study, run_name="__main__")
+' "${STUDY}" "${OBS}/fault" 2>&1)"
+check "an unanticipated fault inside the study exits 2, not the FAIL verdict's 1" "$?" "2"
+contains "and names itself a study error" "${out}" "STUDY ERROR"
+out="$(python3 "${HERE}/observation/verify-evidence.py" 2>&1)"
+check "every committed observation receipt matches its manifest hash" "$?" "0"
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"

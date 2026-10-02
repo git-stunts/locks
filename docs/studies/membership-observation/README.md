@@ -34,7 +34,7 @@ All 21 violating cases returned exit 0 and completed a real transaction. The oth
 
 ### Family
 
-The mixed observation includes the new parent job record and parent path record, but omits the child job. The reader can also include the child's path ref; family membership is discovered through job refs.
+Every violating family observation includes the new parent job record and omits the child job. Either path ref, the parent's or the child's, may come from either state; that is why 4 of the 16 masks per seed violate. Family membership is discovered through job refs, so path refs do not change the plan.
 
 `release --job p6899` plans only the parent deletions. The transaction expects the current parent record, so its compare-and-swap succeeds. Child job `c6899` and its path ref remain after parent `p6899` is deleted. The independent oracle reports `family-parent` because the child's named parent no longer exists.
 
@@ -68,7 +68,7 @@ The small ref-mix spaces are exhausted for these transitions. This is stronger t
 
 ## Reproduction and exit status
 
-Python is used only by this test fixture, alongside the repository's existing Python test dependency. The installed `bin/git-locks` and every `lib/` module are unchanged.
+Python is used only by this test fixture, alongside the repository's existing Python test dependency. The committed `bin/git-locks` and every `lib/` module are unchanged.
 
 Run the full study with a fresh retained output directory:
 
@@ -76,7 +76,7 @@ Run the full study with a fresh retained output directory:
 make study-observation OBSERVATION_OUT=/tmp/locks-observation-review-run
 ```
 
-The current result is **exit 1**, `production_safety: FAIL`, with 21 violating cases. This is an exposed production safety failure under the injected observations, not an expected-failure assertion converted to a passing test. Exit 0 means the studied invariants held within the tested synthetic cases. Exit 2 means the experiment could not execute reliably. Existing evidence is never overwritten.
+The current result is **exit 1**, `production_safety: FAIL`, with 21 violating cases. This is an exposed production safety failure under the injected observations, not an expected-failure assertion converted to a passing test. Exit 0 means the studied invariants held within the tested synthetic cases. Exit 2 means the experiment could not execute reliably: a calibration or instrumentation check failed, or the harness raised any unanticipated error, so a broken fixture can never be read as the FAIL verdict. Existing evidence is never overwritten; reusing an output directory exits 2.
 
 Run only the six oracle cases and two discarded-read controls:
 
@@ -84,9 +84,9 @@ Run only the six oracle cases and two discarded-read controls:
 make test-observation-calibration OBSERVATION_OUT=/tmp/locks-observation-review-run
 ```
 
-Calibration exits 0 when the fixture is working and explicitly reports `production_safety: NOT_EVALUATED`. `make test` also runs this calibration after the ordinary suite. A green ordinary suite or calibration does not mean the observation study is green.
+Calibration exits 0 when the fixture is working and explicitly reports `production_safety: NOT_EVALUATED`. The ordinary suite (`make test`, CI and `make test-docker`) runs this calibration, checks that an unanticipated harness fault exits 2, and runs the evidence verifier below. A green ordinary suite or calibration does not mean the observation study is green.
 
-Every full run retains before/committed-after/final raw refs and objects, the injected refs, command stdout/stderr, read order, transaction stdin, and a result ledger. The committed evidence includes the complete 84-case ledger and representative violating/coherent cases, with [runtime and executable hashes](evidence/provenance.json). Dynamic object IDs and acquisition IDs vary between executions; the invariant failures and ref-selection categories are the comparison points.
+Every full run retains before/committed-after/final raw refs and objects, the injected refs, command stdout/stderr, read order, transaction stdin, and a result ledger. The committed evidence includes the complete 84-case ledger and representative violating/coherent cases, with [runtime and executable hashes](evidence/provenance.json). Its `fixture_sha256` identifies the `study.py` that produced the evidence, introduced in commit `211096d`; later edits that only change how harness errors are reported leave the retained receipts valid but change the current file's hash. Dynamic object IDs and acquisition IDs vary between executions; the invariant failures and ref-selection categories are the comparison points.
 
 To verify that the retained evidence is actually committed, run:
 
@@ -94,7 +94,7 @@ To verify that the retained evidence is actually committed, run:
 python3 test/observation/verify-evidence.py
 ```
 
-This checks every manifest path against `git ls-files` and hashes its `HEAD` blob with `git show`. It does not accept an ignored or untracked working-tree file as evidence. Raw read-order receipts use `.txt` because the repository ignores `.log` files.
+This checks every manifest path against `git ls-files` and hashes its `HEAD` blob with `git show`. It does not accept an ignored or untracked working-tree file as evidence. The ordinary suite runs it, so CI fails if a manifest entry is missing or its committed blob changes. Raw read-order receipts use `.txt` because the repository ignores `.log` files.
 
 ## Follow-up boundary
 

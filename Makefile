@@ -14,7 +14,6 @@ lint:
 
 test:
 	bash test/test.sh
-	python3 test/observation/study.py --calibrate-only --output "$$(mktemp -d)/observation-calibration"
 
 # The study deliberately returns 1 if it exposes a production invariant hole.
 # Choose a fresh output directory; retained receipts are never overwritten.
@@ -27,7 +26,7 @@ test-observation-calibration:
 	python3 test/observation/study.py --calibrate-only --output "$(OBSERVATION_OUT)-calibration"
 
 test-docker: # the same suite inside the official bash image, for a wall between the tests and your machine
-	docker run --rm -v "$(CURDIR)":/src -w /src bash:5.2 bash -c 'apk add --no-cache git python3 py3-jsonschema >/dev/null && git config --global user.email t@example.invalid && git config --global user.name t && bash test/test.sh'
+	docker run --rm -v "$(CURDIR)":/src -w /src bash:5.2 bash -c 'apk add --no-cache git python3 py3-jsonschema >/dev/null && git config --global user.email t@example.invalid && git config --global user.name t && git config --global --add safe.directory /src && bash test/test.sh'
 
 install:
 	mkdir -p $(PREFIX)/bin

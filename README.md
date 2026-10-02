@@ -435,7 +435,8 @@ git locks list          # git dispatches `git locks` to git-locks on PATH
 ```sh
 make build              # assemble bin/git-locks from lib/*.sh and schema/git-locks.schema.json
 make lint               # shellcheck with every optional check on, shfmt
-make test               # test/test.sh, pure bash, temporary repositories; needs python3 with jsonschema for the schema checks
+make test               # test/test.sh, pure bash, temporary repositories; needs python3 with jsonschema for the schema checks and the observation study's calibration
+make study-observation OBSERVATION_OUT=/tmp/fresh-dir   # the membership observation study; exits 1 while it exposes #45
 git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push tests
 ```
 

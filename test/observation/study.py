@@ -2,8 +2,9 @@
 """Synthetic observation-phase safety study; no live Git race is claimed.
 
 The default command exits 1 when production leaves an invariant violation.
-Experiment calibration failures exit 2. Output retains the actual failure,
-not an expected-failure test result.
+Calibration, instrumentation and any other harness failure exit 2, so a broken
+experiment is never mistaken for the FAIL verdict. Output retains the actual
+failure, not an expected-failure test result.
 """
 
 import argparse
@@ -17,6 +18,7 @@ import random
 import shutil
 import subprocess
 import sys
+import traceback
 
 NOW = 1000000
 ROOT = Path(__file__).resolve().parents[2]
@@ -244,6 +246,7 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (AssertionError, RuntimeError, subprocess.TimeoutExpired, OSError, ValueError, KeyError) as exc:
-        print(f"STUDY ERROR: {exc}", file=sys.stderr)
+    except Exception as exc:  # any harness fault is exit 2; exit 1 is reserved for the FAIL verdict
+        traceback.print_exc()
+        print(f"STUDY ERROR: {exc!r}", file=sys.stderr)
         sys.exit(2)
