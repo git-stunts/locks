@@ -5,17 +5,8 @@
 # acquirers who both counted "n of N live" contend on one compare-and-swap and
 # exactly one commits. The other re-reads.
 
-valid_capacity() { # VAR value: canonical positive decimal in Bash's signed 64-bit arithmetic range
-  [[ "$2" =~ ^[0-9]+$ ]] || return 1
-  local _capacity="${2#"${2%%[!0]*}"}" # strip leading zeros without evaluating input as arithmetic
-  [[ -n "${_capacity}" ]] || return 1
-  ((${#_capacity} <= 19)) || return 1
-  # Compare equal-length decimal strings: arithmetic would overflow before rejecting the input.
-  # shellcheck disable=SC2071
-  if ((${#_capacity} == 19)) && [[ "${_capacity}" > 9223372036854775807 ]]; then
-    return 1
-  fi
-  printf -v "$1" '%s' "${_capacity}"
+valid_capacity() { # VAR value: record_uint (leading zeros are decimal, never octal; signed 64-bit range), and positive
+  record_uint "$1" "$2" && [[ "${!1}" != 0 ]]
 }
 
 sem_meta_ref() { printf '%s/sem/%s/meta' "${NS}" "$1"; }
@@ -236,8 +227,8 @@ cmd_sem() {
       local rows ref oid
       rows="$(refs_under "${NS}/sem/")"
       while IFS=' ' read -r ref oid; do
-        [[ "${ref}" == */meta ]] || continue
         name="${ref#"${NS}"/sem/}"
+        [[ "${name#*/}" == meta ]] || continue # not */meta: that also matches the slot of a job named meta
         name="${name%/meta}"
         sem_read "${name}" || continue
         sem_show_line "${name}"
