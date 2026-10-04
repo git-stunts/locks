@@ -1080,6 +1080,46 @@
         },
         "healthy": {
           "type": "boolean"
+        },
+        "hooks": {
+          "type": "object",
+          "description": "Git hooks are disabled for lock-store operations. Configuration is reported without executing hooks; it does not affect the reservation-data health verdict. Executables lists the two hooks relevant to index and ref operations at the configured directory.",
+          "required": [
+            "disabled",
+            "configured_path",
+            "directory",
+            "executables",
+            "fsmonitor_disabled"
+          ],
+          "properties": {
+            "disabled": {
+              "const": true
+            },
+            "configured_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "directory": {
+              "type": "string",
+              "minLength": 1
+            },
+            "executables": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "reference-transaction",
+                  "post-index-change"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "fsmonitor_disabled": {
+              "const": true
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
