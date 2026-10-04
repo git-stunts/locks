@@ -24,3 +24,5 @@ Icon?
 .shellcheckrc.local
 coverage/
 .kcov/
+.test-results/
+__pycache__/

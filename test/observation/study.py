@@ -7,6 +7,10 @@ experiment is never mistaken for the FAIL verdict. Output retains the actual
 failure, not an expected-failure test result.
 """
 
+from pathlib import Path as _GuardPath
+import subprocess as _guard_subprocess
+_guard_subprocess.run(["node", str(_GuardPath(__file__).resolve().parents[2] / "scripts/require-docker.mjs")], check=True)
+
 import argparse
 import copy
 import itertools
@@ -18,6 +22,7 @@ import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import traceback
 
 NOW = 1000000
@@ -209,10 +214,17 @@ def main():
     parser.add_argument("--domains", nargs="+", choices=["family", "semaphore", "prefix"], default=["family", "semaphore", "prefix"])
     parser.add_argument("--calibrate-only", action="store_true", help="check the oracle and discarded-read controls, not production safety")
     args = parser.parse_args()
+    # Evidence may live on a noexec filesystem. Keep executable instrumentation
+    # in bounded scratch storage and retain an identical copy with the results.
+    with tempfile.TemporaryDirectory(prefix="locks-observation-shim-") as temporary:
+        return study(args, Path(temporary))
+
+
+def study(args, shim):
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    shim = output / "shim"
-    shim.mkdir()
+    (output / "shim").mkdir()
+    shutil.copy(ROOT / "test/observation/git-shim.sh", output / "shim/git")
     shutil.copy(ROOT / "test/observation/git-shim.sh", shim / "git")
     (shim / "git").chmod(0o755)
     calibration = calibrate(output, str(Path(args.binary).resolve()), shim)

@@ -458,11 +458,13 @@ git locks list          # git dispatches `git locks` to git-locks on PATH
 
 ## Develop
 
+Tests and lint use the [isolated Docker runner](docs/testing.md); no host checkout or Git metadata is mounted into tests.
+
 ```sh
 make build              # assemble bin/git-locks from lib/*.sh and schema/git-locks.schema.json
 make lint               # shellcheck with every optional check on, shfmt
-make test               # pure bash, temporary repositories; needs python3 with jsonschema for the schema checks and the observation study's calibration
-make study-observation OBSERVATION_OUT=/tmp/fresh-dir   # the membership observation study; exits 1 while it exposes #45
+make test               # copied inputs in an offline Docker worker; host needs Docker, Python 3, and Git
+make study-observation OBSERVATION_OUT=/work/artifacts/fresh-study   # exits 1 while it exposes #45; exports evidence
 git config --local core.hooksPath scripts/hooks   # pre-commit lints, pre-push tests
 ```
 

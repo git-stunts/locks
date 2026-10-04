@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Verify the committed receipt manifest, without trusting untracked files."""
 
+from pathlib import Path as _GuardPath
+import subprocess as _guard_subprocess
+_guard_subprocess.run(["node", str(_GuardPath(__file__).resolve().parents[2] / "scripts/require-docker.mjs")], check=True)
+
 import hashlib
 import json
 from pathlib import Path

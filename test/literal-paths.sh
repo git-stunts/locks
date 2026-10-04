@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Focused regression coverage for literal glob characters in path identity.
 set -uo pipefail
 

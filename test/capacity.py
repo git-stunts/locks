@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Exercise decimal capacity through the CLI with an independent integer oracle."""
+from pathlib import Path as _GuardPath
+import subprocess as _guard_subprocess
+_guard_subprocess.run(["node", str(_GuardPath(__file__).resolve().parents[1] / "scripts/require-docker.mjs")], check=True)
+
 import concurrent.futures
 import json
 import os

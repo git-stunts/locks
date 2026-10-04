@@ -2,7 +2,7 @@
 
 - Tests are the spec. Write the failing case in `test/test.sh` first, show it red, then change the module under `lib/` and run `make build`; `bin/git-locks` is the build product and is committed beside the `lib/` change (the suite refuses a stale one).
 - `make lint` must pass with zero output: shellcheck with every optional check enabled, and shfmt with the repository's settings (`-i 2 -ci -bn`). Do not add a `# shellcheck disable` without a comment saying why.
-- Pure bash and git only. No jq, no Python, no external daemons. Anything that would need one belongs in a different project.
+- Production runtime: Bash and Git only. Test tooling uses Python, Node, and the vendored docker-guard inside Docker. Run `make test` or `python3 scripts/docker-run.py <focused command>`; all suites and benchmarks reject direct host execution. See [test isolation and evidence export](docs/testing.md). Never bind-mount a checkout or copy its `.git` into the worker.
 - Keep `README.md` and `CHANGELOG.md` current in the same commit as the change they describe.
 - Commits use conventional-commit subjects (`feat:`, `fix:`, `test:`, `docs:`, `chore:`). No history rewriting on `main`.
 - Configure the hooks once: `git config --local core.hooksPath scripts/hooks`. Pre-commit lints, pre-push runs the tests.

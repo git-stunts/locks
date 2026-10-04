@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Unicode integration coverage that adapts to the UTF-8 locales installed on
 # the current system. JSON stdout and shell diagnostics are checked separately.
 set -uo pipefail

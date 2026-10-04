@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Prove that skipping the live Unicode integration cannot hide a failure in the
 # deterministic locale-selection checks that run before it.
 set -uo pipefail
