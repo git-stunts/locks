@@ -96,7 +96,7 @@ sem_transact() { # name -> plans the generation CAS and the meta verify, then co
   local gref newgen mref
   gref="$(sem_gen_ref "$1")"
   mref="$(sem_meta_ref "$1")"
-  gen_blob newgen || fail 'could not write the generation token'
+  gen_blob newgen
   plan_set "${gref}" "${SEM_GEN_OID}" "${newgen}" || fail "${PLAN_CONFLICT}" 1
   plan_set "${mref}" "${SEM_META_OID}" '=' || fail "${PLAN_CONFLICT}" 1
   transact && return 0
@@ -151,7 +151,7 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
     return 1
   fi
   record="$(printf 'schema: %s\nsemaphore: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\nacquisition: %s' "${SLOT_SCHEMA}" "${name}" "${job}" "${holder}" "${at}" "${expires}" "${acq}")"
-  write_blob oid "${record}" || fail 'could not write the slot record'
+  write_blob oid "${record}"
   plan_reset
   sem_plan_evict_expired "${name}" "${job}" || fail "${PLAN_CONFLICT}" 1
   slot_ref="$(sem_slot_ref "${name}" "${job}")"
@@ -295,8 +295,8 @@ cmd_sem() {
         fi
         now_v at
         content="$(printf 'schema: %s\nsemaphore: %s\ncapacity: %s\ncreated: %s' "${SEM_SCHEMA}" "${name}" "${capacity}" "${at}")"
-        write_blob meta "${content}" || fail 'could not write the semaphore record'
-        gen_blob gen || fail 'could not write the generation token'
+        write_blob meta "${content}"
+        gen_blob gen
         mref="$(sem_meta_ref "${name}")"
         gref="$(sem_gen_ref "${name}")"
         plan_reset

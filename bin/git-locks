@@ -330,7 +330,8 @@ declare -A PATH_HASH=() # path -> git's hash of the path string, memoised per in
 path_ref() { # VAR path: set VAR to the path's ref; the hash is memoised in this shell (never call inside $(…))
   local h
   if [[ -z "${PATH_HASH[$2]+x}" ]]; then
-    h="$(printf '%s' "$2" | g hash-object --stdin)" || return 1
+    h="$(printf '%s' "$2" | g hash-object --stdin 2>&1)" || store_error "could not hash a path: ${h}"
+    valid_oid "${h}" || store_error "hash-object returned an invalid path id: ${h}"
     PATH_HASH["$2"]="${h}"
   fi
   printf -v "$1" '%s/paths/%s' "${NS}" "${PATH_HASH[$2]}"
@@ -693,7 +694,8 @@ in_list() { # needle list...
 
 write_blob() {  # VAR CONTENT: write CONTENT as a blob, seed the snapshot with it, set VAR to its oid
   local written # not `oid`: printf -v writes to the caller's variable of that name, which a local would shadow
-  written="$(printf '%s\n' "$2" | g hash-object -w --stdin)" || return 1
+  written="$(printf '%s\n' "$2" | g hash-object -w --stdin 2>&1)" || store_write_error "could not write the record: ${written}"
+  valid_oid "${written}" || store_write_error "hash-object returned an invalid record id: ${written}"
   ensure_snapshot
   BLOB["${written}"]="$2"$'\n'
   printf -v "$1" '%s' "${written}"
@@ -891,25 +893,48 @@ plan_set() { # ref before after -> 0, or 1 with PLAN_CONFLICT set
 
 TRANSACT_ERR=''
 
-transact() { # root CAS: success or a stale snapshot that the caller must replan
-  local next rc
+publication_conflict() { # only Git's old-value mismatch can request a new plan
+  if [[ -n "${STATE_OID}" ]]; then
+    [[ "${TRANSACT_ERR}" == *"cannot lock ref '${STATE_REF}': is at "*" but expected ${STATE_OID}"* ]]
+  else
+    [[ "${TRANSACT_ERR}" == *"cannot lock ref '${STATE_REF}': reference already exists"* ]]
+  fi
+}
+
+publication_lock_busy() { # a files-backend ref lock may belong to an active publisher
+  [[ "${TRANSACT_ERR}" == *"cannot lock ref '${STATE_REF}': Unable to create "*"${STATE_REF}.lock': File exists."* ]]
+}
+
+transact() { # success, stale snapshot (return 1), or operational error (exit 2)
+  local next rc lock_try
   next="$(state_tree 2>&1)" || store_write_error "could not build the successor state tree: ${next}"
   valid_oid "${next}" || store_write_error 'invalid successor state object id'
   test_gate "${GIT_LOCKS_PAUSE_BEFORE_COMMIT:-}" # tests force an interleaving between planning and commit
-  TRANSACT_ERR="$(
-    {
-      printf 'start\n'
-      if [[ -n "${STATE_OID}" ]]; then
-        printf 'update %s %s %s\n' "${STATE_REF}" "${next}" "${STATE_OID}"
-      else
-        printf 'create %s %s\n' "${STATE_REF}" "${next}"
-      fi
-      printf 'prepare\ncommit\n'
-    } | g update-ref --stdin 2>&1
-  )"
-  rc=$?
-  SNAP_LOADED=0
-  ((rc == 0))
+  # Git does not identify a .lock file's owner. Briefly retry the SAME candidate
+  # to allow an active publisher to finish; never delete its lock or keep
+  # rebuilding records while a possibly abandoned lock remains in place.
+  for ((lock_try = 0; lock_try < 6; lock_try++)); do
+    TRANSACT_ERR="$(
+      {
+        printf 'start\n'
+        if [[ -n "${STATE_OID}" ]]; then
+          printf 'update %s %s %s\n' "${STATE_REF}" "${next}" "${STATE_OID}"
+        else
+          printf 'create %s %s\n' "${STATE_REF}" "${next}"
+        fi
+        printf 'prepare\ncommit\n'
+      } | g -c core.filesRefLockTimeout=0 -c core.packedRefsTimeout=0 update-ref --stdin 2>&1
+    )"
+    rc=$?
+    SNAP_LOADED=0
+    ((rc == 0)) && return 0
+    publication_conflict && return 1
+    if publication_lock_busy && ((lock_try < 5)); then
+      sleep 0.02
+      continue
+    fi
+    store_write_error "could not publish the state root: ${TRANSACT_ERR}"
+  done
 }
 # ---------------------------------------------------------------- refusals
 
@@ -1058,7 +1083,7 @@ bump_parent() {   # parent-job parent-oid -> plans the parent's blob rewrite wit
   paths="$(record_paths "${poid}")"
   field_v note "${poid}" note
   record_text record "${pjob}" "${holder}" "${claimed}" "${expires}" "${parent}" "${newfam}" "${acq}" "${paths}" "${note}"
-  write_blob newoid "${record}" || fail 'could not write the parent record'
+  write_blob newoid "${record}"
   local pjref
   pjref="$(job_ref "${pjob}")"
   plan_set "${pjref}" "${poid}" "${newoid}" || return 1
@@ -1213,7 +1238,7 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
   new_acquisition acq
   joined="$(printf '%s\n' "${wanted[@]}")"
   record_text record "${job}" "${holder}" "${at}" "${expires}" "${parent}" "${old_family:-0}" "${acq}" "${joined}" "${note}"
-  write_blob new_oid "${record}" || fail 'could not write the lock record'
+  write_blob new_oid "${record}"
 
   local evict=() ref cur rjob rexp
   for p in "${wanted[@]}"; do
@@ -1827,7 +1852,7 @@ cmd_extend() {
     acq="$(field "${oid}" acquisition)"
     field_v note "${oid}" note
     record_text record "${D_JOB}" "${D_HOLDER}" "${claimed}" "${expires}" "${parent}" "${family:-0}" "${acq}" "${paths}" "${note}"
-    write_blob new_oid "${record}" || fail 'could not write the lock record'
+    write_blob new_oid "${record}"
     plan_set "${jref}" "${oid}" "${new_oid}" || fail "${PLAN_CONFLICT}" 1
     while IFS= read -r p; do
       [[ -z "${p}" ]] && continue
@@ -2157,7 +2182,7 @@ sem_transact() { # name -> plans the generation CAS and the meta verify, then co
   local gref newgen mref
   gref="$(sem_gen_ref "$1")"
   mref="$(sem_meta_ref "$1")"
-  gen_blob newgen || fail 'could not write the generation token'
+  gen_blob newgen
   plan_set "${gref}" "${SEM_GEN_OID}" "${newgen}" || fail "${PLAN_CONFLICT}" 1
   plan_set "${mref}" "${SEM_META_OID}" '=' || fail "${PLAN_CONFLICT}" 1
   transact && return 0
@@ -2212,7 +2237,7 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
     return 1
   fi
   record="$(printf 'schema: %s\nsemaphore: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\nacquisition: %s' "${SLOT_SCHEMA}" "${name}" "${job}" "${holder}" "${at}" "${expires}" "${acq}")"
-  write_blob oid "${record}" || fail 'could not write the slot record'
+  write_blob oid "${record}"
   plan_reset
   sem_plan_evict_expired "${name}" "${job}" || fail "${PLAN_CONFLICT}" 1
   slot_ref="$(sem_slot_ref "${name}" "${job}")"
@@ -2356,8 +2381,8 @@ cmd_sem() {
         fi
         now_v at
         content="$(printf 'schema: %s\nsemaphore: %s\ncapacity: %s\ncreated: %s' "${SEM_SCHEMA}" "${name}" "${capacity}" "${at}")"
-        write_blob meta "${content}" || fail 'could not write the semaphore record'
-        gen_blob gen || fail 'could not write the generation token'
+        write_blob meta "${content}"
+        gen_blob gen
         mref="$(sem_meta_ref "${name}")"
         gref="$(sem_gen_ref "${name}")"
         plan_reset
@@ -2698,10 +2723,10 @@ cmd_migrate() {
           printf 'delete %s %s\n' "${ref}" "${REF_OID[${ref}]}"
         done
         printf 'prepare\ncommit\n'
-      } | g update-ref --stdin 2>&1
+      } | g -c core.filesRefLockTimeout=0 -c core.packedRefsTimeout=0 update-ref --stdin 2>&1
     )"
     rc=$?
-    ((rc == 0)) || store_error "offline migration failed: ${result}"
+    ((rc == 0)) || store_write_error "offline migration failed: ${result}"
   fi
   printf '{"event":"migrated","format":"git-locks-state/1","root":"%s","entries":%s}\n' "${next}" "${#REF_OID[@]}"
 }
