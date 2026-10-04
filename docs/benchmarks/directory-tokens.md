@@ -20,12 +20,12 @@ Each scenario has three repetitions of each operation. Claim cleanup runs outsid
 
 ## Reproduction
 
-Requirements are Bash 5, Git, standard Unix utilities, and native `/usr/bin/time` on macOS or GNU time on Linux. Small calibration is part of `make test`. No runtime dependency is added to git-locks.
+The host needs Docker, Python 3, and Git. Bash 5, Git, standard Unix utilities, and GNU time are supplied by the isolated Linux toolchain image. Small calibration is part of `make test`. No production runtime dependency is added to git-locks. See [test isolation and resource limits](../testing.md); historical native measurements retain their original provenance.
 
 ```bash
-bash test/directory-token-churn.sh
-bash scripts/benchmark-directory-tokens.sh run /tmp/locks-churn-quick quick
-bash scripts/benchmark-directory-tokens.sh run /tmp/locks-churn-results
+python3 scripts/docker-run.py bash test/directory-token-churn.sh
+python3 scripts/docker-run.py bash scripts/benchmark-directory-tokens.sh run /work/artifacts/locks-churn-quick quick
+python3 scripts/docker-run.py bash scripts/benchmark-directory-tokens.sh run /work/artifacts/locks-churn-results
 ```
 
 Output directories must not exist. The fixture command refuses existing stores and bounds its input to 10,000 work units. The large matrix processes one store at a time in a private temporary directory, then removes that store. The planned peak footprint is below 200 MiB, including temporary input files, loose objects, and refs. The runner checks the working footprint after the setup transaction, before deleting setup inputs, and reports an excess above 200 MiB. This check happens after allocation; it is not a preventive disk quota. A failed run retains raw command output, metrics, partial CSVs, and its current temporary store for diagnosis.

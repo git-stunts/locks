@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Informational benchmark. Large fixtures are synthetic loose Git objects/refs,
 # calibrated against real claim/release by test/directory-token-churn.sh.
 set -euo pipefail

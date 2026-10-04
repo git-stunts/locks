@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Independent small-store calibration before the informational large benchmark.
 set -euo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_LOCKS_TRACE GIT_LOCKS_PAUSE_AFTER_READ GIT_LOCKS_PAUSE_BEFORE_COMMIT GIT_LOCKS_HOME

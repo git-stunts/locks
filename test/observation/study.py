@@ -7,6 +7,10 @@ experiment is never mistaken for the FAIL verdict. Output retains the actual
 failure, not an expected-failure test result.
 """
 
+from pathlib import Path as _GuardPath
+import subprocess as _guard_subprocess
+_guard_subprocess.run(["node", str(_GuardPath(__file__).resolve().parents[2] / "scripts/require-docker.mjs")], check=True)
+
 import argparse
 import copy
 import itertools

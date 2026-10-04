@@ -1,4 +1,6 @@
 # shellcheck shell=bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Sourced by test.sh. Expected outcomes come from the public family policy,
 # not the production descendants walker. Removing admission checks must fail
 # these cases before doctor is allowed to diagnose an already-created graph.

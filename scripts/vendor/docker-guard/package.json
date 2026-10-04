@@ -1,0 +1,35 @@
+{
+  "name": "@git-stunts/docker-guard",
+  "version": "0.1.0",
+  "description": "A tiny guard that forces tests and benchmarks to run inside Docker.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --globals"
+  },
+  "keywords": [
+    "docker",
+    "guard",
+    "git-stunts",
+    "git",
+    "safety",
+    "testing",
+    "dev-tools"
+  ],
+  "author": "James Ross <james@flyingrobots.dev>",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  },
+  "files": [
+    "src"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/git-stunts/docker-guard.git"
+  },
+  "homepage": "https://github.com/git-stunts/docker-guard#readme",
+  "bugs": {
+    "url": "https://github.com/git-stunts/docker-guard/issues"
+  }
+}

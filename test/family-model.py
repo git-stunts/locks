@@ -6,6 +6,10 @@ successful commands must match the model's whole job set. Removing either the
 descendants check or the cycle check breaks the fixed seeds.
 """
 
+from pathlib import Path as _GuardPath
+import subprocess as _guard_subprocess
+_guard_subprocess.run(["node", str(_GuardPath(__file__).resolve().parents[1] / "scripts/require-docker.mjs")], check=True)
+
 import json
 import os
 from pathlib import Path

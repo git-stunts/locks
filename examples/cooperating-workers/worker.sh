@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../../scripts/require-docker.sh" || exit 1
 # Invoked by the demo launcher through git-locks with, after admission.
 set -euo pipefail
 DEMO_BIN="${DEMO_BIN:?the launcher sets the executable}"

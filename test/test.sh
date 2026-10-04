@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# shellcheck source=scripts/require-docker.sh
+source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Tests for git-locks. Pure bash, no framework: each case makes its own
 # temporary repository, drives bin/git-locks, and asserts exit codes, stdout,
 # stderr, and the refs left behind. RED before the binary exists: every case
@@ -322,6 +324,8 @@ git-locks check a.md >/dev/null 2>&1
 check "a second subject repo has its own store, so the same path is free there" "$?" "0"
 
 cd "${R}" || exit 2
+git -c user.name=test -c user.email=test@example.invalid commit --allow-empty -qm 'worktree fixture'
+check "worktree fixture has an initial commit on supported Git versions" "$?" "0"
 git worktree add -q "${R}-wt" -b wt >/dev/null 2>&1
 cd "${R}-wt" || exit 2
 git-locks check a.md >/dev/null 2>&1

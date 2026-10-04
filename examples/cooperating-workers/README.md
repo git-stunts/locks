@@ -6,13 +6,13 @@ The example exercises controlled local flows. It does not resolve the mixed-obse
 
 ## Run it
 
-From this checkout, with Bash 4+ and Git available:
+From this checkout, with Docker, Python 3, and Git available:
 
 ```bash
-./examples/cooperating-workers/demo.sh /tmp/locks-workers-review
+python3 scripts/docker-run.py bash examples/cooperating-workers/demo.sh /work/artifacts/locks-workers-review
 ```
 
-Choose a fresh output path. An existing directory is refused before any file is overwritten. With no argument, the launcher creates a fresh temporary directory and prints its location. It uses this checkout's `bin/git-locks`; no installation, service, or package download is required.
+Choose a fresh output name. The runner exports `/work/artifacts/locks-workers-review` to `.test-results/artifacts/locks-workers-review` and refuses to overwrite retained evidence. The demonstration uses a copy of this checkout's `bin/git-locks` in an offline container. Image construction installs the toolchain once; subsequent runs reuse it. See [test isolation](../../docs/testing.md).
 
 The launcher selects an explicit bare store at `<output>/store.git`, uses `<output>/work` as the workers' common artifact directory, and writes command receipts under `<output>/receipts`. It retains those files when it finishes. The demonstration does not modify this checkout's source files or project refs.
 
@@ -29,12 +29,12 @@ Artifacts and JSONL receipts: <absolute output directory>
 Inspect the evidence directly:
 
 ```bash
-cat /tmp/locks-workers-review/receipts/worker-b-refusal.jsonl
-cat /tmp/locks-workers-review/receipts/before-renewal.jsonl
-cat /tmp/locks-workers-review/receipts/after-renewal.jsonl
-cat /tmp/locks-workers-review/receipts/replacement-survives.jsonl
-cat /tmp/locks-workers-review/receipts/expired-while-running.jsonl
-cat /tmp/locks-workers-review/receipts/final-doctor.jsonl
+cat .test-results/artifacts/locks-workers-review/receipts/worker-b-refusal.jsonl
+cat .test-results/artifacts/locks-workers-review/receipts/before-renewal.jsonl
+cat .test-results/artifacts/locks-workers-review/receipts/after-renewal.jsonl
+cat .test-results/artifacts/locks-workers-review/receipts/replacement-survives.jsonl
+cat .test-results/artifacts/locks-workers-review/receipts/expired-while-running.jsonl
+cat .test-results/artifacts/locks-workers-review/receipts/final-doctor.jsonl
 ```
 
 Each run records CLI `version`, selected store and checkout revision. The [recorded example](recorded-run.json) retains one observed run's CLI records and results against its named source revision. Object IDs and acquisition IDs change on later runs; compare their relationships and the actual outcomes.
@@ -73,7 +73,7 @@ The reservations are cooperative. Other programs can write the files without usi
 ## Repeatable verification
 
 ```bash
-python3 test/cooperating-workers.py
+python3 scripts/docker-run.py python3 test/cooperating-workers.py
 make lint
 ```
 

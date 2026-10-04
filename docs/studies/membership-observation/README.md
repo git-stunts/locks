@@ -73,7 +73,7 @@ Python is used only by this test fixture, alongside the repository's existing Py
 Run the full study with a fresh retained output directory:
 
 ```bash
-make study-observation OBSERVATION_OUT=/tmp/locks-observation-review-run
+make study-observation OBSERVATION_OUT=/work/artifacts/locks-observation-review-run
 ```
 
 The current result is **exit 1**, `production_safety: FAIL`, with 21 violating cases. This is an exposed production safety failure under the injected observations, not an expected-failure assertion converted to a passing test. Exit 0 means the studied invariants held within the tested synthetic cases. Exit 2 means the experiment could not execute reliably: a calibration or instrumentation check failed, or the harness raised any unanticipated error, so a broken fixture can never be read as the FAIL verdict. Existing evidence is never overwritten; reusing an output directory exits 2.
@@ -81,7 +81,7 @@ The current result is **exit 1**, `production_safety: FAIL`, with 21 violating c
 Run only the six oracle cases and two discarded-read controls:
 
 ```bash
-make test-observation-calibration OBSERVATION_OUT=/tmp/locks-observation-review-run
+make test-observation-calibration OBSERVATION_OUT=/work/artifacts/locks-observation-review-run
 ```
 
 Calibration exits 0 when the fixture is working and explicitly reports `production_safety: NOT_EVALUATED`. The ordinary suite (`make test`, CI and `make test-docker`) runs this calibration, checks that an unanticipated harness fault exits 2, and runs the evidence verifier below. A green ordinary suite or calibration does not mean the observation study is green.
@@ -91,7 +91,7 @@ Every full run retains before/committed-after/final raw refs and objects, the in
 To verify that the retained evidence is actually committed, run:
 
 ```bash
-python3 test/observation/verify-evidence.py
+python3 scripts/docker-run.py python3 test/observation/verify-evidence.py
 ```
 
 This checks every manifest path against `git ls-files` and hashes its `HEAD` blob with `git show`. It does not accept an ignored or untracked working-tree file as evidence. The ordinary suite runs it, so CI fails if a manifest entry is missing or its committed blob changes. Raw read-order receipts use `.txt` because the repository ignores `.log` files.

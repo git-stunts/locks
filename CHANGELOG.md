@@ -11,6 +11,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Changed
 
+- Tests, benchmarks, lint, and CI use one reusable offline Docker worker with copied source, a fresh unrelated Git fixture, no host mounts, and bounded temporary storage. A pinned git-stunts/docker-guard adapter rejects raw test entry points even with Docker/CI environment flags set. Isolation configuration, logs, and explicitly selected evidence are exported before teardown; production dependencies are unchanged.
 - **Breaking:** re-claiming a parent's acquisition while any of its descendants remain stored, expired ones included, now exits 1 with a `parent` refusal whose detail is `descendants`. Before, a same-holder re-claim replaced the parent and left its children pointing at a superseded acquisition. Scripts that renew a parent by claiming it again must switch to `extend`, or release or sweep the descendants first (#34).
 - The README leads with cooperative path reservations, explains TTL and launcher admission before the first example, and refreshes introductory and wrapper transcripts with acquisition IDs. It clarifies linked-worktree logical ownership, release conditions, and Git concurrent-reader visibility (#37).
 

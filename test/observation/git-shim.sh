@@ -2,6 +2,7 @@
 # Inject exactly one synthetic ref observation; retries use real Git reads.
 # Objects and update-ref transactions always use real Git in the isolated store.
 set -euo pipefail
+node /work/source/scripts/require-docker.mjs || exit 1
 OBS_CASE="${OBS_CASE:?set the isolated case directory}"
 OBS_INJECT_READ="${OBS_INJECT_READ:?set the read ordinal}"
 OBS_REAL_GIT="${OBS_REAL_GIT:?set the real Git executable}"

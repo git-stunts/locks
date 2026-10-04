@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Behavior tests for the runnable demo, using its real launchers and Git store."""
 
+from pathlib import Path as _GuardPath
+import subprocess as _guard_subprocess
+_guard_subprocess.run(["node", str(_GuardPath(__file__).resolve().parents[1] / "scripts/require-docker.mjs")], check=True)
+
 import json
 import os
 from pathlib import Path
