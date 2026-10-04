@@ -40,33 +40,21 @@ plan_set() { # ref before after -> 0, or 1 with PLAN_CONFLICT set
   return 1
 }
 
-plan_lines() { # -> update-ref stdin lines, one per ref, in plan order
-  local ref before after
-  for ref in "${PLAN_ORDER[@]}"; do
-    before="${T_BEFORE[${ref}]}"
-    after="${T_AFTER[${ref}]}"
-    if [[ "${after}" == '=' ]]; then
-      if [[ -n "${before}" ]]; then printf 'verify %s %s\n' "${ref}" "${before}"; else printf 'verify %s\n' "${ref}"; fi # no old value: the ref must not exist
-    elif [[ -z "${after}" ]]; then
-      [[ -n "${before}" ]] && printf 'delete %s %s\n' "${ref}" "${before}"
-    elif [[ -z "${before}" ]]; then
-      printf 'create %s %s\n' "${ref}" "${after}"
-    else
-      printf 'update %s %s %s\n' "${ref}" "${after}" "${before}"
-    fi
-  done
-}
-
 TRANSACT_ERR=''
 
-transact() { # commits the plan; 0 ok, 1 refused (TRANSACT_ERR carries git's words). Invalidates the snapshot either way.
-  local lines rc
-  lines="$(plan_lines)"
+transact() { # root CAS: success or a stale snapshot that the caller must replan
+  local next rc
+  next="$(state_tree 2>&1)" || store_write_error "could not build the successor state tree: ${next}"
+  valid_oid "${next}" || store_write_error 'invalid successor state object id'
   test_gate "${GIT_LOCKS_PAUSE_BEFORE_COMMIT:-}" # tests force an interleaving between planning and commit
   TRANSACT_ERR="$(
     {
       printf 'start\n'
-      printf '%s\n' "${lines}"
+      if [[ -n "${STATE_OID}" ]]; then
+        printf 'update %s %s %s\n' "${STATE_REF}" "${next}" "${STATE_OID}"
+      else
+        printf 'create %s %s\n' "${STATE_REF}" "${next}"
+      fi
       printf 'prepare\ncommit\n'
     } | g update-ref --stdin 2>&1
   )"

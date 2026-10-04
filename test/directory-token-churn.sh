@@ -5,6 +5,8 @@ source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 set -euo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_LOCKS_TRACE GIT_LOCKS_PAUSE_AFTER_READ GIT_LOCKS_PAUSE_BEFORE_COMMIT GIT_LOCKS_HOME
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fixture_git() { python3 "${ROOT}/test/store-fixture.py" "$@"; }
+
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/locks-churn-calibration.XXXXXX")"
 trap 'rm -rf "${TMP}"' EXIT
 BENCH="${ROOT}/scripts/benchmark-directory-tokens.sh"
@@ -23,14 +25,14 @@ assert() { # description actual expected
   }
   printf 'ok %s\n' "$1"
 }
-count_refs() { git --git-dir="$1" for-each-ref --format='%(refname)' "$2" | wc -l | tr -d ' '; }
+count_refs() { fixture_git --git-dir="$1" for-each-ref --format='%(refname)' "$2" | wc -l | tr -d ' '; }
 signature() { # Acquisition ids vary; every other reachable record byte must agree.
   local ref oid line rows body
-  rows="$(git --git-dir="$1" for-each-ref --format='%(refname) %(objectname)')"
+  rows="$(fixture_git --git-dir="$1" for-each-ref --format='%(refname) %(objectname)')"
   while read -r ref oid; do
     [[ -n "${ref}" ]] || continue
     printf '%s\n' "${ref}"
-    body="$(git --git-dir="$1" cat-file blob "${oid}")"
+    body="$(fixture_git --git-dir="$1" cat-file blob "${oid}")"
     while IFS= read -r line; do
       case "${line}" in acquisition:*) ;; *) printf '%s\n' "${line}" ;; esac
     done <<<"${body}"
@@ -75,7 +77,7 @@ for shape in wide deep reuse; do
   assert "${shape} has no job refs" "${got}" 0
   got="$(count_refs "${synthetic}" refs/locks/paths/)"
   assert "${shape} has no path refs" "${got}" 0
-  got="$(git --git-dir="${synthetic}" for-each-ref --format='%(objectname)' | sort -u | wc -l | tr -d ' ')"
+  got="$(fixture_git --git-dir="${synthetic}" for-each-ref --format='%(objectname)' | sort -u | wc -l | tr -d ' ')"
   assert "${shape} retains the expected distinct records" "${got}" "${records}"
   got="$(signature "${synthetic}")"
   want="$(signature "${actual}")"
@@ -93,8 +95,8 @@ assert 'live control has independent job count' "${got}" 3
 GIT_LOCKS_STORE="${TMP}/live.git" GIT_LOCKS_NOW=1000000 "${ROOT}/bin/git-locks" doctor >/dev/null
 printf 'ok live control passes the real doctor\n'
 # Deliberate contamination must make the gate fail, rather than time the wrong state.
-oid="$(git --git-dir="${TMP}/wide.git" for-each-ref --format='%(objectname)' | head -1)"
-git --git-dir="${TMP}/wide.git" update-ref refs/locks/jobs/contamination "${oid}"
+oid="$(fixture_git --git-dir="${TMP}/wide.git" for-each-ref --format='%(objectname)' | head -1)"
+fixture_git --git-dir="${TMP}/wide.git" update-ref refs/locks/jobs/contamination "${oid}"
 if bash "${BENCH}" verify "${TMP}/wide.git" 3 0; then
   printf 'FAIL verifier accepted a live-ref contamination\n' >&2
   exit 1
@@ -148,7 +150,7 @@ for ((sample = 0; sample < 12; sample++)); do
   store="${TMP}/fuzz-${sample}.git"
   bash "${BENCH}" fixture "${store}" "${shape}" "${count}"
   bash "${BENCH}" verify "${store}" "${dirs}" 0 >/dev/null
-  got="$(git --git-dir="${store}" for-each-ref --format='%(objectname)' | sort -u | wc -l | tr -d ' ')"
+  got="$(fixture_git --git-dir="${store}" for-each-ref --format='%(objectname)' | sort -u | wc -l | tr -d ' ')"
   assert "seed39 shape sample ${sample} reachable records" "${got}" "${records}"
 done
 printf 'directory-token calibration passed\n'

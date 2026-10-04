@@ -26,7 +26,7 @@ main() {
       printf '{"name":"git-locks","version":"%s"}\n' "${VERSION}"
       exit 0
       ;;
-    claim | batch | release | check | list | sweep | store | show | ttl | extend | with | sem | doctor) ;;
+    claim | batch | release | check | list | sweep | store | show | ttl | extend | with | sem | doctor | migrate) ;;
     *) usage ;;
   esac
   for a in "$@"; do
@@ -38,7 +38,7 @@ main() {
   done
   [[ "${cmd}" == doctor ]] && DIAGNOSTIC_READ=1
   resolve_store
-  case "${cmd}" in store) ;; *) ensure_snapshot ;; esac # once, in this shell: subshells inherit it instead of re-reading
+  case "${cmd}" in store | migrate) ;; *) ensure_snapshot ;; esac # once, in this shell: subshells inherit it instead of re-reading
   "cmd_${cmd}" "$@"
 }
 

@@ -9,6 +9,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
 # git-locks test hooks: an inherited trace adds I/O to timed commands, a pause gate hangs them.
 unset GIT_LOCKS_TRACE GIT_LOCKS_PAUSE_AFTER_READ GIT_LOCKS_PAUSE_BEFORE_COMMIT GIT_LOCKS_HOME
 BENCH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fixture_git() { python3 "${BENCH_ROOT}/test/store-fixture.py" "$@" || return "$?"; }
 
 fail() {
   printf 'directory-token benchmark: %s\n' "$*" >&2
@@ -87,12 +88,12 @@ fixture() { # New STORE, wide|deep|reuse, count, optional live
     done
   done
   if ((records > 0)); then
-    text="$(printf '%s\n' "${record_files[@]}" | git --git-dir="${store}" hash-object -w --stdin-paths)"
+    text="$(printf '%s\n' "${record_files[@]}" | fixture_git --git-dir="${store}" hash-object -w --stdin-paths)"
     mapfile -t record_oids <<<"${text}"
-    text="$(printf '%s\n' "${prefix_files[@]}" | git --git-dir="${store}" hash-object --stdin-paths)"
+    text="$(printf '%s\n' "${prefix_files[@]}" | fixture_git --git-dir="${store}" hash-object --stdin-paths)"
     mapfile -t prefix_oids <<<"${text}"
     if [[ "${live}" == live ]]; then
-      text="$(printf '%s\n' "${path_files[@]}" | git --git-dir="${store}" hash-object --stdin-paths)"
+      text="$(printf '%s\n' "${path_files[@]}" | fixture_git --git-dir="${store}" hash-object --stdin-paths)"
       mapfile -t path_oids <<<"${text}"
     fi
     {
@@ -108,7 +109,7 @@ fixture() { # New STORE, wide|deep|reuse, count, optional live
       fi
       printf 'prepare\ncommit\n'
     } >"${inputs}/transaction"
-    git --git-dir="${store}" update-ref --stdin <"${inputs}/transaction" >/dev/null
+    fixture_git --git-dir="${store}" update-ref --stdin <"${inputs}/transaction" >/dev/null
   fi
   local footprint
   footprint="$(du -sk "${store}")"
@@ -123,7 +124,7 @@ fixture() { # New STORE, wide|deep|reuse, count, optional live
 
 verify() { # STORE expected directory refs, expected live jobs/path refs
   local store="$1" want_dirs="$2" want_jobs="$3" dirs=0 jobs=0 paths=0 ref rows
-  rows="$(git --git-dir="${store}" for-each-ref --format='%(refname)')" || return 1
+  rows="$(python3 "${BENCH_ROOT}/test/store-fixture.py" --git-dir="${store}" for-each-ref --format='%(refname)')" || return 1
   while IFS= read -r ref; do
     [[ -n "${ref}" ]] || continue
     case "${ref}" in
@@ -144,13 +145,13 @@ verify() { # STORE expected directory refs, expected live jobs/path refs
 }
 
 ref_fingerprint() {
-  git --git-dir="$1" for-each-ref --format='%(refname) %(objectname)' | git --git-dir="$1" hash-object --stdin
+  fixture_git --git-dir="$1" for-each-ref --format='%(refname) %(objectname)' | fixture_git --git-dir="$1" hash-object --stdin
 }
 
 inventory() { # STORE scenario phase setup_us -> CSV, all reachable objects are blobs
   local store="$1" rows ref oid dirs=0 jobs=0 paths=0 refs=0 reachable=0 loose=0 disk key value
   local -A seen=()
-  rows="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+  rows="$(fixture_git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
   while read -r ref oid; do
     [[ -n "${ref}" ]] || continue
     refs=$((refs + 1))
@@ -165,7 +166,7 @@ inventory() { # STORE scenario phase setup_us -> CSV, all reachable objects are 
       *) fail "unexpected ref ${ref}" ;;
     esac
   done <<<"${rows}"
-  rows="$(git --git-dir="${store}" count-objects -v)"
+  rows="$(fixture_git --git-dir="${store}" count-objects -v)"
   while read -r key value; do [[ "${key}" != count: ]] || loose="${value}"; done <<<"${rows}"
   rows="$(du -sk "${store}")"
   read -r disk _ <<<"${rows}"
@@ -276,7 +277,7 @@ run_matrix() { # NEW OUTPUT DIRECTORY [quick]
     verify "${store}" "${dirs}" "${jobs}" >/dev/null
     inventory "${store}" "${scenario}" before "${setup_us}" "${FIXTURE_WORKING_KIB}" >>"${out}/fixtures.csv"
     before="$(ref_fingerprint "${store}")"
-    probe_hash="$(printf '_benchmark_probe/' | git --git-dir="${store}" hash-object --stdin)"
+    probe_hash="$(printf '_benchmark_probe/' | fixture_git --git-dir="${store}" hash-object --stdin)"
     for operation in check exact_claim prefix_claim list doctor; do
       for ((rep = 1; rep <= repetitions; rep++)); do
         local args=()
@@ -294,15 +295,15 @@ run_matrix() { # NEW OUTPUT DIRECTORY [quick]
         esac
         measure "${store}" "${out}" "${scenario}" "${operation}" "${rep}" "${expected}" "${args[@]}"
         if [[ "${operation}" == *_claim ]]; then
-          probe_oid="$(git --git-dir="${store}" rev-parse refs/locks/jobs/benchmark-probe)"
+          probe_oid="$(fixture_git --git-dir="${store}" rev-parse refs/locks/jobs/benchmark-probe)"
           GIT_LOCKS_STORE="${store}" GIT_LOCKS_NOW=1000000 "${BENCH_ROOT}/bin/git-locks" release --job benchmark-probe >/dev/null
           if [[ "${operation}" == prefix_claim ]]; then
-            current="$(git --git-dir="${store}" rev-parse "refs/locks/dirs/${probe_hash}")"
+            current="$(fixture_git --git-dir="${store}" rev-parse "refs/locks/dirs/${probe_hash}")"
             [[ "${current}" == "${probe_oid}" ]] || {
               fail 'probe token changed unexpectedly'
               return 1
             }
-            git --git-dir="${store}" update-ref -d "refs/locks/dirs/${probe_hash}" "${probe_oid}"
+            fixture_git --git-dir="${store}" update-ref -d "refs/locks/dirs/${probe_hash}" "${probe_oid}"
           fi
         fi
         after="$(ref_fingerprint "${store}")"

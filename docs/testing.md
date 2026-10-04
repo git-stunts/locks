@@ -74,7 +74,8 @@ free space, output bytes, and any resource refusal. Other container files
 are disposable. Exported receipts are ignored by Git and never copied back
 into a later test input.
 
-The ordinary suite checks Docker isolation and raw-entry refusal as well as
-the existing behavior tests. The full observation study still reports the
-known safety counterexamples until #45 is fixed. A passing container suite
-does not change that production-safety verdict.
+The ordinary suite checks Docker isolation, raw-entry refusal, the state-root
+protocol, existing behavior, and the complete observation study. The study
+retains its original per-ref counterexamples as historical evidence and checks
+all before/after root observations for the current protocol. Passing these gates
+establishes their stated coverage, not the absence of other correctness defects.

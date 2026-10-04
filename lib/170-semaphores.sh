@@ -286,22 +286,30 @@ cmd_sem() {
   case "${verb}" in
     create)
       valid_capacity capacity "${capacity}" || fail '--capacity is a decimal integer from 1 through 9223372036854775807' 2
-      if sem_read "${name}"; then
-        sem_refusal "${name}" exists
-        exit 1
-      fi
-      local at meta gen mref gref content
-      now_v at
-      content="$(printf 'schema: %s\nsemaphore: %s\ncapacity: %s\ncreated: %s' "${SEM_SCHEMA}" "${name}" "${capacity}" "${at}")"
-      write_blob meta "${content}" || fail 'could not write the semaphore record'
-      gen_blob gen || fail 'could not write the generation token'
-      mref="$(sem_meta_ref "${name}")"
-      gref="$(sem_gen_ref "${name}")"
-      plan_reset
-      plan_set "${mref}" '' "${meta}"
-      plan_set "${gref}" '' "${gen}"
-      transact || {
-        sem_refusal "${name}" exists
+      local at meta gen mref gref content attempt created=0
+      for ((attempt = 0; attempt < RETRIES; attempt++)); do
+        ((attempt == 0)) || snapshot
+        if sem_read "${name}"; then
+          sem_refusal "${name}" exists
+          exit 1
+        fi
+        now_v at
+        content="$(printf 'schema: %s\nsemaphore: %s\ncapacity: %s\ncreated: %s' "${SEM_SCHEMA}" "${name}" "${capacity}" "${at}")"
+        write_blob meta "${content}" || fail 'could not write the semaphore record'
+        gen_blob gen || fail 'could not write the generation token'
+        mref="$(sem_meta_ref "${name}")"
+        gref="$(sem_gen_ref "${name}")"
+        plan_reset
+        plan_set "${mref}" '' "${meta}"
+        plan_set "${gref}" '' "${gen}"
+        if transact; then
+          created=1
+          break
+        fi
+        sleep 0.01
+      done
+      ((created)) || {
+        transaction_refusal
         exit 1
       }
       json_str _j1 "${name}"
