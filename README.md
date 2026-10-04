@@ -60,7 +60,7 @@ Local agent runners, generators, and build processes are candidate integrations 
 
 ## The cast: a store, records, and one root
 
-The default store is a separate bare repository under `~/.git-stunts/locks`, keyed by the subject repository's common directory. Linked worktrees share that store and the same logical path namespace. `git locks store` reports the resolved location; `GIT_LOCKS_STORE` or `locks.store` can select another store.
+The default store is a separate bare repository under `~/.git-stunts/locks`, keyed by the subject repository's common directory. Linked worktrees share that store and the same logical path namespace. `git locks store` reports the resolved location; `GIT_LOCKS_STORE` or `locks.store` can select another store. First use prepares a complete bare repository before making it visible; existing non-repository destinations are refused. See [store initialization](docs/store-initialization.md).
 
 Records are immutable blobs containing a job, holder, acquisition identity, expiry, and paths. A Git tree maps jobs and path hashes to those records, alongside family and semaphore bookkeeping. One ref, `refs/locks/state`, points to the whole tree.
 
