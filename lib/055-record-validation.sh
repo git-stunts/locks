@@ -3,16 +3,6 @@
 # semaphore generation tokens are opaque. Doctor uses the same decoder but
 # reports findings instead of refusing the snapshot.
 
-record_uint() { # VAR text: decimal in the nonnegative signed 64-bit range
-  [[ "$2" =~ ^[0-9]+$ ]] || return 1
-  local digits="$2" limit=9223372036854775808
-  while [[ "${digits}" == 0?* ]]; do digits="${digits#0}"; done
-  ((${#digits} < 19)) || {
-    ((${#digits} == 19)) && [[ "x${digits}" < "x${limit}" ]] || return 1
-  }
-  printf -v "$1" '%s' "${digits}"
-}
-
 RECORD_ERROR=''
 record_invalid() {
   RECORD_ERROR="$1"
@@ -50,7 +40,7 @@ validate_record() { # oid lock|meta|slot: parsed values are safe before arithmet
     value="${R_FIELD["${oid} ${key}"]:-}"
     # Older lock records may omit family; no membership changes means zero.
     [[ "${role}" == lock && "${key}" == family && -z "${R_FIELD["${oid} family"]+x}" ]] && value=0
-    record_uint value "${value}" || {
+    decimal_uint value "${value}" || {
       record_invalid "invalid ${key}"
       return 1
     }

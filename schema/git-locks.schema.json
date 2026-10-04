@@ -78,7 +78,8 @@
     "epoch": {
       "type": "integer",
       "minimum": 0,
-      "description": "Seconds since the Unix epoch, UTC."
+      "description": "Canonical nonnegative seconds since the Unix epoch, UTC, within the signed 64-bit range.",
+      "maximum": 9223372036854775807
     },
     "check_line": {
       "type": "object",
@@ -621,7 +622,8 @@
     "remaining": {
       "type": "integer",
       "minimum": 0,
-      "description": "Seconds until the lock expires, 0 once it has."
+      "description": "Seconds until the lock expires, 0 once it has.",
+      "maximum": 9223372036854775807
     },
     "ttl_line": {
       "type": "object",
@@ -918,7 +920,7 @@
     },
     "error_line": {
       "type": "object",
-      "description": "On stderr: a usage failure (exit 2), a store that could not be read or written (exit 2; nothing is reported free or held), or a failed operation (exit 1).",
+      "description": "On stderr: usage, store-read, store-write, or clock errors exit 2; a failed operation exits 1.",
       "required": [
         "event",
         "reason",
@@ -933,7 +935,8 @@
             "usage",
             "store-read",
             "store-write",
-            "failed"
+            "failed",
+            "clock"
           ]
         },
         "detail": {

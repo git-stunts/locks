@@ -12,7 +12,7 @@ cmd_extend() {
     [[ -n "${oid}" ]] || missing "${JOB_ARG}"
     describe "${oid}"
     now_v at
-    expires=$((at + ttl))
+    expiry_v expires "${at}" "${ttl}"
     paths="$(record_paths "${oid}")"
     claimed="$(field "${oid}" claimed)"
     parent="$(field "${oid}" parent)"

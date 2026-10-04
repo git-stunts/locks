@@ -70,7 +70,7 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
 
   local at expires
   now_v at
-  expires=$((at + ttl))
+  expiry_v expires "${at}" "${ttl}"
 
   # Paths planned earlier in this batch are not in the snapshot, so the checks below cannot see them: a record
   # claiming dist/ and another claiming dist/a.js would each plan against a store where the other does not exist,

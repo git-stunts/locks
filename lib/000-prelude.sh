@@ -59,7 +59,7 @@ SEM_SCHEMA='git-locks-sem/1'
 SLOT_SCHEMA='git-locks-slot/1'
 VERSION='0.7.0'
 RETRIES=200   # a plan refused for a stale expectation is re-read and re-planned this many times
-NOW_CACHED='' # the clock, read once per invocation by now()
+NOW_CACHED='' # the clock, read once per snapshot by now()
 
 usage_text() {
   cat <<'EOF'
@@ -121,7 +121,9 @@ output:  JSON Lines, always: one object per result on stdout, written as each re
          line. A command wrapped by with owns stdout.
 store:   GIT_LOCKS_STORE=<path|self>, else `git config locks.store`,
          else ${GIT_LOCKS_HOME:-~/.git-stunts}/locks/<main repo path>
-clock:   GIT_LOCKS_NOW=<epoch seconds> (tests)
+clock:   GIT_LOCKS_NOW=<nonnegative decimal epoch> (tests; empty is invalid)
+numbers: decimal digits only, at most 9223372036854775807; TTL is positive,
+         wait may be zero; expiry and wait-deadline sums must fit the same range
 exit:    0 done or free, 1 refused or held, 2 usage or a store error
 EOF
 }

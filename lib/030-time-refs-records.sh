@@ -1,11 +1,23 @@
 # ---------------------------------------------------------------- time, refs, records
 
-now_v() { # VAR: set VAR to the clock, read once per invocation; no fork after the first call
+system_now_v() { # VAR: one validated system-clock sample; errors return to the caller for cleanup
+  local _sn_clock
+  _sn_clock="$(date +%s 2>&1)" || {
+    clock_error "could not read the system clock: ${_sn_clock}"
+    return 2
+  }
+  decimal_uint "$1" "${_sn_clock}" || {
+    clock_error 'system clock must return a nonnegative signed 64-bit decimal epoch'
+    return 2
+  }
+}
+
+now_v() { # VAR: one validated clock value per snapshot; replanning refreshes it
   if [[ -z "${NOW_CACHED}" ]]; then
-    if [[ -n "${GIT_LOCKS_NOW:-}" ]]; then
+    if [[ -n "${GIT_LOCKS_NOW+x}" ]]; then
       NOW_CACHED="${GIT_LOCKS_NOW}"
     else
-      NOW_CACHED="$(date +%s)"
+      system_now_v NOW_CACHED || exit 2
     fi
   fi
   printf -v "$1" '%s' "${NOW_CACHED}"
@@ -37,10 +49,7 @@ valid_holder() { [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one li
 valid_note() { [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one line; empty means no note
 
 valid_ttl() { # VAR value: VAR = the value as a decimal number of seconds; 1 unless it is digits only and positive (010 is ten, never octal eight)
-  [[ "$2" =~ ^[0-9]+$ ]] || return 1
-  local _vt=$((10#$2))
-  ((_vt > 0)) || return 1
-  printf -v "$1" '%s' "${_vt}"
+  decimal_uint "$1" "$2" && [[ "${!1}" != 0 ]]
 }
 
 valid_oid() { [[ "$1" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; }

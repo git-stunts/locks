@@ -20,6 +20,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Time inputs share one decimal parser with signed 64-bit bounds (#55, #56). TTL and wait additions check for overflow before arithmetic; leading zeros are decimal, and malformed clock overrides are rejected before store initialization. System-clock failures and backward steps during waits report structured errors. Publication retries refresh their lease clock and recheck expiry bounds. Tests cover all TTL writers and confirm refused inputs cannot publish or launch a command.
 - The full membership observation study is an ordinary test/CI gate (#88). Current-root and stale-root cases cover families, semaphores, and prefixes. Original per-ref counterexample receipts remain historical evidence.
 
 - The README no longer overstates child admission: the parent's liveness and holder are checked at planning time, and the transaction compares the parent's record rather than sending a `verify` line. The claim stanza is marked as simplified (it omits the ancestor-prefix verify and the directory token), directory token refs are noted to outlive a release, and `with` lists `--note` and `--parent` (#37).
