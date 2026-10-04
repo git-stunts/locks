@@ -791,17 +791,17 @@ R="$(mkrepo)"
 cd "${R}" || exit 2
 for i in $(seq 1 50); do git-locks claim --job "j${i}" --holder h "p${i}.md" >/dev/null 2>&1; done
 git_count git-locks list
-check "list of 50 locks spawns at most 8 git processes (snapshot plus one batched path-index validation)" "$((n <= 8))" "1"
+check "list of 50 locks spawns at most 9 git processes (snapshot plus one batched path-index validation)" "$((n <= 9))" "1"
 git_count git-locks check p1.md p2.md p3.md
-check "check of 3 known paths spawns at most 8 git processes (validated path hashes are reused)" "$((n <= 8))" "1"
+check "check of 3 known paths spawns at most 9 git processes (validated path hashes are reused)" "$((n <= 9))" "1"
 git_count git-locks show --job j7
-check "show spawns at most 8 git processes" "$((n <= 8))" "1"
+check "show spawns at most 9 git processes" "$((n <= 9))" "1"
 git_count git-locks claim --job jx --holder h a.md b.md c.md
-check "a 3-path claim spawns at most 16 git processes (validated snapshot, new path hashes, record, index, root CAS)" "$((n <= 16))" "1"
+check "a 3-path claim spawns at most 17 git processes (validated snapshot, new path hashes, record, index, root CAS)" "$((n <= 17))" "1"
 git-locks sem create s --capacity 5 >/dev/null 2>&1
 for i in 1 2 3; do git-locks sem acquire s --job "t${i}" --holder h >/dev/null 2>&1; done
 git_count git-locks sem show s
-check "sem show spawns at most 8 git processes" "$((n <= 8))" "1"
+check "sem show spawns at most 9 git processes" "$((n <= 9))" "1"
 out="$(git-locks list 2>&1)"
 lines n "${out}"
 check "the snapshot path lists every lock" "${n}" "51"
@@ -1884,6 +1884,21 @@ fixture_git --git-dir="${GIT_LOCKS_STORE}" update-ref -d "refs/locks/paths/${pat
 out="$(git-locks check held.md 2>&1)"
 check 'a missing path index fails closed instead of reporting free' "$?" 2
 jfields 'a missing path index is a store-read error' "${out}" 'event="error"' 'reason="store-read"'
+unset GIT_LOCKS_STORE
+
+# Dangling symbolic roots are omitted by Git's ordinary ref enumeration.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+export GIT_LOCKS_STORE="${R}/dangling-store.git"
+git init -q --bare "${GIT_LOCKS_STORE}"
+git --git-dir="${GIT_LOCKS_STORE}" symbolic-ref refs/locks/state refs/private/missing
+out="$(git-locks check x.md 2>&1)"
+check 'a dangling symbolic root never means an empty store' "$?" 2
+jfields 'a dangling root is a structured read error' "${out}" 'event="error"' 'reason="store-read"'
+out="$(git-locks claim --job redirected --holder alice x.md 2>&1)"
+check 'claim refuses a dangling symbolic root' "$?" 2
+got="$(git --git-dir="${GIT_LOCKS_STORE}" for-each-ref --format='%(refname)' refs/private/)"
+check 'claim does not publish through the dangling target' "${got}" ''
 unset GIT_LOCKS_STORE
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
