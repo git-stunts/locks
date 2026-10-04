@@ -13,7 +13,7 @@ try {
   isolated = existsSync('/.dockerenv')
     && readFileSync('/opt/git-locks-test-runtime', 'utf8') === 'git-locks isolated test runtime v1\n'
     && realpathSync(root) === '/work/source'
-    && tmpfs('/work') && tmpfs('/tmp') && tmpfs('/home/node') && tmpfs('/evidence')
+    && tmpfs('/work') && tmpfs('/tmp') && tmpfs('/home/node') && tmpfs('/evidence') && tmpfs('/dev/shm')
     && readdirSync('/sys/class/net').every((name) => name === 'lo')
     && !existsSync('/var/run/docker.sock');
 } catch {

@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 IMAGE = "git-locks-tests:local"
 WORKER = "git-locks-tests"
 OWNER = "git-stunts.locks.tests"
-PROFILE = "4"
+PROFILE = "5"
 SOURCE_LIMIT = 64 * 1024 * 1024
 ARTIFACT_LIMIT = 80 * 1024 * 1024
 
@@ -139,7 +139,7 @@ def main():
                 worker = None
         if worker is None:
             run("docker", "create", "--name", WORKER, "--label", f"{OWNER}=1", "--label", f"{OWNER}.profile={PROFILE}",
-                "--init", "--network", "none", "--read-only", "--cpus", "2", "--memory", "2g",
+                "--init", "--network", "none", "--read-only", "--ipc", "private", "--shm-size", "16m", "--cpus", "2", "--memory", "2g",
                 "--memory-swap", "2g", "--pids-limit", "256", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--user", "1000:1000",
                 "--tmpfs", "/work:rw,exec,nosuid,nodev,size=512m,uid=1000,gid=1000",
@@ -156,7 +156,8 @@ def main():
         if (worker["Mounts"] or config["Binds"] or config["NetworkMode"] != "none"
                 or not config["ReadonlyRootfs"] or config["Privileged"] or not config["Init"]
                 or config["Memory"] != 2 * 1024**3 or config["NanoCpus"] != 2 * 10**9
-                or config["PidsLimit"] != 256
+                or config["PidsLimit"] != 256 or config["ShmSize"] != 16 * 1024**2
+                or config["IpcMode"] != "private" or config["PidMode"]
                 or set(config["Tmpfs"]) != {"/work", "/tmp", "/home/node", "/evidence"}):
             raise RuntimeError("worker isolation or resource configuration differs from the required boundary")
         receipts = ROOT / ".test-results"
@@ -180,7 +181,7 @@ def main():
             command = sys.argv[1:] or ["make", "test-container"]
             # The inner runner monitors the VM and quota filesystems. The host
             # separately checks its own filesystem; no host path is mounted.
-            process = subprocess.Popen(["docker", "exec", "-e", f"TEST_LOG_BUDGET_BYTES={128 * 1024**2 - retained - 17 * 1024**2}", "-w", "/work/source", WORKER,
+            process = subprocess.Popen(["docker", "exec", "-e", f"TEST_LOG_BUDGET_BYTES={128 * 1024**2 - retained - 18 * 1024**2}", "-w", "/work/source", WORKER,
                                         "python3", "scripts/docker-exec.py", *command])
             host_guard = False
             while process.poll() is None:

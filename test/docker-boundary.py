@@ -19,7 +19,7 @@ assert sorted(p.name for p in Path('/sys/class/net').iterdir()) == ['lo']
 assert not Path('/var/run/docker.sock').exists()
 assert os.getuid() != 0
 assert os.environ['TMPDIR'] == '/tmp'
-for mount, limit in (('/work', 512), ('/tmp', 512), ('/home/node', 32), ('/evidence', 16)):
+for mount, limit in (('/work', 512), ('/tmp', 512), ('/home/node', 32), ('/evidence', 16), ('/dev/shm', 16)):
     fs = os.statvfs(mount)
     assert fs.f_blocks * fs.f_frsize <= limit * 1024**2, (mount, fs)
 assert (ROOT.parent / 'artifacts').resolve() == Path('/evidence/artifacts')

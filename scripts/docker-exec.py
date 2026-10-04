@@ -16,7 +16,7 @@ import time
 
 MIN_FREE = 50 * 1024**3
 LOG_LIMIT = 16 * 1024**2
-MOUNTS = ('/work', '/tmp', '/home/node', '/evidence')
+MOUNTS = ('/work', '/tmp', '/home/node', '/evidence', '/dev/shm')
 peaks = {mount: 0 for mount in MOUNTS}
 minimum_vm_free = None
 interrupted = False

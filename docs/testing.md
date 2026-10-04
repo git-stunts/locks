@@ -43,7 +43,9 @@ do not rebuild the toolchain image.
 
 Resource limits are two CPUs, 2 GiB memory including swap, 256 processes,
 512 MiB each for `/work` and `/tmp`, 32 MiB for the container home, and a separate
-16 MiB tmpfs for live logs and exported evidence. `TMPDIR` is explicitly `/tmp`.
+16 MiB tmpfs for live logs and exported evidence. Private `/dev/shm` is also
+explicitly capped at 16 MiB and monitored; daemon-wide defaults cannot enlarge it.
+`TMPDIR` is explicitly `/tmp`.
 The runner checks host and Docker VM backing-filesystem free space before work
 and monitors both during execution, stopping below 50 GiB. The smaller quota
 filesystems have their own limits and a 1 MiB remaining-space stop threshold. Inputs are limited to
@@ -63,7 +65,7 @@ latest command. Write evidence that must survive teardown under
 `.test-results/artifacts/<unique-name>`. Existing evidence is never overwritten,
 and aggregate retained evidence is limited to 80 MiB, counting allocated blocks.
 A new run reserves 16 MiB of export space before it starts. The live log/evidence
-filesystem, latest host log, and bounded Docker log leave the combined log
+filesystem, latest host log, 1 MiB receipt-metadata reserve, and bounded Docker log leave the combined log
 budget below 128 MiB. A monitored conservative count also includes generated
 fixture files outside Git object storage; copied inputs are excluded. The
 runtime data filesystems plus host receipts total less than 1.2 GiB, below the
