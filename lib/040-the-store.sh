@@ -56,4 +56,4 @@ create_store() ( # private initialization; publish a complete directory on this 
   fi
 )
 
-g() { git --git-dir="${STORE}" "$@"; }
+g() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false --git-dir="${STORE}" "$@"; }

@@ -71,10 +71,36 @@ doctor_slot_record() { # subject oid name job -> 0 when the record decodes as a 
   return "${bad}"
 }
 
+doctor_hook_policy() { # VAR -> report the configured hooks without invoking any
+  local configured rc directory hook executables=() _j1 _j2 joined
+  # These two read-only Git commands inspect the unmodified configuration.
+  # All object/index/ref operations use g(), which overrides core.hooksPath.
+  configured="$(git --git-dir="${STORE}" config --path --get core.hooksPath 2>&1)"
+  rc=$?
+  if ((rc == 1)); then
+    _j1=null
+  elif ((rc == 0)); then
+    json_str _j1 "${configured}"
+  else
+    store_error "cannot inspect hook configuration: ${configured}"
+  fi
+  directory="$(git --git-dir="${STORE}" rev-parse --path-format=absolute --git-path hooks 2>&1)" || store_error "cannot inspect hook directory: ${directory}"
+  for hook in reference-transaction post-index-change; do
+    if [[ -f "${directory}/${hook}" && -x "${directory}/${hook}" ]]; then
+      executables+=("\"${hook}\"")
+    fi
+  done
+  local IFS=','
+  joined="${executables[*]}"
+  json_str _j2 "${directory}"
+  printf -v "$1" '{"disabled":true,"fsmonitor_disabled":true,"configured_path":%s,"directory":%s,"executables":[%s]}' "${_j1}" "${_j2}" "${joined}"
+}
+
 cmd_doctor() {
   (($# == 0)) || usage
   ensure_snapshot
-  local rows ref oid job name rest at refs_n=0 recs_n="${#BLOB[@]}"
+  local rows ref oid job name rest at refs_n=0 recs_n="${#BLOB[@]}" hook_policy
+  doctor_hook_policy hook_policy
   local -A JOB_OID=() OID_JOBS=() PATHREF_OID=() EXPECTED_PATHREF=() JOB_OK=()
   local -A SEM_META=() SEM_GEN=() SEM_SLOT_OIDS=() SEM_SLOT_JOBS=() SEM_NAMES=()
   local jobs=() sems=() pathrefs=() all_paths=() p paths
@@ -228,7 +254,7 @@ cmd_doctor() {
   local _j1 healthy=true
   ((DOC_FINDINGS == 0)) || healthy=false
   json_str _j1 "${STORE}"
-  printf '{"event":"doctor","store":%s,"basis":{"refs":%s,"records":%s,"now":%s},"checks":[%s],"findings":%s,"healthy":%s}\n' \
-    "${_j1}" "${refs_n}" "${recs_n}" "${at}" "${DOC_CHECKS}" "${DOC_FINDINGS}" "${healthy}"
+  printf '{"event":"doctor","store":%s,"basis":{"refs":%s,"records":%s,"now":%s},"checks":[%s],"findings":%s,"healthy":%s,"hooks":%s}\n' \
+    "${_j1}" "${refs_n}" "${recs_n}" "${at}" "${DOC_CHECKS}" "${DOC_FINDINGS}" "${healthy}" "${hook_policy}"
   ((DOC_FINDINGS == 0))
 }
