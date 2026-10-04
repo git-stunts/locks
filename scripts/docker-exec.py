@@ -72,17 +72,49 @@ def interrupted_signal(_signum, _frame):
     interrupted = True
 
 
-def main():
+def process_ids():
+    return {int(name) for name in os.listdir('/proc') if name.isdecimal()}
+
+
+def stop_workload(existing):
+    """This serialized container owns every process started after the baseline.
+
+    Sessions and process groups do not escape this boundary. Kill immediately:
+    after a guard failure no grace period may keep producing unmonitored data.
+    Re-scan to catch a child forked while its parent was being stopped.
+    """
+    deadline = time.monotonic() + 5
+    while True:
+        active = []
+        for pid in process_ids() - existing:
+            try:
+                state = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
+                if state != 'Z':
+                    os.kill(pid, signal.SIGKILL)
+                    active.append(pid)
+            except ProcessLookupError:
+                pass
+            except FileNotFoundError:
+                pass
+        if not active:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError('owned workload did not stop; container teardown required')
+        time.sleep(.01)
+
+
+def main(command=None, evidence=Path('/evidence')):
     for path in ROOT.rglob('*'):
         if path.is_file():
             stat = path.stat()
             input_sizes[str(path)] = max(stat.st_size, stat.st_blocks * 512)
     measure()
-    Path('/evidence/runner.pid').write_text(str(os.getpid()))
+    (evidence / 'runner.pid').write_text(str(os.getpid()))
     signal.signal(signal.SIGTERM, interrupted_signal)
     signal.signal(signal.SIGINT, interrupted_signal)
     resource.setrlimit(resource.RLIMIT_FSIZE, (LOG_LIMIT, LOG_LIMIT))
-    process = subprocess.Popen(sys.argv[1:], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    existing = process_ids()
+    process = subprocess.Popen(sys.argv[1:] if command is None else command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                start_new_session=True)
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ)
@@ -90,7 +122,7 @@ def main():
     error = None
     written = 0
     try:
-        with Path('/evidence/test.log').open('wb') as log:
+        with (evidence / 'test.log').open('wb') as log:
             while selector.get_map() or process.poll() is None:
                 measure()
                 if interrupted or time.monotonic() >= deadline:
@@ -108,21 +140,16 @@ def main():
                     sys.stdout.buffer.write(data)
                     sys.stdout.buffer.flush()
         return process.wait()
-    except (RuntimeError, OSError, subprocess.TimeoutExpired) as exc:
+    except Exception as exc:
         error = str(exc)
         print(f'Docker resource guard: {error}', file=sys.stderr, flush=True)
         return 2
     finally:
         selector.close()
-        if process.poll() is None:
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
+        stop_workload(existing)
+        process.wait(timeout=5)
         # Quota reserve above leaves room for this receipt even on a refused run.
-        Path('/evidence/resources.json').write_text(json.dumps({
+        (evidence / 'resources.json').write_text(json.dumps({
             'peak_tmpfs_bytes': peaks, 'minimum_vm_free_bytes': minimum_vm_free,
             'stdout_bytes': written, 'guard_error': error,
             'peak_generated_nonobject_bytes': peak_generated_log_bytes, 'runtime_log_budget_bytes': log_budget,

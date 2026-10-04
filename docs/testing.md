@@ -48,7 +48,11 @@ The runner checks host and Docker VM backing-filesystem free space before work
 and monitors both during execution, stopping below 50 GiB. The smaller quota
 filesystems have their own limits and a 1 MiB remaining-space stop threshold. Inputs are limited to
 64 MiB; individual generated files and the test log are capped at 16 MiB.
-Each invocation has a 30-minute timeout. The project uses no compiler cache
+Each invocation has a 30-minute timeout. On completion, timeout, or any monitor
+failure, the runner kills every process created after its container baseline,
+including descendants in other sessions and groups. Container teardown is the
+final boundary if process inspection or termination itself fails.
+The project uses no compiler cache
 or data volumes; the toolchain image and its build cache must remain within
 the shared 20 GiB project budget.
 
