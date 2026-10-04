@@ -56,10 +56,10 @@ plan_family() { # job parent -> refuse replacement with descendants or a cyclic 
   return 0
 }
 
-plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets CLAIM_LINE/CLAIM_OID; CONFLICTS=1 on refusal
+plan_claim() {    # job holder ttl parent note acquisition-or-empty path... -> plans one claim; sets CLAIM_LINE/CLAIM_OID; CONFLICTS=1 on refusal
   ensure_snapshot # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
-  local job="$1" holder="$2" ttl="$3" parent="$4" note="$5"
-  shift 5
+  local job="$1" holder="$2" ttl="$3" parent="$4" note="$5" acquisition="$6"
+  shift 6
   local paths=("$@") p n norm=() sorted wanted=()
   for p in "${paths[@]}"; do
     n="$(normalize_path "${p}")" || exit 2
@@ -138,7 +138,8 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
   old_job_oid="$(ref_oid "${jref}")"
   [[ -n "${old_job_oid}" ]] && old_family="$(field "${old_job_oid}" family)"
   local record new_oid acq joined
-  new_acquisition acq
+  acq="${acquisition}"
+  [[ -n "${acq}" ]] || new_acquisition acq
   joined="$(printf '%s\n' "${wanted[@]}")"
   record_text record "${job}" "${holder}" "${at}" "${expires}" "${parent}" "${old_family:-0}" "${acq}" "${joined}" "${note}"
   write_blob new_oid "${record}"
@@ -393,7 +394,7 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
   ((${#CA_PATHS[@]} > 0)) || usage
 }
 
-plan_one_claim() { plan_claim "${CA_JOB}" "${CA_HOLDER}" "${CA_TTL}" "${CA_PARENT}" "${CA_NOTE}" "${CA_PATHS[@]}"; }
+plan_one_claim() { plan_claim "${CA_JOB}" "${CA_HOLDER}" "${CA_TTL}" "${CA_PARENT}" "${CA_NOTE}" '' "${CA_PATHS[@]}"; }
 
 cmd_claim() {
   claim_args "$@"

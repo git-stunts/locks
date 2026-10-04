@@ -111,7 +111,10 @@ await_ready "${gate}" "${worker}"
 replacement_acquisition=''
 acquisition_from replacement_acquisition "${DEMO_RECEIPTS}/replacement.jsonl"
 : >"${gate}"
-wait "${worker}"
+status=0
+wait "${worker}" || status=$?
+printf '%s\n' "${status}" >"${DEMO_RECEIPTS}/superseded-worker.status"
+[[ "${status}" == 125 ]]
 "${DEMO_BIN}" show --job reused >"${DEMO_RECEIPTS}/replacement-survives.jsonl"
 "${DEMO_BIN}" release --job reused --acquisition "${replacement_acquisition}" >"${DEMO_RECEIPTS}/replacement-release.jsonl"
 printf 'Superseded cleanup preserved the replacement acquisition.\n'

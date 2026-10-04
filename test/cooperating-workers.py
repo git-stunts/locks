@@ -5,6 +5,8 @@ from pathlib import Path as _GuardPath
 import subprocess as _guard_subprocess
 _guard_subprocess.run(["node", str(_GuardPath(__file__).resolve().parents[1] / "scripts/require-docker.mjs")], check=True)
 
+import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -40,11 +42,32 @@ def group_alive(pgid):
     return True
 
 
+def session_members(sid):
+    members = []
+    for stat in Path('/proc').glob('[0-9]*/stat'):
+        try:
+            fields = stat.read_text().rsplit(')', 1)[1].split()
+            if fields[0] != 'Z' and int(fields[3]) == sid:
+                members.append(int(stat.parent.name))
+        except FileNotFoundError:
+            pass
+    return members
+
+
 def stop_demo(proc):
-    # Kill the whole session: the launcher's background workers outlive a kill of bash alone.
-    if group_alive(proc.pid):
-        os.killpg(proc.pid, signal.SIGKILL)
-    proc.wait()
+    # Request the launcher's EXIT cleanup, then reclaim only its owned session.
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            pass
+    for pid in session_members(proc.pid):
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    proc.wait(timeout=5)
 
 
 def finish_demo(proc, timeout):
@@ -84,7 +107,9 @@ def verify(root):
     old = lines(root, "superseded-worker.jsonl")
     replacement = lines(root, "replacement.jsonl")[0]
     survivor = lines(root, "replacement-survives.jsonl")[0]
-    assert old[-1] == {"event": "nothing", "job": "reused", "reason": "superseded"}
+    assert old[-1] == {"event": "lost", "job": "reused", "reason": "superseded",
+                       "acquisition": old[0]["acquisition"], "command_status": 0}
+    assert (receipts / "superseded-worker.status").read_text().strip() == "125"
     assert old[0]["acquisition"] != replacement["acquisition"] == survivor["acquisition"]
     assert survivor["holder"] == "bob" and survivor["state"] == "live"
     assert (receipts / "failing-worker.status").read_text().strip() == "17"
@@ -100,6 +125,26 @@ def verify(root):
     assert (receipts / "source-revision.txt").read_text().strip()
 
 
+def normalized(records, run_directory):
+    identities = {key: {} for key in ('acquisition', 'record', 'root')}
+
+    def visit(value, key=None):
+        if isinstance(value, dict):
+            return {name: visit(value[name], name) for name in sorted(value)}
+        if isinstance(value, list):
+            return [visit(item) for item in value]
+        if isinstance(value, str):
+            if key in identities:
+                seen = identities[key]
+                if value not in seen:
+                    seen[value] = f'{key}-{len(seen)}'
+                return seen[value]
+            return value.replace(str(run_directory), '<run>')
+        return value
+
+    return visit(records)
+
+
 def verify_recorded(root, stdout):
     # The retained run must still describe what the demo emits today.
     recorded = json.loads(RECORDED.read_text())
@@ -110,6 +155,10 @@ def verify_recorded(root, stdout):
             SCHEMA.validate(record)
     assert sum(len(batch) for batch in records.values()) == recorded["schema_validated_records"]
     assert recorded["transcript"][:-1] == stdout.splitlines()[:-1], "recorded transcript drifted"
+    archived_root = Path(records['store.jsonl'][0]['store']).parent
+    actual = {p.name: lines(root, p.name) for p in (root / 'receipts').glob('*.jsonl')}
+    assert normalized(records, archived_root) == normalized(actual, root), 'recorded behavior or identity relationships drifted'
+    assert recorded['superseded_worker_status'] == 125
 
 
 def run(output):
@@ -121,7 +170,6 @@ def run(output):
 
 
 def stopped_demo_leaves_no_workers(output):
-    # A stop while Alice is gated must not orphan her launcher and worker.
     proc = start_demo(output)
     try:
         ready = output / "gates" / "build.ready"
@@ -129,18 +177,55 @@ def stopped_demo_leaves_no_workers(output):
         while not ready.exists():
             assert proc.poll() is None and time.monotonic() < deadline, "demo never gated its first worker"
             time.sleep(0.02)
+        proc.terminate()
+        assert proc.wait(timeout=8) == 143
+        deadline = time.monotonic() + 5
+        while session_members(proc.pid) and time.monotonic() < deadline:
+            time.sleep(.02)
+        assert not session_members(proc.pid), "stopped demo left a process in its session"
+        result = subprocess.run([str(ROOT / 'bin/git-locks'), 'list'], text=True, capture_output=True, timeout=5,
+                                env=dict(os.environ, GIT_LOCKS_STORE=str(output / 'store.git'), GIT_LOCKS_NOW='1000000'))
+        assert result.returncode == 0 and not result.stdout, result
     finally:
         stop_demo(proc)
-    deadline = time.monotonic() + 5
-    while group_alive(proc.pid) and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert not group_alive(proc.pid), "stopped demo left worker processes running"
+
+
+def write_recorded(root, stdout, output):
+    records = {p.name: lines(root, p.name) for p in sorted((root / 'receipts').glob('*.jsonl'))}
+    report = {
+        'artifacts': {name: (root / 'work' / name).read_text() for name in
+                      ('failed.txt', 'generated/api.txt', 'generated/types.txt', 'independent.txt')},
+        'blocked_mutation_ran': (root / 'work/blocked-ran').exists(),
+        'cli_records': records,
+        'clock': {'default': 1000000, 'expiry_observation': 1000002, 'kind': 'simulated'},
+        'external_adoption': 'not run',
+        'failing_worker_status': int((root / 'receipts/failing-worker.status').read_text()),
+        'superseded_worker_status': int((root / 'receipts/superseded-worker.status').read_text()),
+        'schema_validated_records': sum(len(batch) for batch in records.values()),
+        'source_revision': (root / 'receipts/source-revision.txt').read_text().strip(),
+        'source_revision_kind': 'synthetic copied-input commit, with no upstream history',
+        'source_sha256': {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in
+                          ('bin/git-locks', 'examples/cooperating-workers/demo.sh', 'examples/cooperating-workers/worker.sh')},
+        'transcript': stdout.splitlines(),
+        'worker_active_after_expiry': (root / 'receipts/worker-active-after-expiry.txt').read_text().strip() == 'yes',
+    }
+    with output.open('x') as stream:
+        stream.write(json.dumps(report, indent=2, sort_keys=True) + '\n')
+
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--record', type=Path, help='export this observed golden run to a fresh JSON file')
+args = parser.parse_args()
 
 
 with tempfile.TemporaryDirectory(prefix="git-locks-demo-tests-") as tmp:
     scratch = Path(tmp)
     golden = scratch / "golden path with spaces"
-    verify_recorded(golden, run(golden))
+    transcript = run(golden)
+    if args.record:
+        write_recorded(golden, transcript, args.record)
+    else:
+        verify_recorded(golden, transcript)
     # Existing caller-owned output is rejected before anything is overwritten.
     occupied = scratch / "occupied"
     occupied.mkdir()

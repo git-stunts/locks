@@ -92,13 +92,18 @@ sem_plan_evict_expired() { # name [keep-job] -> plans deletes for expired slots,
   done
 }
 
-sem_transact() { # name -> plans the generation CAS and the meta verify, then commits; 0 ok, 2 lost the race
+sem_plan_generation() { # name -> include the generation and capacity in the current plan
   local gref newgen mref
   gref="$(sem_gen_ref "$1")"
   mref="$(sem_meta_ref "$1")"
   gen_blob newgen
   plan_set "${gref}" "${SEM_GEN_OID}" "${newgen}" || fail "${PLAN_CONFLICT}" 1
   plan_set "${mref}" "${SEM_META_OID}" '=' || fail "${PLAN_CONFLICT}" 1
+  return 0
+}
+
+sem_transact() { # name -> commit the current semaphore plan
+  sem_plan_generation "$1"
   transact && return 0
   return 2
 }
@@ -132,9 +137,16 @@ sem_acquire_once() { # name job holder ttl -> 0 acquired (line printed), 1 refus
   return 1
 }
 
-sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacity), 2 lost the race
-  ensure_snapshot       # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
-  local name="$1" job="$2" holder="$3" ttl="$4" i at expires record oid _j1 _j2 _j3 _j4 _j5 own_oid='' own_live=0 slot_ref live_after acq=''
+sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused, 2 stale
+  plan_reset
+  plan_sem_acquire "$1" "$2" "$3" "$4" '' || return 1
+  transact || return 2
+  printf '%s\n' "${SEM_ACQUIRED_LINE}"
+}
+
+plan_sem_acquire() { # name job holder ttl acquisition-or-empty -> append to the current plan
+  ensure_snapshot    # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
+  local name="$1" job="$2" holder="$3" ttl="$4" i at expires record oid _j1 _j2 _j3 _j4 _j5 own_oid='' own_live=0 slot_ref live_after acq="$5"
   now_v at
   expiry_v expires "${at}" "${ttl}"
   sem_read "${name}" || sem_missing "${name}"
@@ -142,7 +154,7 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
     if [[ "${SLOT_JOBS[${i}]}" == "${job}" ]]; then
       own_oid="${SLOT_OIDS[${i}]}"
       own_live="${SLOT_LIVE[${i}]}"
-      ((own_live)) && acq="$(field "${own_oid}" acquisition)" # a refresh keeps the acquisition; a re-acquire after expiry mints one
+      ((own_live)) && [[ -z "${acq}" ]] && acq="$(field "${own_oid}" acquisition)" # a refresh keeps the acquisition; a re-acquire after expiry mints one
     fi
   done
   [[ -n "${acq}" ]] || new_acquisition acq
@@ -152,7 +164,6 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
   fi
   record="$(printf 'schema: %s\nsemaphore: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\nacquisition: %s' "${SLOT_SCHEMA}" "${name}" "${job}" "${holder}" "${at}" "${expires}" "${acq}")"
   write_blob oid "${record}"
-  plan_reset
   sem_plan_evict_expired "${name}" "${job}" || fail "${PLAN_CONFLICT}" 1
   slot_ref="$(sem_slot_ref "${name}" "${job}")"
   if [[ -n "${own_oid}" ]]; then
@@ -162,13 +173,13 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
     plan_set "${slot_ref}" '' "${oid}" || fail "${PLAN_CONFLICT}" 1
     live_after=$((SEM_LIVE + 1))
   fi
-  sem_transact "${name}" || return 2
+  sem_plan_generation "${name}"
   json_str _j1 "${name}"
   json_str _j2 "${job}"
   json_str _j3 "${holder}"
   json_str _j4 "${oid}"
   json_str _j5 "${acq}"
-  printf '{"event":"acquired","semaphore":%s,"job":%s,"holder":%s,"claimed":%s,"expires":%s,"live":%s,"capacity":%s,"record":%s,"acquisition":%s}\n' \
+  printf -v SEM_ACQUIRED_LINE '{"event":"acquired","semaphore":%s,"job":%s,"holder":%s,"claimed":%s,"expires":%s,"live":%s,"capacity":%s,"record":%s,"acquisition":%s}' \
     "${_j1}" "${_j2}" "${_j3}" "${at}" "${expires}" "${live_after}" "${SEM_CAP}" "${_j4}" "${_j5}"
   return 0
 }
@@ -327,7 +338,7 @@ cmd_sem() {
       W_TTL="${ttl}"
       local errfile rc
       errfile="$(mktemp "${TMPDIR:-/tmp}/git-locks-sem.XXXXXX")" || fail 'cannot create a temporary file'
-      acquire_with_wait sem "${wait}" "${errfile}"
+      sem_acquire_with_wait "${wait}" "${errfile}"
       rc=$?
       rm -f "${errfile}"
       ((rc == 0)) || exit "${rc}"
