@@ -30,6 +30,7 @@ test-container:
 	python3 test/store-bootstrap.py
 	python3 test/store-hooks.py
 	python3 test/store-environment.py
+	python3 test/store-selection.py
 	python3 test/store-integrity.py
 	python3 test/renewal.py
 	python3 test/wrapper-lifecycle.py
