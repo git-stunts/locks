@@ -255,7 +255,7 @@ Bash does reseed `$RANDOM` in subshells (verified: three subshells printed 1205,
 In git-stunts/locks: make the acquisition id a typed value.
 - Add valid_acquisition() in lib/030-time-refs-records.sh with the grammar ^[0-9]+-[0-9]+-[0-9]+$ (digits-dash-digits-dash-digits), use it in lib/055-record-validation.sh instead of valid_holder for `acquisition`, and in cmd_release (lib/110) and cmd_sem release (lib/170) for --acquisition, failing with exit 2 usage on a malformed id.
 - Add the pattern to schema $defs.acquisition.
-- Widen the random component to 62 bits using $SRANDOM when BASH_VERSINFO>=5.1 and falling back to four $RANDOM draws otherwise (keep the format).
+- Widen the random component to a 62-bit value: on Bash 5.1 or newer concatenate 31 low bits from each of two independent $SRANDOM draws; otherwise concatenate four 15-bit $RANDOM draws and two low bits from a fifth draw. Keep the decimal format and nonnegative signed-64-bit arithmetic. This describes the output width, not a claim of cryptographic entropy for the $RANDOM fallback.
 Failing tests first: (1) `release --acquisition 'not an id'` exits 2 with reason usage; (2) a stored record with `acquisition: x y` is a store-read error naming 'invalid acquisition'; (3) 1000 ids minted in one process are distinct.
 Acceptance: tests green, schema/README/CHANGELOG updated.
 ```
@@ -577,6 +577,8 @@ Branch points count `if`, `elif`, `case`, `while`, `for`, `until`, `&&` and `||`
 | 170-semaphores.sh | 370 | 16 | 15 | 16 | 89 | 24.0 | 22 | 3 |
 | 175-doctor.sh | 234 | 5 | 12 | 15 | 68 | 29.0 | 16 | 1 |
 | 990-main.sh | 45 | 2 | 1 | 2 | 10 | 22.2 | 6 | 0 |
+
+The 22-module scope also includes `180-schema-marker.sh`, a one-line build marker with no executable code. It is excluded from the 21-row executable-module metrics table above.
 
 Functions longer than 60 lines: `plan_claim` 244 (`lib/090`), `cmd_doctor` 161 (`lib/175`), `cmd_sem` 151 (`lib/170`), `cmd_with` 122 (`lib/160`), `validate_record` 97 (`lib/055`), `cmd_release` 91 (`lib/110`), `usage_text` 61 (`lib/000`).
 

@@ -113,7 +113,7 @@ Task: split the suite into a fast pre-push tier and a full CI tier without delet
 
 1. Measure first: add `GIT_LOCKS_TEST_TIMING=1` support to test/test.sh so each `ok` line can carry elapsed milliseconds, and produce a one-off ranking of the slowest 30 cases (the race, fuzz, 500-lock performance and forced-interleaving cases are the likely heavy hitters). Record the ranking in the PR description.
 2. Add a Makefile target `test-fast` that runs: test/test.sh with `GIT_LOCKS_TEST_TIER=fast` (skipping cases tagged slow via a `slow` helper you add, with a printed `SKIP <name> (slow tier)` line so the skip is visible), plus test/literal-paths.sh. Keep `test` as the full suite; CI keeps running `make test`.
-3. Write the failing test first: a new case in test/test.sh named "fast tier finishes under 120 s" that runs `make test-fast` in a subshell with `time` and asserts the elapsed seconds are below 120. Show it red (it will be red while test-fast still equals test), then make it green.
+3. Write the failing test first: a separate timing harness, not called by test/test.sh or test-fast, named "fast tier finishes under 120 s" that runs `make test-fast` and asserts the elapsed seconds are below 120. Run this harness explicitly so it cannot recursively invoke itself. Show it red against the full-tier baseline, then make it green.
 4. Point scripts/hooks/pre-push at `make test-fast`, and add a comment naming the budget and that CI runs the full suite.
 5. Update README.md (Develop section) and CONTRIBUTING.md to describe the two tiers in the same commit.
 
