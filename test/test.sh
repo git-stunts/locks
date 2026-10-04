@@ -18,6 +18,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_OBJECT_
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="${HERE}/../bin:${PATH}"
+fixture_git() { python3 "${HERE}/store-fixture.py" "$@"; }
 PASS=0
 FAIL=0
 FAILED=()
@@ -130,7 +131,7 @@ refs() { # subject-repo [prefix] -> refs in whatever store resolves for it; dire
   local store line
   line="$(cd "$1" && git-locks store)" || return 1
   jstr store "${line}" store
-  git --git-dir="${store}" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | grep -v '^refs/locks/dirs/' | sort
+  fixture_git --git-dir="${store}" for-each-ref --format='%(refname)' "refs/locks/${2:-}" | grep -v '^refs/locks/dirs/' | sort
   return 0
 }
 
@@ -138,7 +139,7 @@ dir_tokens() { # subject-repo -> the number of directory token refs
   local store line
   line="$(cd "$1" && git-locks store)" || return 1
   jstr store "${line}" store
-  git --git-dir="${store}" for-each-ref --format='%(refname)' 'refs/locks/dirs/' | wc -l | tr -d ' '
+  fixture_git --git-dir="${store}" for-each-ref --format='%(refname)' 'refs/locks/dirs/' | wc -l | tr -d ' '
 }
 
 export GIT_LOCKS_NOW=1000000
@@ -337,7 +338,7 @@ line="$(GIT_LOCKS_STORE=self git-locks store)"
 jstr got "${line}" store
 check "GIT_LOCKS_STORE=self resolves to the subject's own git dir" "${got}" "${common}"
 GIT_LOCKS_STORE=self git-locks claim --job s --holder h self.md >/dev/null 2>&1
-got="$(git -C "${R}" for-each-ref --format='%(refname)' refs/locks/jobs/)"
+got="$(fixture_git --git-dir="${common}" for-each-ref --format='%(refname)' refs/locks/jobs/)"
 check "self mode writes refs into the subject repo" "${got}" "refs/locks/jobs/s"
 GIT_LOCKS_STORE=self git-locks check a.md >/dev/null 2>&1
 check "self mode does not see the default store's locks" "$?" "0"
@@ -790,17 +791,17 @@ R="$(mkrepo)"
 cd "${R}" || exit 2
 for i in $(seq 1 50); do git-locks claim --job "j${i}" --holder h "p${i}.md" >/dev/null 2>&1; done
 git_count git-locks list
-check "list of 50 locks spawns at most 4 git processes (rev-parse, config, for-each-ref, cat-file --batch)" "$((n <= 4))" "1"
+check "list of 50 locks spawns at most 6 git processes (lookup, root, tree type, tree entries, blobs)" "$((n <= 6))" "1"
 git_count git-locks check p1.md p2.md p3.md
-check "check of 3 paths spawns at most 7 git processes (snapshot plus one hash-object per path)" "$((n <= 7))" "1"
+check "check of 3 paths spawns at most 9 git processes (snapshot plus one hash-object per path)" "$((n <= 9))" "1"
 git_count git-locks show --job j7
-check "show spawns at most 4 git processes" "$((n <= 4))" "1"
+check "show spawns at most 6 git processes" "$((n <= 6))" "1"
 git_count git-locks claim --job jx --holder h a.md b.md c.md
-check "a 3-path claim spawns at most 10 git processes (lookup, snapshot, 3 hashes, a blob write, a transaction)" "$((n <= 10))" "1"
+check "a 3-path claim spawns at most 15 git processes (lookup, immutable snapshot, hashes, record, index, root CAS)" "$((n <= 15))" "1"
 git-locks sem create s --capacity 5 >/dev/null 2>&1
 for i in 1 2 3; do git-locks sem acquire s --job "t${i}" --holder h >/dev/null 2>&1; done
 git_count git-locks sem show s
-check "sem show spawns at most 4 git processes" "$((n <= 4))" "1"
+check "sem show spawns at most 6 git processes" "$((n <= 6))" "1"
 out="$(git-locks list 2>&1)"
 lines n "${out}"
 check "the snapshot path lists every lock" "${n}" "51"
@@ -1109,7 +1110,7 @@ cd "${R}" || exit 2
 line="$(git-locks store)"
 S=''
 jstr S "${line}" store
-gs() { git --git-dir="${S}" "$@"; }
+gs() { fixture_git --git-dir="${S}" "$@"; }
 blob() { gs hash-object -w --stdin; } # stdin -> oid, written into the store (tests corrupt the store directly)
 pref() {                              # VAR path: the path ref for a path
   local h
@@ -1650,14 +1651,14 @@ cd "${R}" || exit 2
 store="${R}/records.git"
 export GIT_LOCKS_STORE="${store}"
 git-locks claim --job held --holder alice x.md >/dev/null
-path_oid="$(printf x.md | git --git-dir="${store}" hash-object --stdin)"
+path_oid="$(printf x.md | fixture_git --git-dir="${store}" hash-object --stdin)"
 lock_record=$'schema: git-locks/1\njob: held\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nfamily: 0\nacquisition: original\npaths:\nx.md'
 meta_record=$'schema: git-locks-sem/1\nsemaphore: gpu\ncapacity: 2\ncreated: 1000000'
 slot_record=$'schema: git-locks-slot/1\nsemaphore: gpu\njob: held\nholder: alice\nclaimed: 1000000\nexpires: 1014400\nacquisition: original'
-bad_oid="$(printf 'not a record\n' | git --git-dir="${store}" hash-object -w --stdin)"
-git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
-git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${bad_oid}"
-before="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+bad_oid="$(printf 'not a record\n' | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+fixture_git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
+fixture_git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${bad_oid}"
+before="$(fixture_git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
 commands=(check list show ttl claim batch release extend sweep with sem)
 for verb in "${commands[@]}"; do
   case "${verb}" in
@@ -1677,7 +1678,7 @@ for verb in "${commands[@]}"; do
   err="$(cat "${ERR_PRE}")"
   jfields "${verb} reports store-read" "${err}" 'event="error"' 'reason="store-read"'
   valid "${verb} malformed-record error" "${err}"
-  after="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+  after="$(fixture_git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
   check "${verb} leaves authoritative refs unchanged" "${after}" "${before}"
 done
 ran=''
@@ -1714,9 +1715,9 @@ for role in lock meta slot; do
       ;;
     *) exit 2 ;;
   esac
-  good_oid="$(printf '%s\n' "${lock_record}" | git --git-dir="${store}" hash-object -w --stdin)"
-  git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
-  git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+  good_oid="$(printf '%s\n' "${lock_record}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+  fixture_git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+  fixture_git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
   cases=('not a record' "${template/schema: /schema: wrong-}")
   if [[ "${role}" == lock ]]; then
     cases+=("${template/$'paths:\nx.md'/paths:}" "${template/x.md//absolute}" "${template/x.md/../escape}")
@@ -1745,8 +1746,8 @@ for role in lock meta slot; do
     cases+=("${template/"${key}: ${value}"/"${key}: ${fuzz_state}x"}")
   done
   for record in "${cases[@]}"; do
-    bad_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
-    git --git-dir="${store}" update-ref "${target}" "${bad_oid}"
+    bad_oid="$(printf '%s\n' "${record}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+    fixture_git --git-dir="${store}" update-ref "${target}" "${bad_oid}"
     out="$(git-locks check x.md 2>"${ERR_PRE}")"
     rc=$?
     err="$(cat "${ERR_PRE}")"
@@ -1761,51 +1762,51 @@ for role in lock meta slot; do
     if [[ "${err}" == *'"reason":"store-read"'* ]]; then error_kind='store-read'; fi
     check "corrupt ${role} case ${case_count} fails closed" "${rc}:${out}:${error_kind}" '2::store-read'
   done
-  git --git-dir="${store}" update-ref -d "${target}"
+  fixture_git --git-dir="${store}" update-ref -d "${target}"
 done
 printf '  info record corruption corpus: %s cases, fixed seed 33\n' "${case_count}"
 # Legacy decimal spellings stay readable and serialize as decimal JSON.
 legacy="${lock_record/claimed: 1000000/claimed: 01000000}"
 legacy="${legacy/expires: 1014400/expires: 01014400}"
 legacy="${legacy/family: 0/family: 000}"
-good_oid="$(printf '%s\n' "${legacy}" | git --git-dir="${store}" hash-object -w --stdin)"
-git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
-git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+good_oid="$(printf '%s\n' "${legacy}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+fixture_git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+fixture_git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
 out="$(git-locks show --job held 2>&1)"
 check 'legacy leading-zero timestamps remain readable' "$?" 0
 jfields 'legacy timestamps emit decimal JSON numbers' "${out}" 'claimed=1000000' 'expires=1014400' 'remaining=14400'
 valid 'legacy timestamp output' "${out}"
 for capacity in 02 9223372036854775807; do
   legacy="${meta_record/capacity: 2/capacity: ${capacity}}"
-  good_oid="$(printf '%s\n' "${legacy}" | git --git-dir="${store}" hash-object -w --stdin)"
-  git --git-dir="${store}" update-ref refs/locks/sem/gpu/meta "${good_oid}"
+  good_oid="$(printf '%s\n' "${legacy}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+  fixture_git --git-dir="${store}" update-ref refs/locks/sem/gpu/meta "${good_oid}"
   out="$(git-locks sem show gpu 2>&1)"
   check "stored capacity ${capacity} remains readable" "$?" 0
   valid "stored capacity ${capacity} output" "${out}"
 done
-git --git-dir="${store}" update-ref -d refs/locks/sem/gpu/meta
+fixture_git --git-dir="${store}" update-ref -d refs/locks/sem/gpu/meta
 
 # A valid maximum generation can be read, but advancing it must fail before
 # the child or a wrapped negative generation reaches any authoritative ref.
 record="${lock_record/family: 0/family: 9223372036854775807}"
-good_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
-git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
-git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
-before="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+good_oid="$(printf '%s\n' "${record}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+fixture_git --git-dir="${store}" update-ref refs/locks/jobs/held "${good_oid}"
+fixture_git --git-dir="${store}" update-ref "refs/locks/paths/${path_oid}" "${good_oid}"
+before="$(fixture_git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
 out="$(git-locks claim --job child --holder alice --parent held child.md 2>"${ERR_PRE}")"
 check 'child admission refuses an exhausted family generation' "$?" 2
 check 'exhausted family admission prints no success' "${out}" ''
 err="$(cat "${ERR_PRE}")"
 jfields 'exhausted family admission is a store-read error' "${err}" 'event="error"' 'reason="store-read"'
-after="$(git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
+after="$(fixture_git --git-dir="${store}" for-each-ref --format='%(refname) %(objectname)')"
 check 'exhausted family admission preserves all refs' "${after}" "${before}"
 
 # Directory and semaphore generations can contain arbitrary text, even when
 # all locks have gone. They must not be treated as active lock records.
-git --git-dir="${store}" update-ref -d refs/locks/jobs/held
-git --git-dir="${store}" update-ref -d "refs/locks/paths/${path_oid}"
-git --git-dir="${store}" update-ref refs/locks/dirs/opaque "${bad_oid}"
-git --git-dir="${store}" update-ref refs/locks/sem/gpu/gen "${bad_oid}"
+fixture_git --git-dir="${store}" update-ref -d refs/locks/jobs/held
+fixture_git --git-dir="${store}" update-ref -d "refs/locks/paths/${path_oid}"
+fixture_git --git-dir="${store}" update-ref refs/locks/dirs/opaque "${bad_oid}"
+fixture_git --git-dir="${store}" update-ref refs/locks/sem/gpu/gen "${bad_oid}"
 out="$(git-locks check x.md 2>&1)"
 check 'opaque generation records do not block a free path' "$?" 0
 jfields 'free path stays free beside opaque tokens' "${out}" 'state="free"'
@@ -1813,12 +1814,12 @@ jfields 'free path stays free beside opaque tokens' "${out}" 'state="free"'
 # A blank line among a record's paths is an empty stored path, and the
 # diagnosis says so rather than calling it some other malformed path.
 record="${lock_record/$'paths:\nx.md'/$'paths:\nx.md\n\ny.md'}"
-bad_oid="$(printf '%s\n' "${record}" | git --git-dir="${store}" hash-object -w --stdin)"
-git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
+bad_oid="$(printf '%s\n' "${record}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+fixture_git --git-dir="${store}" update-ref refs/locks/jobs/held "${bad_oid}"
 out="$(git-locks check x.md 2>&1)"
 check 'an empty stored path fails closed' "$?" 2
 contains 'an empty stored path is named as empty' "${out}" 'empty stored path'
-git --git-dir="${store}" update-ref -d refs/locks/jobs/held
+fixture_git --git-dir="${store}" update-ref -d refs/locks/jobs/held
 unset GIT_LOCKS_STORE
 
 # ---------------------------------------------------------------- a slot for a job named meta is a slot, not metadata

@@ -14,3 +14,10 @@ store_error() { # detail: the store could not be read; nothing is reported as fr
   printf '{"event":"error","reason":"store-read","detail":%s}\n' "${_j1}" >&2
   exit 2
 }
+
+store_write_error() { # operational failure, never a contention/usage refusal
+  local _j1
+  json_str _j1 "$1"
+  printf '{"event":"error","reason":"store-write","detail":%s}\n' "${_j1}" >&2
+  exit 2
+}

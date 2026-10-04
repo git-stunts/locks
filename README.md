@@ -22,7 +22,7 @@ Reservations are cooperative and time-bounded. They do not prevent writes by oth
 
 Acquire in the launcher that starts the mutation. `check` reports an observation and does not authorize a later write: another worker can claim between the check and the write. `with` supplies that acquire-before-launch ordering for shell commands.
 
-Each writer submits expected ref values in one Git transaction. These writer checks do not provide atomic visibility to concurrent readers: Git documents that a reader may see only some changes from a multi-ref transaction. The cached read is not a consistent snapshot of a single instant. See [Git's update-ref transaction contract](https://git-scm.com/docs/git-update-ref) and the [membership observation investigation](https://github.com/git-stunts/locks/issues/38).
+Every command reads an immutable state tree through one Git ref. Writers publish a successor tree only if that ref still holds the root they read; competing writers reread and replan. See the [state protocol](docs/state-protocol.md) for the argument, tradeoffs, and offline upgrade from the old per-ref format.
 
 ## The example we will follow
 
@@ -58,275 +58,32 @@ The job ID is a reusable name. The acquisition ID identifies this reservation's 
 
 Local agent runners, generators, and build processes are candidate integrations for this workflow. The runnable behavior establishes what the tool does; adoption and business demand still need evidence from actual users.
 
-## The cast: a store, a record, and two kinds of ref
+## The cast: a store, records, and one root
 
-A lock is made of exactly three things, and once you can name them the rest of the tool is arithmetic on them. The store is a git repository that holds nothing but locks. The record is a blob in that repository, a few lines of text. The refs are pointers from stable names to that blob: one named after the job, one named after each locked path. This section introduces each, using alice's claim.
+The default store is a separate bare repository under `~/.git-stunts/locks`, keyed by the subject repository's common directory. Linked worktrees share that store and the same logical path namespace. `git locks store` reports the resolved location; `GIT_LOCKS_STORE` or `locks.store` can select another store.
 
-The storage sketches and older mechanism examples below abbreviate object IDs and omit generated record fields and directory-generation bookkeeping. Use the complete introductory transcript and CLI schema for integration payloads.
-
-The store is not your project's repository. By default it is a bare repository at `~/.git-stunts/locks/<absolute path of your repository>`, created the first time you claim, so `refs/locks/` never appears in your project and linked worktrees of one repository share one store. `git locks store` tells you where it resolved:
+Records are immutable blobs containing a job, holder, acquisition identity, expiry, and paths. A Git tree maps jobs and path hashes to those records, alongside family and semaphore bookkeeping. One ref, `refs/locks/state`, points to the whole tree.
 
 ```text
-$ git locks store
-{"store":"/Users/alice/.git-stunts/locks/Users/alice/work/reports"}
+refs/locks/state -> tree
+                   jobs/alice-report -> reservation blob
+                   paths/<path-hash> -> the same blob
+                   sem/gpu/...      -> capacity and slot records
 ```
 
-Linked worktrees share the main repository's default store and the same relative path namespace. Reserving `src/file.ts` in one worktree therefore reserves that logical name in the others, even though each worktree may have a different physical file. This is the implemented coordination policy. Callers needing independent physical-file ownership can select separate stores with `GIT_LOCKS_STORE` or `locks.store`; callers sharing artifacts must deliberately share a store.
+A writer reads that root, checks its complete state, builds a successor tree, and asks Git to replace the root only if it has not changed. That last comparison decides who wins. Failed publication grants nothing; the caller must read again. Unchanged subtrees are shared between versions. Bash and Git do all of this, without a daemon.
 
-In this simplified view, Alice's reservation has a job ref and a path ref pointing at the same record. Prefix coordination also writes directory token refs, omitted from this sketch. Plain Git can inspect the store:
+To inspect the current state with Git, resolve the store and run `git --git-dir="$store" ls-tree -r refs/locks/state`. Read one record with `git --git-dir="$store" show refs/locks/state:jobs/alice-report`.
 
-```text
-$ git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" for-each-ref
-75f0c1fb62f9e0b728caf81652be9b5c0693dc04 blob	refs/locks/jobs/alice-report
-75f0c1fb62f9e0b728caf81652be9b5c0693dc04 blob	refs/locks/paths/57982dcddc1bb1c76ac1e00f4ff74d76706eecad
-```
+## Expiry, families, batches, and capacity
 
-Both refs point at the same object, `75f0c1f`. The first is named after the job. The second is named after the path, hashed: `57982dc…` is `git hash-object` of the string `notes/report.md`, so a path with spaces or slashes becomes a valid ref name without any escaping. The object they point at is the record:
+A reservation is live until its expiry. An expired record can remain stored; a later claim can evict it, and `sweep` removes expired reservations. No background process is needed.
 
-```text
-$ git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" cat-file -p refs/locks/jobs/alice-report
-schema: git-locks/1
-job: alice-report
-holder: alice
-claimed: 1757980800
-expires: 1757995200
-paths:
-notes/report.md
-```
+A child names a live parent held by the same holder. Releasing or sweeping the parent removes its descendants in the same publication. Re-claiming a parent with stored descendants is refused; `extend` renews it while preserving acquisition identity. `batch` plans several claims and publishes all of them together, or none.
 
-The load-bearing lines are `holder` and `expires`. `holder` is what a refusal reports, and `expires` is what turns a dead session's lock into a free path four hours later. Job and path refs identify the record, and prefix checks also consult overlapping reservations. A ref can remain after expiry, so its existence alone does not imply a live reservation.
+A semaphore has a capacity and time-bounded slots. `sem acquire` checks all slots in the same immutable tree as the capacity, then conditionally publishes the result. Concurrent acquisition cannot bypass the root comparison by observing a generation without its membership.
 
-The diagram below shows the store as a git graph. Read each node as a blob, not a commit, and each branch as a ref: git-locks never makes commits, it moves refs between blobs. After alice's claim, two refs share one blob.
-
-```mermaid
-gitGraph
-  commit id: "empty store"
-  branch refs/locks/jobs/alice-report
-  checkout refs/locks/jobs/alice-report
-  commit id: "75f0c1f alice: notes/report.md" type: HIGHLIGHT
-  checkout main
-  branch refs/locks/paths/57982dc
-  checkout refs/locks/paths/57982dc
-  commit id: "same blob 75f0c1f"
-```
-
-<details>
-<summary>Figure 1 - The store after alice's claim</summary>
-
-Two refs, one blob. `refs/locks/jobs/alice-report` and `refs/locks/paths/57982dc…` both point at blob `75f0c1f`, the record shown above. The `main` line is only the empty store; nothing is ever committed to it.
-
-</details>
-
-| Piece | Where | What it is for |
-|---|---|---|
-| store | `~/.git-stunts/locks/<repo path>`, a bare repository | holds every lock for one project, outside the project |
-| record | a blob in the store | job, holder, claimed, expires, paths |
-| job ref | `refs/locks/jobs/<job>` | find a lock by the job that owns it: release, extend, show |
-| path ref | `refs/locks/paths/<hash of path>` | find who holds a path: check, refuse |
-
-In summary, a lock is a blob plus the refs that name it, and everything git-locks reports is read straight off those refs. The only other refs are directory tokens, which serialise prefix races and never decide who holds a path.
-
-A reservation is live only while its validated record has not expired. A prefix reservation can cover a path without a ref for that exact path. Ref existence alone does not decide whether a path is held.
-
-## What git already guarantees about refs
-
-Before the tool can refuse bob, git has to make refusing possible, and it does so with one command most people never use directly: `git update-ref --stdin`. This section explains the two properties git-locks leans on, because the refusal in the example is nothing more than git enforcing them.
-
-The first property is that a ref update can be conditional. `update-ref` takes an old value alongside the new one, and if the ref does not currently hold that old value, the update fails. A `create` is the special case where the expected old value is "nothing": it fails if the ref already exists. That is a compare-and-swap, and git takes a lock file on the ref while it checks, so two processes cannot both pass.
-
-The second property is that several ref updates can be one transaction. On stdin, `start`, then any number of `create`, `update`, `delete` and `verify` lines, then `prepare` and `commit`. Every line is checked before any is applied, and if one fails, none are applied. This is the core of the stanza alice's claim sent, reconstructed from the code path in `bin/git-locks`; the real stanza also carries a `verify` that no prefix lock exists on `notes/` and a `create` of the directory token for `notes/`, omitted here:
-
-```text
-start
-create refs/locks/paths/57982dc… 75f0c1f…
-create refs/locks/jobs/alice-report 75f0c1f…
-prepare
-commit
-```
-
-The `create` on the path ref is the whole lock. If bob's process had sent its own stanza at the same instant, git would have accepted one `create` on that ref and failed the other, and the failed transaction would have created nothing, including its job ref. A claim on three paths is three `create` lines in one stanza; if one path is taken, the other two are not, either.
-
-```mermaid
-sequenceDiagram
-  participant A as alice's claim
-  participant G as git update-ref
-  participant B as bob's claim
-  A->>G: start / create paths/57982dc / create jobs/alice-report / commit
-  B->>G: start / create paths/57982dc / create jobs/bob-report / commit
-  G-->>A: ok, both refs written
-  G-->>B: fatal, paths/57982dc already exists, nothing written
-  B->>G: read paths/57982dc
-  G-->>B: blob 75f0c1f, holder alice
-  B-->>B: print refused line, exit 1
-```
-
-<details>
-<summary>Figure 2 - Two claims race for one ref</summary>
-
-Both claimants send a transaction. Git serialises them at the ref: one `create` succeeds, the other fails and its transaction applies nothing. The loser then reads the ref that beat it to name the holder.
-
-</details>
-
-| Turn | What happened | Why it is safe |
-|---|---|---|
-| alice sends her stanza | both refs are created | no ref named after the path existed |
-| bob sends his stanza | `create` on the path ref fails | git checked the ref under its own lock file |
-| bob's job ref | never created | the failed transaction applied nothing |
-| bob reads the path ref | finds alice's blob | that is where the holder's name lives |
-
-In summary, git-locks does not implement locking; git does. The tool decides what refs to ask for and turns git's yes or no into a line that names the holder.
-
-> **Intuition to carry forward:** every change git-locks makes is one `update-ref` transaction, and every replacement of an existing ref carries the old value it expects. That is what makes expiry and semaphores safe later on.
-
-## The refusal, traced through the model
-
-With the model in place, bob's refused claim in the example is fully explained, and this section walks it through step by step so nothing is left to trust. The claim reads before it writes; the read is what lets it name alice, and the transaction is what protects the read from going stale.
-
-When bob runs `claim`, the tool first hashes `notes/report.md`, finds `refs/locks/paths/57982dc…` already exists, and reads its blob. The blob says `holder: alice`, `job: alice-report`, and `expires: 1757995200`, which is in the future. So the tool does not even send a transaction: it prints the refusal line on stderr and exits 1. That is the line from the example:
-
-```text
-{"event":"refused","path":"notes/report.md","holder":"alice","job":"alice-report","expires":1757995200}
-```
-
-Had the ref not existed when bob read, but been created by alice a millisecond later, bob's transaction would have failed instead, and the tool would then read the ref and print the same refusal line. Two different code paths, one contract: a refusal names the holder. The store afterwards is unchanged by bob, which is why the git graph after bob's attempt is Figure 1 again with nothing added.
-
-The other outcome in the example is `release`. Alice's release is also one transaction, this time `delete` lines, each carrying the blob it expects the ref to hold. If some other process had replaced the path ref in the meantime, alice's delete of that ref would fail rather than remove someone else's lock. After the release no job or path ref remains (the directory token for `notes/` stays, still pointing at the old record but deciding nothing), and bob's second claim is a fresh Figure 1 with his names in it.
-
-```mermaid
-gitGraph
-  commit id: "empty store"
-  branch refs/locks/jobs/alice-report
-  checkout refs/locks/jobs/alice-report
-  commit id: "75f0c1f alice claims"
-  checkout main
-  commit id: "alice releases: both refs deleted"
-  branch refs/locks/jobs/bob-report
-  checkout refs/locks/jobs/bob-report
-  commit id: "new blob: bob, notes/report.md" type: HIGHLIGHT
-```
-
-<details>
-<summary>Figure 3 - Release, then bob's claim</summary>
-
-Alice's release deletes both of her refs in one transaction. Bob's claim then creates his own two refs pointing at a new blob. Nodes are blobs and branches are refs; the `main` line only marks time.
-
-</details>
-
-In summary, a refusal is a read of the winning blob, a release is a guarded delete, and neither leaves anything behind that the next reader could mistake for a live lock.
-
-## Expiry, and why nothing has to clean up
-
-A lock held by a process that died would block its path forever unless something ended it, and git-locks ends it with time rather than with a cleaner. This section shows how `expires` in the record does that job, and what the tool does when it finds an expired lock in its way.
-
-Every record carries `expires`, four hours after `claimed` unless `--ttl` said otherwise. Every read compares it to the clock. `check` reports an expired lock as `expired`, with `remaining: 0`, and exits 0 for that path because it is free to take. `list` and `show` report `state: expired`. Nothing deletes anything until a writer needs the path.
-
-When a claim finds an expired lock on a path it wants, it evicts the whole expired lock inside its own transaction: an `update` on the path ref carrying the expired blob as the expected old value, plus `delete` lines for the expired lock's job ref and its other path refs. If a racing claimant evicted first, the old value no longer matches and this transaction fails cleanly. `sweep` does the same eviction for every expired lock, on demand, and `extend --job` moves a live lock's expiry forward by rewriting its blob and `update`-ing every ref that pointed at the old one.
-
-| Situation | What `check` says | What a claim does |
-|---|---|---|
-| ref exists, `expires` in the future | `held`, names the holder, exit 1 | refuses, names the holder |
-| ref exists, `expires` in the past | `expired`, names the last holder, exit 0 | evicts the old lock and takes the path, one transaction |
-| no ref | `free`, exit 0 | creates the ref |
-
-In summary, expiry is a field, not a process. A dead holder's lock is free the moment its time is up, and the next writer removes it as part of taking the path.
-
-## Families and batches: all or nothing across locks
-
-One transaction per claim already makes a multi-path claim atomic; this section extends that to several locks at once, in two forms that share one mechanism. A child lock is tied to a parent so that the family lives and dies together, and a batch claims several independent locks in one stanza.
-
-A child is a claim with `--parent <job>`. Its record gains a `parent:` line. Child admission rewrites the parent's record with a bumped family generation and compares against the record it read. The parent must be live and held by the same holder at planning time; the expected record detects an intervening change such as release. The clock is checked at planning time, so this does not recheck expiry at commit or make concurrent reads consistent. Releasing or sweeping a parent collects every descendant, transitively, and deletes them all in the same transaction, so a child never outlives its parent. The release line lists them as `cascaded`.
-
-A batch is `git locks batch` reading records on stdin, each record in the same blank-line-separated form as the blob itself. Every record is planned into one stanza, and a child may name a parent that appears earlier in the same batch. If any path in any record is held, or any parent check fails, the stanza is never sent and nothing is claimed.
-
-```mermaid
-flowchart TD
-  P["parent: build (alice)"]
-  C1["child: build-docs (alice)"]
-  C2["child: build-site (alice)"]
-  G["grandchild: build-site-assets (alice)"]
-  P --> C1
-  P --> C2
-  C2 --> G
-  R["release --job build"] --> P
-  style R fill:#f8d7da,stroke:#c0392b
-  style P fill:#f8d7da,stroke:#c0392b
-  style C1 fill:#f8d7da,stroke:#c0392b
-  style C2 fill:#f8d7da,stroke:#c0392b
-  style G fill:#f8d7da,stroke:#c0392b
-```
-
-<details>
-<summary>Figure 4 - A family released whole</summary>
-
-Releasing `build` deletes the refs of every lock whose parent chain reaches it, in one transaction. The release line reports `"cascaded":["build-docs","build-site","build-site-assets"]`.
-
-</details>
-
-| Form | Guarantee | Verified by |
-|---|---|---|
-| `claim --parent` | parent live and same holder when planned, and its record unchanged at commit | an `update` of the parent's refs to a family-bumped record, from the record it read |
-| `release`, `sweep` of a parent | every descendant goes with it | one transaction of `delete` lines |
-| `batch` | all records claimed or none | one stanza for every record |
-| `release --job a --job b` | both families released or neither | one stanza |
-
-In summary, "all or nothing" is never a loop with a rollback. It is one stanza, and git either applies the whole stanza or none of it.
-
-## Semaphores: capacity instead of exclusivity
-
-A path lock says one holder. Some resources are better described by a number: two GPUs, five build agents. This section shows how git-locks gives a named resource a capacity while keeping the same atomicity, and it needs one new idea, a generation token, that the reader has all the pieces for.
-
-Capacity is a positive decimal integer from `1` through `9223372036854775807`. Leading zeros are accepted and normalized: `--capacity 010` means ten and emits JSON `10`. Reads also normalize leading-zero capacities stored by older versions without rewriting their metadata. Invalid or out-of-range input is refused before semaphore refs are created; invalid stored capacity is a `store-read` error, and `doctor` reports it as a `sem-record` finding.
-
-A semaphore is three kinds of ref under `refs/locks/sem/<name>/`. `meta` points at a blob holding the capacity. `slots/<job>` is one ref per holder, pointing at a slot record with the holder and an expiry, exactly like a lock record. And `gen` points at a blob whose only purpose is to change: every transaction on the semaphore writes a fresh generation blob and `update`s `gen` from the generation it read. Two acquirers that both read "2 of 3 live" both try to move `gen` from the same old value; git lets exactly one through, and the other re-reads and finds the semaphore full. Here is the example's semaphore, capacity 2, filled by alice and bob, then refused to carol:
-
-```text
-$ git locks sem create gpu --capacity 2
-{"event":"created","semaphore":"gpu","capacity":2}
-$ git locks sem acquire gpu --job train-1 --holder alice
-{"event":"acquired","semaphore":"gpu","job":"train-1","holder":"alice","claimed":1757980800,"expires":1757995200,"live":1,"capacity":2}
-$ git locks sem acquire gpu --job train-2 --holder bob
-{"event":"acquired","semaphore":"gpu","job":"train-2","holder":"bob","claimed":1757980800,"expires":1757995200,"live":2,"capacity":2}
-$ git locks sem acquire gpu --job train-3 --holder carol
-{"event":"refused","reason":"capacity","semaphore":"gpu","capacity":2,"live":2}
-(exit 1)
-```
-
-And the store afterwards, again in plain git:
-
-```text
-$ git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" for-each-ref refs/locks/sem/
-5cd95224… blob	refs/locks/sem/gpu/gen
-cc04fb6d… blob	refs/locks/sem/gpu/meta
-60ebcc0f… blob	refs/locks/sem/gpu/slots/train-1
-cc694fe0… blob	refs/locks/sem/gpu/slots/train-2
-```
-
-The `gen` ref is the part that makes capacity a hard limit rather than a hope. Without it, two acquirers could each count two live slots below a capacity of three and each create a slot, giving four. With it, each acquire is `create slots/<job>` plus `update gen <new> <old-I-read>` in one stanza, and only one stanza per generation can commit.
-
-```mermaid
-gitGraph
-  commit id: "create: meta cap 2"
-  branch refs/locks/sem/gpu/gen
-  checkout refs/locks/sem/gpu/gen
-  commit id: "gen g0"
-  commit id: "gen g1 (alice takes train-1)"
-  commit id: "gen g2 (bob takes train-2)" type: HIGHLIGHT
-```
-
-<details>
-<summary>Figure 5 - The generation ref moves once per successful transaction</summary>
-
-Each successful acquire moves `gen` to a fresh blob; a refusal moves nothing, which is why carol does not appear on the line. She read generation `g2`, counted two live slots against capacity two, and was refused before sending anything. Had she raced bob and read `g1`, her `update gen g3 g1` would have failed because `gen` was already at `g2`, and she would have re-read and been refused the same way.
-
-</details>
-
-| Ref | Points at | Changes when |
-|---|---|---|
-| `sem/gpu/meta` | the capacity | never, after `create` |
-| `sem/gpu/slots/<job>` | one holder's slot record, with expiry | acquire, release, eviction of an expired slot |
-| `sem/gpu/gen` | a fresh token | every transaction on the semaphore |
-
-In summary, a semaphore is a set of slot refs plus one ref that every writer must move, and the compare-and-swap on that one ref is what keeps the count honest under contention. Twenty racers on capacity three winning exactly three times is a test in `test/test.sh`, not a promise.
+Existing per-ref stores require an [offline migration](docs/state-protocol.md#upgrade). Stop every old client before running `git locks migrate --offline`; ordinary commands refuse the old layout.
 
 ## Wrapping a command: claim, run, release
 
@@ -363,23 +120,23 @@ An outside review of 0.2.1 found the guarantees running ahead of the implementat
 
 **What a successful acquisition authorises, and how it is identified.** A claim admits one *acquisition*, and three names apply to it, kept distinct on purpose. The **job id** is a label a person or an orchestrator chooses; it can be reused, and a later claim under the same job is a new acquisition that replaces the old one, unless the old one still has stored descendants (see what `parent` means, below). The **acquisition id** (`acquisition` on the claim line) is minted by the claim and kept by every rewrite of the record: `extend`, and the family bump a child admission performs on a parent. The **record** (`record`) is the object id of the current version of that record, and changes on every rewrite. `release --job X --acquisition <id>` releases that acquisition and only that one, across any number of renewals; `--record <oid>` releases only if the record is exactly that version. If the job now holds a different acquisition, the answer is `{"event":"nothing","reason":"superseded"}` and nothing moves. `with` remembers the acquisition it made and releases by it, so an invocation that outlives a re-claim of its job name cannot release someone else's lock, and one whose command renewed the lock still releases it. Semaphore slots carry the same two ids.
 
-**What binds the membership you observed to the decision you commit.** Every write is compiled into one transition per ref with the old value it expects, and sent as one transaction; a stale expectation fails the whole transaction and the command re-reads and re-plans a bounded number of times. Family membership is bound through the parent's own record: admitting a child rewrites the parent's blob with a bumped `family` generation and moves the parent's refs to it, so a release or sweep that planned against the old parent fails when a child was admitted meanwhile, and re-plans with the child in view. Semaphore capacity is bound through the semaphore's generation ref the same way. A snapshot is a cached read taken under one `for-each-ref`; it is not a consistent cut. Expected ref values detect stale values, but do not by themselves establish that membership and its generation were observed coherently. The [membership observation study](docs/studies/membership-observation/README.md) exposes synthetic counterexamples in families, semaphores and prefixes; [#45](https://github.com/git-stunts/locks/issues/45) tracks the unresolved correctness fix. A live Git schedule producing those observations has not been reproduced.
+**What binds the membership you observed to the decision you commit.** A single root identifies all immutable entries used in planning. Publication compares that root, so a competing membership change invalidates the entire plan. This replaces the old per-ref generation protocol whose synthetic failures are retained in the [membership observation study](docs/studies/membership-observation/README.md). The [state protocol](docs/state-protocol.md) describes the proof obligation and its limits.
 
-**What `parent` means.** Ownership plus lifetime, not dependency ordering. A child is admitted only under a live parent held by the same holder. Liveness and holder are checked at planning time; what the generation bump adds at commit time is that the parent's record is unchanged since that check, so a release, a renewal or another child cannot have slipped in between. The bump does not re-check the clock: a parent that expires during the microseconds between planning and commit is still bumped, and its family ends at the next sweep or claim over it. The child is released or swept whenever the parent is, by any command, including a claim that evicts an expired parent. Expiry is not inherited: a child keeps its own `expires`, and a parent's expiry ends the family. Renewing a parent (`extend`) keeps its family and acquisition identity.
+**What `parent` means.** Ownership plus lifetime, not dependency ordering. A child is admitted only under a live parent held by the same holder. Liveness and holder are checked at planning time; the root comparison ensures that the complete state is unchanged since that check, so a release, a renewal or another child cannot have slipped in between. The comparison does not re-check the clock: a parent that expires during the microseconds between planning and commit is still bumped, and its family ends at the next sweep or claim over it. The child is released or swept whenever the parent is, by any command, including a claim that evicts an expired parent. Expiry is not inherited: a child keeps its own `expires`, and a parent's expiry ends the family. Renewing a parent (`extend`) keeps its family and acquisition identity.
 
 A child stores its parent's **job name**, but belongs to the **acquisition** that admitted it. To preserve that binding without adding an acquisition field to each child, `claim` and `batch` refuse to replace any job with stored descendants, even for the same holder. This includes reparenting that job and descendants that have expired but have not yet been released or swept. Use `extend` to renew a parent; release or sweep its descendants before replacing it, or release the parent to end the whole family. Recreating the name after release starts a fresh acquisition with no old descendants. A leaf can still be replaced or reparented under a live parent with the same holder. Self-parenting and indirect cycles are refused.
 
 These rules also apply inside a batch. Replacing a leaf and then admitting a new child under it is allowed. Admitting a child and then replacing its parent is refused, as is replacing a parent with children already stored, even if the batch also replaces those children. Refusals use `reason: "parent"` with `detail: "cycle"` or `detail: "descendants"`, exit 1 and leave all refs unchanged. For `descendants`, both `job` and `parent` name the job whose acquisition would be replaced.
 
-The replacement transaction checks the old job record, whose family generation moves on child admission. Ancestry checks also verify the observed ancestor records, so concurrent reparenting between planning and commit invalidates the plan. The tests force child admission and replacement in both orders, and compare seeded command histories with an independent family model. These checks cover changes after the cached observation; they do not establish that membership and generation came from a coherent observation during a partially visible multi-ref transaction. That separate investigation is tracked in [#38](https://github.com/git-stunts/locks/issues/38).
+Replacement and ancestry decisions use the same immutable root as the rest of the operation. The tests force child admission and replacement in both orders and compare seeded command histories with an independent family model.
 
-**What a path identifies.** The lexical form after normalisation: leading `./`, empty segments and `.` segments are removed; absolute paths and `..` are refused. `dir//file` and `dir/./file` are one key. Literal `*`, `?` and bracket characters stay unchanged; files in the working tree never expand or otherwise rewrite a requested path. Case, symlinks and hard links are not resolved. A trailing `/` is kept and means a prefix: `dir/` covers every path under it, and is covered by any live lock under it, in both directions and inside the transaction (a directory token ref per level, compared-and-swapped by every claim, is what makes a stale scan fail rather than land); `dir` without the slash is the directory entry itself, a different key, and a prefix does not cover it. Before 0.7.0 the slash was stripped; that is the one normalisation rule that changed.
+**What a path identifies.** The lexical form after normalisation: leading `./`, empty segments and `.` segments are removed; absolute paths and `..` are refused. `dir//file` and `dir/./file` are one key. Literal `*`, `?` and bracket characters stay unchanged; files in the working tree never expand or otherwise rewrite a requested path. Case, symlinks and hard links are not resolved. A trailing `/` is kept and means a prefix: `dir/` covers every path under it, and is covered by any live lock under it, in both directions and inside the transaction (the root comparison invalidates a plan after any intervening state change); `dir` without the slash is the directory entry itself, a different key, and a prefix does not cover it. Before 0.7.0 the slash was stripped; that is the one normalisation rule that changed.
 
 **What a lock does not do.** It is a cooperative, time-bounded reservation. `with` claims once, runs, and releases; it does not renew, so the reservation can expire under a long command and another claimant may take the path. Give `--ttl` the command's worst case, or renew with `extend` from inside it. A `check` that says free is an observation, not an admission; the protected write needs a claim.
 
 **What a failed read is.** An error, never a free path. If `for-each-ref` or `cat-file` fails, or an object does not parse, the command exits 2 with `{"event":"error","reason":"store-read"}` and reports nothing as free or held. Each refreshed snapshot validates authoritative job/path records, semaphore metadata, and semaphore slots before normal commands use them. Missing required fields, duplicate headers, invalid identities, and unsafe numeric fields are store-read errors. Decimal fields accept leading zeros on disk and normalize them before arithmetic or JSON output; values must fit a nonnegative signed 64-bit integer, and capacity must be positive. A parent at the maximum family generation can still be read or released; child admission fails before its generation would overflow. Directory and semaphore generation tokens remain opaque. `doctor` uses the same record validation to report findings instead of refusing a decodable snapshot.
 
-**What the invariants are, and how to see them hold.** `git locks doctor` reads one snapshot and checks it, writing nothing: every job record decodes and names its own job; every path a record lists has a path ref pointing at that record; every path ref points at a record some job ref points at, and that record lists the path; every child's parent exists, is live and has the same holder, and no parent chain cycles; every semaphore has its meta and gen refs, its records decode, and its live slots fit its capacity. Each broken invariant is one `finding` line as it is found, and the last line states the basis it was checked against, the refs and records of that one snapshot and the clock, so a clean report says what was clean. An unreadable store is an error, never healthy. Repair is not a mode of this command; when a finding needs a hand, the fix is a `release`, a `sweep`, or an explicit `update-ref` on the store by someone who has read the finding.
+**What the invariants are, and how to see them hold.** `git locks doctor` reads one snapshot and checks it, writing nothing: every job record decodes and names its own job; every path a record lists has a path ref pointing at that record; every path ref points at a record some job ref points at, and that record lists the path; every child's parent exists, is live and has the same holder, and no parent chain cycles; every semaphore has its meta and gen refs, its records decode, and its live slots fit its capacity. Each broken invariant is one `finding` line as it is found, and the last line states the basis it was checked against, the refs and records of that one snapshot and the clock, so a clean report says what was clean. An unreadable store is an error, never healthy. Repair is not a mode of this command; when a finding needs a hand, the fix is a `release`, a `sweep`, or an explicit offline reconstruction of the state tree by someone who has read the finding.
 
 **What the tests are.** A contract with bounded conformance evidence, not a proof. The race tests show one winner among twenty racers and three among twenty on capacity three, in those runs. The interleaving that let a child survive its parent's release is forced deterministically with `GIT_LOCKS_PAUSE_BEFORE_COMMIT`, a test-only gate that makes a transaction wait for a file before committing, and the invariant is asserted on the resulting store.
 
@@ -399,7 +156,7 @@ For a consumer, done is a checklist you can run:
 
 - `git locks claim` on a free path exits 0 and prints one `claimed` line with a `record`; on a held path it exits 1 and the stderr line names the holder.
 - `git locks check <path>` exits 1 exactly while the path is held by an unexpired lock, and exits 2, saying so, when the store cannot be read.
-- `git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" for-each-ref` shows every lock, and your project's `git for-each-ref refs/locks/` shows nothing.
+- `git --git-dir "$(git locks store | sed -E 's/.*"store":"([^"]*)".*/\1/')" ls-tree -r refs/locks/state` shows every entry, and your project's `git for-each-ref refs/locks/` shows nothing.
 - `git locks with … -- cmd` exits with `cmd`'s status and releases the acquisition it made, even after Ctrl-C, even if its job name was re-claimed meanwhile.
 - `git locks sem show <name>` never reports `live` above `capacity`, under any number of racers.
 - Every line you receive, on either stream, parses as JSON and validates against `git locks schema`.
@@ -426,6 +183,7 @@ Output is JSON Lines on every command; there is no text mode.
 | `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <cmd>...` | claim, run the command, release by the acquisition it made; `--wait` retries once a second until the requested paths and, if `--sem` is given, a semaphore slot are available or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
+| `migrate --offline` | import legacy state after stopping all old clients | one `migrated` object with root and entry count | 0 migrated/already current, 2 on error |
 | `doctor` | read-only invariant check of the store; nothing is repaired | one `finding` object per broken invariant as it is found, then one `doctor` object with the basis (refs, records, clock), the checks run and the verdict | 0 healthy, 1 with findings, 2 if the store cannot be read |
 | `sem create <name> --capacity <n>` | a semaphore with n slots | one `created` object | 0, 1 if it exists |
 | `sem acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]` | take a slot; re-acquiring refreshes the job's own slot; `--wait` retries once a second | one `acquired` object with `live` and `capacity` | 0, 1 when full |
@@ -476,7 +234,7 @@ The source is `lib/`, one module per section in numeric order (`000-prelude.sh` 
 - One machine. The store is local; a shared remote would need a fetch before every claim and is out of scope.
 - `git rev-parse --path-format=absolute` and `update-ref --stdin` transactions need git 2.31 or newer.
 - bash 4 or newer: the store snapshot uses associative arrays. macOS's `/bin/bash` is 3.2; the script's shebang finds a newer bash on `PATH` (Homebrew's, for instance).
-- Each command reads the store once (`for-each-ref` plus one `cat-file --batch`) and every transaction invalidates that snapshot, so an invocation is a handful of git processes however many locks exist; the test suite pins the counts with a shim that counts spawns. Process count is not time: the snapshot is parsed in bash, so work grows linearly with the store, and `list` renders every record without forking. Measured on 500 locks (macOS, bash 5.3, 0.4.0): `check` 0.28 s, `show` 0.25 s, `claim` 0.33 s, `list` 0.58 s; the same store under 0.3.2 took 0.87 s, 0.85 s, 1.0 s and 6.75 s. A store of hundreds of live locks is fine; one of many thousands will feel the snapshot.
+- Commands load one immutable root, its tree entries, and record blobs. Git process counts stay bounded, but scanning and index construction grow with the store. All writers contend on the root. Previous per-ref benchmark results are historical, not measurements of this layout.
 - Released history is part of the store too: directory tokens outlive their claims, so a store with no live locks can still be slow to read. Historical directory-token measurements have a calibrated generator and an informational runner in [`scripts/benchmark-directory-tokens.sh`](scripts/benchmark-directory-tokens.sh). See the [benchmark protocol](docs/benchmarks/directory-tokens.md) for fixture semantics, resource bounds, and reproducible commands. Timings are not CI gates, and the first retained run is resource-confounded rather than a baseline.
 - Every command reads the store once, plans, then commits with expectations. A racer can win in between; the transaction then fails and the command re-plans or reports who won. That is the designed outcome, not a gap.
 - The tests are bounded conformance evidence. Twenty racers and one forced interleaving are what the suite shows; they are not a proof over every schedule.

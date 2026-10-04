@@ -54,8 +54,14 @@ def fields(body):
 
 def read_state(store):
     refs = refmap(store)
+    root = refs.get("refs/locks/state")
+    if root is not None:
+        if set(refs) != {"refs/locks/state"}:
+            raise RuntimeError(("mixed physical authority", refs))
+        refs = {"refs/locks/" + line.split("\t")[1]: line.split()[2]
+                for line in git(store, "ls-tree", "-r", root).splitlines()}
     objects = {oid: git(store, "cat-file", "blob", oid) for oid in set(refs.values())}
-    return {"refs": refs, "objects": objects}
+    return {"refs": refs, "objects": objects, **({"root": root} if root else {})}
 
 
 def violations(state):
@@ -138,17 +144,21 @@ def scenario(case, domain, seed, binary):
 
 def run_case(case, domain, seed, mask, binary, shim, inject_read=None):
     store, env, before, after, action = scenario(case, domain, seed, binary)
-    changed = sorted(ref for ref in before["refs"].keys() | after["refs"].keys() if before["refs"].get(ref) != after["refs"].get(ref))
-    expected_count = {"family": 4, "semaphore": 2, "prefix": 3}[domain]
+    tree_format = "root" in after
+    before_observation = {"refs/locks/state": before["root"]} if tree_format else before["refs"]
+    after_observation = {"refs/locks/state": after["root"]} if tree_format else after["refs"]
+    changed = sorted(ref for ref in before_observation.keys() | after_observation.keys()
+                     if before_observation.get(ref) != after_observation.get(ref))
+    expected_count = 1 if tree_format else {"family": 4, "semaphore": 2, "prefix": 3}[domain]
     if len(changed) != expected_count:
         raise RuntimeError(("fixture transition shape changed", domain, changed))
-    observed = dict(before["refs"])
+    observed = dict(before_observation)
     selection = {}
     for index, ref in enumerate(changed):
-        source = after if mask & (1 << index) else before
-        selection[ref] = "after" if source is after else "before"
-        if ref in source["refs"]:
-            observed[ref] = source["refs"][ref]
+        source = after_observation if mask & (1 << index) else before_observation
+        selection[ref] = "after" if source is after_observation else "before"
+        if ref in source:
+            observed[ref] = source[ref]
         else:
             observed.pop(ref, None)
     write_refs(case / "observed.refs", observed)
@@ -164,8 +174,20 @@ def run_case(case, domain, seed, mask, binary, shim, inject_read=None):
         raise RuntimeError(("planner injection did not run", domain, action))
     final = read_state(store)
     bad = violations(final)
+    if tree_format:
+        # A blind root overwrite can erase the winner instead of leaving two
+        # conflicting records. A final-state overlap oracle alone misses that.
+        if domain in ("prefix", "semaphore"):
+            if result.returncode != 1 or final["refs"] != after["refs"]:
+                bad.append({"invariant": "committed-reservation-preserved", "domain": domain})
+        else:
+            released = json.loads(result.stdout) if result.returncode == 0 else {}
+            children = sorted(ref.removeprefix("refs/locks/jobs/") for ref in after["refs"]
+                              if ref.startswith("refs/locks/jobs/") and ref != "refs/locks/jobs/" + action[-1])
+            if released.get("cascaded") != children or released.get("paths") != 2:
+                bad.append({"invariant": "family-release-complete", "domain": domain})
     write_json(case / "final.json", final)
-    record = {"domain": domain, "seed": seed, "mask": mask, "changed": selection, "observation": "synthetic-per-ref-before-after", "command": action, "exit": result.returncode, "violations": bad, "reads": (case / "reads.log").read_text().splitlines(), "injected_read": inject_read or (1 if domain == "prefix" else 2), "transactions": int((case / "transaction-count").read_text()) if (case / "transaction-count").exists() else 0}
+    record = {"domain": domain, "seed": seed, "mask": mask, "changed": selection, "observation": "synthetic-root-before-after" if tree_format else "synthetic-per-ref-before-after", "command": action, "exit": result.returncode, "violations": bad, "reads": (case / "reads.log").read_text().splitlines(), "injected_read": inject_read or (1 if domain == "prefix" else 2), "transactions": int((case / "transaction-count").read_text()) if (case / "transaction-count").exists() else 0}
     write_json(case / "result.json", record)
     return record
 
@@ -240,15 +262,16 @@ def study(args, shim):
         "python": sys.version.splitlines()[0],
     }
     write_json(output / "provenance.json", provenance)
+    tree_format = "root" in json.loads((output / "calibration-family/healthy.json").read_text())
     results = []
     for seed in args.seeds:
         for domain in args.domains:
-            size = {"family": 16, "semaphore": 4, "prefix": 8}[domain]
+            size = 2 if tree_format else {"family": 16, "semaphore": 4, "prefix": 8}[domain]
             for mask in range(size):
                 result = run_case(output / f"{domain}-{seed}-{mask:02d}", domain, seed, mask, str(Path(args.binary).resolve()), shim)
                 results.append(result)
                 print(json.dumps(result), flush=True)
-    report = {"observation": "synthetic-per-ref-before-after", "live_git_race_reproduced": False, "cases": len(results), "violating_cases": sum(bool(r["violations"]) for r in results), "results": results, "calibration": calibration}
+    report = {"observation": "synthetic-root-before-after" if tree_format else "synthetic-per-ref-before-after", "live_git_race_reproduced": False, "cases": len(results), "violating_cases": sum(bool(r["violations"]) for r in results), "results": results, "calibration": calibration}
     report["production_safety"] = "FAIL" if report["violating_cases"] else "PASS_WITHIN_TESTED_SYNTHETIC_CASES"
     write_json(output / "report.json", report)
     print(json.dumps({key: value for key, value in report.items() if key not in ("results", "calibration")}), flush=True)

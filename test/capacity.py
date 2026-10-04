@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='git-locks-capacity-') as tmp:
         return data
 
     def git(*args, input=None):
-        return subprocess.run(['git', '--git-dir=' + env['GIT_LOCKS_STORE'], *args],
+        return subprocess.run(['python3', str(ROOT / 'test/store-fixture.py'), '--git-dir=' + env['GIT_LOCKS_STORE'], *args],
                               cwd=tmp, env=env, text=True, input=input,
                               capture_output=True, check=True).stdout.strip()
 

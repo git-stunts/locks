@@ -32,15 +32,12 @@
 # worktrees), or persistently with `git config locks.store <path|self>`.
 # Precedence: environment, then config, then the default.
 #
-# A lock is one blob (a plain-text record: job, holder, claimed, expires,
-# optional parent, a family generation, and the paths) pointed at by
-# refs/locks/jobs/<id> and by refs/locks/paths/<h> for every path, where <h>
-# is git's own hash of the normalised path string. Every command reads the
-# store once (for-each-ref plus one cat-file --batch) and compiles its intent
-# into one transition per ref (create, update from an expected old value,
-# delete with an expected old value, or verify), sent as a single
-# `git update-ref --stdin` transaction. A stale expectation fails the whole
-# transaction; commands that can re-plan do so a bounded number of times.
+# Immutable reservation blobs are indexed by jobs, paths, and semaphore slots
+# inside a Git tree. refs/locks/state is the sole mutable authority. Commands
+# read one root, plan against its complete state, build a successor in a private
+# Git index, and publish only if the root is unchanged. Contenders replan.
+# Legacy per-ref stores require an explicit offline migration with all old
+# clients stopped. See docs/state-protocol.md.
 #
 # Exit codes: 0 done (or free), 1 refused / held, 2 usage or a store error.
 # GIT_LOCKS_NOW=<epoch seconds> fixes the clock (tests).
@@ -80,6 +77,7 @@ usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent 
        git locks sem     create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]
                                   | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>
        git locks doctor
+       git locks migrate --offline
        git locks version
        git locks help | schema
 
@@ -115,6 +113,8 @@ doctor   read-only invariant check of the store: one finding line per problem, t
          basis (refs and records read, the clock) and the verdict; exit 1 on findings, 2 when the store
          cannot be read (an unreadable store is never healthy). Diagnosis only: nothing is repaired
 schema   print the JSON Schema every output line conforms to
+migrate  import a legacy per-ref store into one immutable state tree. Stop every
+         old reader and writer first; --offline asserts that this has been done.
 
 output:  JSON Lines, always: one object per result on stdout, written as each result is known;
          refusals and errors are objects on stderr; help is a usage object; schema is the schema on one
@@ -161,6 +161,7 @@ sub_usage_text() {
     extend) printf 'usage: git locks extend --job <id> --ttl <seconds>\n' ;;
     with) printf 'usage: git locks with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--note <text>] [<path>...] -- <command>...\n' ;;
     doctor) printf 'usage: git locks doctor\n' ;;
+    migrate) printf 'usage: git locks migrate --offline (all old readers and writers must be stopped)\n' ;;
     sem) printf 'usage: git locks sem create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>] | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>\n' ;;
     *) usage_text ;;
   esac

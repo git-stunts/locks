@@ -54,13 +54,16 @@
     },
     {
       "$ref": "#/$defs/usage_line"
+    },
+    {
+      "$ref": "#/$defs/migration_line"
     }
   ],
   "$defs": {
     "job": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
-      "description": "The job id, as given to --job. Names the lock: refs/locks/jobs/<job>."
+      "description": "The job id, as given to --job. Names the lock: jobs/<job> in the tree at refs/locks/state."
     },
     "holder": {
       "type": "string",
@@ -915,7 +918,7 @@
     },
     "error_line": {
       "type": "object",
-      "description": "On stderr: a usage failure (exit 2), a store that could not be read (exit 2; nothing is reported free or held), or a failed operation (exit 1).",
+      "description": "On stderr: a usage failure (exit 2), a store that could not be read or written (exit 2; nothing is reported free or held), or a failed operation (exit 1).",
       "required": [
         "event",
         "reason",
@@ -929,6 +932,7 @@
           "enum": [
             "usage",
             "store-read",
+            "store-write",
             "failed"
           ]
         },
@@ -1086,6 +1090,32 @@
     "via": {
       "$ref": "#/$defs/path",
       "description": "The covering lock's own path when it differs from the one asked about or claimed: the prefix above it, or the path under a wanted prefix. Absent when the lock is on the path itself."
+    },
+    "migration_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "format",
+        "root",
+        "entries"
+      ],
+      "properties": {
+        "event": {
+          "const": "migrated"
+        },
+        "format": {
+          "const": "git-locks-state/1"
+        },
+        "root": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+        },
+        "entries": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

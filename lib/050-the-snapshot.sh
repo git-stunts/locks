@@ -1,11 +1,9 @@
 # ---------------------------------------------------------------- the snapshot
 #
-# One for-each-ref and one cat-file --batch per invocation; every reader below
-# comes from these two arrays. A read that fails, or an object that does not
-# parse, is a store error: it is never reported as "free". Every transaction
-# invalidates the snapshot; the next read takes a fresh one. A snapshot is a
-# cached read taken under one for-each-ref, not a proof of a consistent cut;
-# every write below carries the expectations that make a stale read fail.
+# One root ref, one recursive tree read, and one cat-file --batch. The root
+# identifies an immutable coherent state even when another writer publishes
+# during the read. A transaction compares that root before publishing its
+# successor. Unreadable or legacy state is never reported as "free".
 
 declare -A REF_OID=()   # ref -> oid
 declare -A BLOB=()      # oid -> record text
@@ -45,16 +43,40 @@ parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], on
 
 snapshot() {
   local -A refs=() blobs=()
-  local rows ref oid oids=() rc
-  rows="$(g for-each-ref --format='%(refname) %(objectname)' "${NS}/" 2>&1)"
+  local rows ref oid oids=() rc mode kind path symref
+  rows="$(g for-each-ref --format='%(refname) %(objectname) %(symref)' "${NS}/" 2>&1)"
   rc=$?
   ((rc == 0)) || store_error "for-each-ref exited ${rc}: ${rows}"
-  while IFS=' ' read -r ref oid; do
+  STATE_OID=''
+  while IFS=' ' read -r ref oid symref; do
     [[ -z "${ref}" ]] && continue
     valid_oid "${oid}" || store_error "for-each-ref line does not parse: ${ref} ${oid}"
-    refs["${ref}"]="${oid}"
-    oids+=("${oid}")
+    [[ -z "${symref}" ]] || store_error 'state authority must use direct refs, not symbolic refs'
+    if [[ "${ref}" != "${STATE_REF}" ]]; then
+      ((SNAP_LEGACY_ALLOWED)) || store_error 'legacy per-ref state: stop all writers, then run git locks migrate --offline'
+      refs["${ref}"]="${oid}"
+      oids+=("${oid}")
+      continue
+    fi
+    [[ -z "${STATE_OID}" ]] || store_error 'duplicate state root'
+    STATE_OID="${oid}"
   done <<<"${rows}"
+  if [[ -n "${STATE_OID}" ]]; then
+    ((${#refs[@]} == 0)) || store_error 'state root and legacy refs coexist; restore the store before use'
+    kind="$(g cat-file -t "${STATE_OID}" 2>&1)" || store_error "cannot read state root: ${kind}"
+    [[ "${kind}" == tree ]] || store_error 'state root is not a tree'
+    rows="$(g ls-tree -r "${STATE_OID}" 2>&1)" || store_error "cannot read state tree: ${rows}"
+    while IFS=$' \t' read -r mode kind oid path; do
+      [[ -n "${mode}" ]] || continue
+      [[ "${mode}" == 100644 && "${kind}" == blob ]] || store_error 'state entries must be ordinary record blobs'
+      valid_oid "${oid}" || store_error 'invalid state entry object id'
+      [[ "${path}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ && "/${path}/" != *'/../'* && "/${path}/" != *'/./'* && "${path}" != *'//'* ]] || store_error 'invalid state entry name'
+      ref="${NS}/${path}"
+      [[ -z "${refs[${ref}]+x}" ]] || store_error 'duplicate state entry'
+      refs["${ref}"]="${oid}"
+      oids+=("${oid}")
+    done <<<"${rows}"
+  fi
   if ((${#oids[@]} > 0)); then
     local out
     out="$(printf '%s\n' "${oids[@]}" | sort -u | g cat-file --batch 2>&1 && printf x)" # the x keeps trailing newlines

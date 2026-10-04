@@ -12,11 +12,15 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Changed
 
+- **Breaking storage format (#45):** reservations now live in one immutable Git tree, published through a conditional update of `refs/locks/state`. Every membership and absence decision uses that root. Disjoint writers replan after contention; semaphore creation no longer mistakes unrelated publication for an existing semaphore. Stop all old clients and use `git locks migrate --offline` to import a healthy legacy store. No daemon or new production dependency is introduced.
+
 - Tests, benchmarks, lint, and CI use one reusable offline Docker worker with copied source, a fresh unrelated Git fixture, no host mounts, and bounded temporary storage. A pinned git-stunts/docker-guard adapter rejects raw test entry points even with Docker/CI environment flags set. Isolation configuration, logs, and explicitly selected evidence are exported before teardown; production dependencies are unchanged.
 - **Breaking:** re-claiming a parent's acquisition while any of its descendants remain stored, expired ones included, now exits 1 with a `parent` refusal whose detail is `descendants`. Before, a same-holder re-claim replaced the parent and left its children pointing at a superseded acquisition. Scripts that renew a parent by claiming it again must switch to `extend`, or release or sweep the descendants first (#34).
 - The README leads with cooperative path reservations, explains TTL and launcher admission before the first example, and refreshes introductory and wrapper transcripts with acquisition IDs. It clarifies linked-worktree logical ownership, release conditions, and Git concurrent-reader visibility (#37).
 
 ### Fixed
+
+- The full membership observation study is an ordinary test/CI gate (#88). Current-root and stale-root cases cover families, semaphores, and prefixes. Original per-ref counterexample receipts remain historical evidence.
 
 - The README no longer overstates child admission: the parent's liveness and holder are checked at planning time, and the transaction compares the parent's record rather than sending a `verify` line. The claim stanza is marked as simplified (it omits the ancestor-prefix verify and the directory token), directory token refs are noted to outlive a release, and `with` lists `--note` and `--parent` (#37).
 - The README states that `with --wait` also waits for a semaphore slot when `--sem` is given, and the `with` command-table row lists `--sem` and the optional paths (#37).

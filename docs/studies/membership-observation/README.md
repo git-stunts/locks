@@ -1,6 +1,6 @@
 # Membership observation study
 
-The controlled reader exposed unsafe commits in all three studied domains. Across 84 synthetic per-ref observations, 21 commands returned success and left a family, semaphore-capacity or prefix-exclusivity violation. Production code is unchanged. The corrective work is tracked by [#45](https://github.com/git-stunts/locks/issues/45), an unresolved release correctness gate in [#41](https://github.com/git-stunts/locks/issues/41).
+The controlled reader exposed unsafe commits in all three studied domains. Across 84 synthetic per-ref observations, 21 commands returned success and left a family, semaphore-capacity or prefix-exclusivity violation. Those retained receipts describe the historical per-ref implementation. The current implementation uses a [single immutable state root](../../state-protocol.md); this changes the observation space to two complete root values. The runner checks both for each domain and seed (18 cases), retains stale/current and discarded-read controls, and runs as an ordinary test/CI gate. The original 84-case evidence is unchanged.
 
 These are synthetic observation counterexamples executed against real objects and real Git transactions. This study did **not** reproduce a live Git reader/writer schedule. It establishes how the planner behaves when given these mixed observations, and challenges the claim that generation compare-and-swap alone makes any cached observation safe.
 

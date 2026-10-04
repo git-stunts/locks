@@ -23,12 +23,15 @@ test-container:
 	node scripts/require-docker.mjs
 	python3 test/docker-boundary.py
 	python3 test/docker-resources.py
+	python3 test/state-coherence.py
 	bash test/test.sh
 	python3 test/capacity.py
 	bash test/literal-paths.sh
 	bash test/unicode-locale.sh
 	bash test/unicode-locale-calibration.sh
 	bash test/directory-token-churn.sh
+	python3 test/observation/study.py --output /work/artifacts/observation-$$(date +%s)-$$$$
+	python3 test/root-cas-calibration.py
 
 # The study deliberately returns 1 if it exposes a production invariant hole.
 # Choose a fresh output directory; retained receipts are never overwritten.

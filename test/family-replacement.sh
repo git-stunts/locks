@@ -9,7 +9,7 @@ family_refs() {
   local family_store family_line
   family_line="$(git-locks store)"
   jstr family_store "${family_line}" store
-  git --git-dir="${family_store}" for-each-ref --format='%(refname) %(objectname)'
+  fixture_git --git-dir="${family_store}" for-each-ref --format='%(refname) %(objectname)'
 }
 
 family_ok() {
