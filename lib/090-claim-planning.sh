@@ -141,7 +141,7 @@ plan_claim() {    # job holder ttl parent note path... -> plans one claim; sets 
   new_acquisition acq
   joined="$(printf '%s\n' "${wanted[@]}")"
   record_text record "${job}" "${holder}" "${at}" "${expires}" "${parent}" "${old_family:-0}" "${acq}" "${joined}" "${note}"
-  write_blob new_oid "${record}" || fail 'could not write the lock record'
+  write_blob new_oid "${record}"
 
   local evict=() ref cur rjob rexp
   for p in "${wanted[@]}"; do

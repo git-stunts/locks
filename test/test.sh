@@ -944,10 +944,11 @@ BROKEN2="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-broken2.XXXXXX")"
 printf '#!/usr/bin/env bash\nif [[ " $* " == *" update-ref "* ]]; then printf "fatal: injected\\nsecond line with \\"quotes\\"\\n" >&2; exit 128; fi\nexec "%s" "$@"\n' "${REAL_GIT}" >"${BROKEN2}/git"
 chmod +x "${BROKEN2}/git"
 err="$(PATH="${BROKEN2}:${PATH}" git-locks claim --job t --holder h t.md 2>&1 >/dev/null)"
-check "a failed transaction exits 1" "$?" "1"
+check "a permanent transaction failure exits 2" "$?" "2"
 jsonl_ok <<<"${err}" >/dev/null 2>&1
-check "a multi-line git diagnostic inside a refusal is still valid JSON" "$?" "0"
-valid "transaction refusal line" "${err}"
+check "a multi-line git diagnostic inside a store error is still valid JSON" "$?" "0"
+jfields "a permanent transaction failure is an operational store error" "${err}" 'event="error"' 'reason="store-write"'
+valid "transaction error line" "${err}"
 
 # ---------------------------------------------------------------- SHOULD: what a path identifies
 

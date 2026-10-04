@@ -203,7 +203,8 @@ in_list() { # needle list...
 
 write_blob() {  # VAR CONTENT: write CONTENT as a blob, seed the snapshot with it, set VAR to its oid
   local written # not `oid`: printf -v writes to the caller's variable of that name, which a local would shadow
-  written="$(printf '%s\n' "$2" | g hash-object -w --stdin)" || return 1
+  written="$(printf '%s\n' "$2" | g hash-object -w --stdin 2>&1)" || store_write_error "could not write the record: ${written}"
+  valid_oid "${written}" || store_write_error "hash-object returned an invalid record id: ${written}"
   ensure_snapshot
   BLOB["${written}"]="$2"$'\n'
   printf -v "$1" '%s' "${written}"

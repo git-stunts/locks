@@ -34,7 +34,8 @@ declare -A PATH_HASH=() # path -> git's hash of the path string, memoised per in
 path_ref() { # VAR path: set VAR to the path's ref; the hash is memoised in this shell (never call inside $(…))
   local h
   if [[ -z "${PATH_HASH[$2]+x}" ]]; then
-    h="$(printf '%s' "$2" | g hash-object --stdin)" || return 1
+    h="$(printf '%s' "$2" | g hash-object --stdin 2>&1)" || store_error "could not hash a path: ${h}"
+    valid_oid "${h}" || store_error "hash-object returned an invalid path id: ${h}"
     PATH_HASH["$2"]="${h}"
   fi
   printf -v "$1" '%s/paths/%s' "${NS}" "${PATH_HASH[$2]}"

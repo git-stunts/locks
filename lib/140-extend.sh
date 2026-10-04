@@ -20,7 +20,7 @@ cmd_extend() {
     acq="$(field "${oid}" acquisition)"
     field_v note "${oid}" note
     record_text record "${D_JOB}" "${D_HOLDER}" "${claimed}" "${expires}" "${parent}" "${family:-0}" "${acq}" "${paths}" "${note}"
-    write_blob new_oid "${record}" || fail 'could not write the lock record'
+    write_blob new_oid "${record}"
     plan_set "${jref}" "${oid}" "${new_oid}" || fail "${PLAN_CONFLICT}" 1
     while IFS= read -r p; do
       [[ -z "${p}" ]] && continue

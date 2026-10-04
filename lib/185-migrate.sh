@@ -24,10 +24,10 @@ cmd_migrate() {
           printf 'delete %s %s\n' "${ref}" "${REF_OID[${ref}]}"
         done
         printf 'prepare\ncommit\n'
-      } | g update-ref --stdin 2>&1
+      } | g -c core.filesRefLockTimeout=0 -c core.packedRefsTimeout=0 update-ref --stdin 2>&1
     )"
     rc=$?
-    ((rc == 0)) || store_error "offline migration failed: ${result}"
+    ((rc == 0)) || store_write_error "offline migration failed: ${result}"
   fi
   printf '{"event":"migrated","format":"git-locks-state/1","root":"%s","entries":%s}\n' "${next}" "${#REF_OID[@]}"
 }

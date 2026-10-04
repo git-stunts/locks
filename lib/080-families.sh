@@ -109,7 +109,7 @@ bump_parent() {   # parent-job parent-oid -> plans the parent's blob rewrite wit
   paths="$(record_paths "${poid}")"
   field_v note "${poid}" note
   record_text record "${pjob}" "${holder}" "${claimed}" "${expires}" "${parent}" "${newfam}" "${acq}" "${paths}" "${note}"
-  write_blob newoid "${record}" || fail 'could not write the parent record'
+  write_blob newoid "${record}"
   local pjref
   pjref="$(job_ref "${pjob}")"
   plan_set "${pjref}" "${poid}" "${newoid}" || return 1

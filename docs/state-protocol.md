@@ -33,6 +33,10 @@ existing schemas and acquisition identities.
 6. On a competing publication, discard the snapshot and replan within the retry
    bound. Unpublished candidate objects never grant a reservation.
 
+Permission failures and other operational errors exit 2. A busy Git ref lock
+gets a short bounded retry of the same candidate; only an expected-root conflict
+causes replanning. See [store failures and contention](store-errors.md).
+
 The index is private scratch space, removed when tree construction finishes.
 It is not a shared coordination file and does not replace Git's ref locking.
 

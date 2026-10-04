@@ -20,6 +20,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Publication distinguishes stale roots from operational failures (#52). Permission and unknown Git errors return `store-write` (exit 2) immediately. A busy root lock gets at most six attempts with one unchanged candidate; it is never deleted by acquisition. Blob-write and path-hash diagnostics are structured too. Real permission and lock-file tests verify bounded retries, preserved authority, and bounded record creation across writer commands.
 - Time inputs share one decimal parser with signed 64-bit bounds (#55, #56). TTL and wait additions check for overflow before arithmetic; leading zeros are decimal, and malformed clock overrides are rejected before store initialization. System-clock failures and backward steps during waits report structured errors. Publication retries refresh their lease clock and recheck expiry bounds. Tests cover all TTL writers and confirm refused inputs cannot publish or launch a command.
 - The full membership observation study is an ordinary test/CI gate (#88). Current-root and stale-root cases cover families, semaphores, and prefixes. Original per-ref counterexample receipts remain historical evidence.
 
