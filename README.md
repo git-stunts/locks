@@ -176,7 +176,7 @@ Output is JSON Lines on every command; there is no text mode.
 | `store` | the resolved store path | one `store` object | 0 |
 | `show --job <id>` | one lock in full, with `remaining` seconds | one object, same shape as a `list` line | 0, 1 if no such lock |
 | `ttl --job <id>` | the seconds a lock has left | one `{job, expires, remaining}` object | 0, 1 if no such lock |
-| `extend --job <id> --ttl <s>` | move the expiry to now + ttl, paths unchanged, atomically | one `extended` object | 0, 1 if no such lock |
+| `extend --job <id> --ttl <s> [--acquisition <id>]` | renew a live reservation to now + ttl; optionally guard its acquisition identity | one `extended` object | 0, 1 if missing, expired, or superseded |
 | `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder when planned, and its record unchanged at commit (the clock is not rechecked), and must not be the job itself or one of its descendants; the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
 | `batch < records` | claim several locks in one transaction, or none; records are blank-line separated `job:`, `holder:`, `ttl:`, `parent:`, then `paths:` with one path per line | one `claimed` object per record | 0, 1 if any is refused, 2 on a malformed record |
 | `release --job <id> [--record <oid> OR --acquisition <id>] [--job <id>...]` | release the jobs and descendants; `--acquisition` survives renewal, while `--record` requires the exact stored version; give one condition per job (if both are given, both must match) | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
@@ -200,6 +200,8 @@ Every JSON line git-locks writes, on stdout or stderr, matches exactly one defin
 Contention exits 1. Store read/write failures exit 2 with a structured error; permanent write failures do not trigger repeated replanning. A persistent Git ref lock is reported without deleting it. See [store errors](docs/store-errors.md).
 
 Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path ending in `/` is a prefix and covers everything under it. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`. A holder is one line of text; any byte but a newline is stored whole and escaped on output. A note, given with `--note`, is one line saying why the lock is held; it rides on the claim, `show`, `list`, `check` and refusal lines, so the claimant who loses reads the reason and not only the name. A ttl is a decimal number of seconds; a leading zero is not octal.
+
+Renewal refuses expired acquisitions. Workers should pass the `acquisition` from their original claim receipt to `extend --acquisition`; an unguarded renewal deliberately addresses whichever live reservation currently has that job name. The guard prevents stale renewal, not access by an untrusted store owner. See [renewal semantics](docs/time.md#renewal).
 
 TTL, wait, capacity, and clock values use the same bounded decimal parser: `08` is eight and `010` is ten. TTLs must be positive; waits may be zero. Expiries and wait deadlines must fit `0..9223372036854775807`, with overflow rejected before publication. See [time boundaries](docs/time.md).
 

@@ -476,6 +476,29 @@
             }
           },
           "additionalProperties": false
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "job"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "enum": [
+                "expired",
+                "superseded"
+              ]
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Renewal refused: the acquisition expired, or --acquisition no longer names the current reservation."
         }
       ]
     },

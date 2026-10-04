@@ -10,7 +10,7 @@
 #   git locks store                    print the store this directory resolves to
 #   git locks show    --job <id>       one lock in full, with the seconds it has left
 #   git locks ttl     --job <id>       just the seconds left
-#   git locks extend  --job <id> --ttl <seconds>
+#   git locks extend  --job <id> --ttl <seconds> [--acquisition <id>]
 #   git locks with    --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [<path>...] -- <command>...
 #   git locks sem     create|acquire|release|show|list|delete   capacity semaphores
 #   git locks help | schema | version
@@ -72,7 +72,7 @@ usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent 
        git locks store
        git locks show    --job <id>
        git locks ttl     --job <id>
-       git locks extend  --job <id> --ttl <seconds>
+       git locks extend  --job <id> --ttl <seconds> [--acquisition <id>]
        git locks with    --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--note <text>] [<path>...] -- <command>...
        git locks sem     create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]
                                   | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>
@@ -101,7 +101,8 @@ sweep    delete expired locks, each with its descendants
 store    print the store this directory resolves to
 show     one lock in full; exit 1 if there is none
 ttl      the seconds a lock has left; exit 1 if there is none
-extend   move a lock's expiry to now + ttl, keeping its paths and family
+extend   move a live lock's expiry to now + ttl, keeping its paths and family; expired locks are refused.
+         --acquisition guards against a replaced owner; without it, renewal addresses the current job
 with     claim, run the command, release the acquisition it made (also on failure or a signal), exit with
          the command's status; --wait retries once a second until the paths are free or the wait runs out.
          The command's stdout is its own; git-locks reports its claim and release on stderr. The lock is a
@@ -160,7 +161,7 @@ sub_usage_text() {
     store) printf 'usage: git locks store\n' ;;
     show) printf 'usage: git locks show --job <id>\n' ;;
     ttl) printf 'usage: git locks ttl --job <id>\n' ;;
-    extend) printf 'usage: git locks extend --job <id> --ttl <seconds>\n' ;;
+    extend) printf 'usage: git locks extend --job <id> --ttl <seconds> [--acquisition <id>]\n' ;;
     with) printf 'usage: git locks with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--note <text>] [<path>...] -- <command>...\n' ;;
     doctor) printf 'usage: git locks doctor\n' ;;
     migrate) printf 'usage: git locks migrate --offline (all old readers and writers must be stopped)\n' ;;

@@ -54,7 +54,7 @@ The admission boundary is the `with` invocation in [demo.sh](demo.sh):
 
 The gates control order without guessing how long a worker will take. Alice remains inside her command while Bob's conflicting launch is refused and Bob's independent launch writes `independent.txt`. The independent worker records Alice's live acquisition during its own execution. It then exits and releases its separate reservation.
 
-The launcher renews Alice's reservation with `extend`. The before/after records have different `record` object IDs and the same `acquisition` ID. When Alice's gate opens, her wrapper releases that original acquisition despite the renewal. Both generated paths become free.
+The launcher renews Alice's live reservation with `extend --acquisition`, using the identity from her original acquisition receipt. The before/after records have different `record` object IDs and the same `acquisition` ID. When Alice's gate opens, her wrapper releases that original acquisition despite the renewal. Both generated paths become free.
 
 A separate case starts a wrapper with job name `reused`, then creates a replacement acquisition under that name. The old wrapper's cleanup reports `nothing` with `reason: superseded`; the replacement stays live and is released explicitly by its own acquisition ID.
 

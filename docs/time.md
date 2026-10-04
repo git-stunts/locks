@@ -40,6 +40,31 @@ overflow after a retry is refused even if it fitted during the first attempt.
 lease time but does not change the wait clock. Omit it to use the system clock;
 setting it to an empty string is an error.
 
+## Renewal
+
+`extend` requires the selected reservation to be live at the snapshot's clock:
+`expires > now`. Equality is expired. An expired acquisition is refused with
+`reason: expired`, exit 1, without changing the root. Acquire a new reservation
+with `claim` after expiry; extending the old acquisition cannot revive it.
+
+Workers should retain the `acquisition` from their successful claim and pass it
+to `extend --job <id> --ttl <seconds> --acquisition <id>`. A different current
+identity is refused with `reason: superseded`, exit 1. Both liveness and identity
+are rechecked after a failed root comparison. Successful renewal keeps that
+identity even though its record OID changes, so the original receipt guards
+subsequent renewals and release.
+
+Without `--acquisition`, renewal deliberately addresses the current live job,
+like an unguarded `release --job`. This is an administrative operation among
+trusted callers; a holder name is descriptive, not authentication. Missing jobs
+still produce `missing`, exit 1. An explicitly empty or multiline guard is a
+usage error. The cooperating-worker example uses the guarded form.
+
+A renewal sets expiry to `now + ttl`, which may shorten the previous deadline.
+The snapshot's liveness check is not atomic with wall time and publication; a
+process can pause after planning. Git's root comparison detects competing data
+changes, not the passage of time. It does not fence a command's filesystem writes.
+
 ## Waiting
 
 `--wait 08` means eight seconds; `--wait 010` means ten. Zero allows one attempt.
@@ -62,3 +87,8 @@ leading zeros, hostile numeric expressions, malformed system clocks, wait
 deadlines, and wrapper cleanup after a clock failure. Controlled publication
 races prove that both path and semaphore retries use fresh lease time and
 recheck overflow. Every test runs through the hermetic Docker worker.
+
+`test/renewal.py` checks the exact expiry boundary, stale acquisition guards,
+identity-preserving renewal, and forced publication retries after expiry or
+replacement. The sweep race uses a fresh replacement claim, since an expired
+acquisition can no longer be renewed.
