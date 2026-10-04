@@ -21,7 +21,8 @@ existing schemas and acquisition identities.
 ## Read, plan, publish
 
 1. Read the root OID. Reject legacy refs, a non-tree root, unreadable objects,
-   symbolic authority, invalid tree entries, and malformed authoritative records.
+   symbolic authority, invalid tree entries, malformed authoritative records,
+   and inconsistent indexes or ownership relationships. See [state integrity](state-integrity.md).
 2. Read all entries and blobs through that immutable OID. Membership, absence,
    capacity, ancestry, and path overlap now refer to the same state.
 3. Plan the operation against those entries. Verify each plan expectation

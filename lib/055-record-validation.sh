@@ -114,6 +114,7 @@ validate_snapshot() {
     oid="${REF_OID[${ref}]}"
     case "${ref}" in
       "${NS}"/jobs/* | "${NS}"/paths/*) role=lock ;;
+      "${NS}"/dirs/*) continue ;; # opaque historical directory tokens are not authority
       "${NS}"/sem/*)
         # Split at the first / after the name: a glob such as sem/*/meta
         # would also match the slot ref of a job named meta.
@@ -121,10 +122,11 @@ validate_snapshot() {
         case "${rest#*/}" in
           meta) role=meta ;;
           slots/*) role=slot ;;
-          *) continue ;;
+          gen) continue ;;
+          *) store_error "${ref}: unknown semaphore entry" ;;
         esac
         ;;
-      *) continue ;;
+      *) store_error "${ref}: unknown state entry" ;;
     esac
     if [[ -z "${checked["${oid} ${role}"]+x}" ]]; then
       validate_record "${oid}" "${role}" || store_error "${ref}: record ${oid}: ${RECORD_ERROR}"
@@ -146,4 +148,5 @@ validate_snapshot() {
       *) ;;
     esac
   done
+  validate_relations
 }

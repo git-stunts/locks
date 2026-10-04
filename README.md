@@ -85,6 +85,8 @@ A semaphore has a capacity and time-bounded slots. `sem acquire` checks all slot
 
 Existing per-ref stores require an [offline migration](docs/state-protocol.md#upgrade). Stop every old client before running `git locks migrate --offline`; ordinary commands refuse the old layout.
 
+Reservation commands also refuse inconsistent indexes, broken families, missing semaphore metadata, and conflicting live ownership. `doctor` diagnoses these failures without changing the store. See [state integrity and recovery](docs/state-integrity.md).
+
 ## Wrapping a command: claim, run, release
 
 `with` acquires every requested resource in one Git publication, verifies ownership before launch, and releases its acquisitions when the command exits. A live job or semaphore slot with the same name is refused, including after a competing publication.

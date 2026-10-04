@@ -8,6 +8,7 @@ subprocess.run(['node', str(ROOT / 'scripts/require-docker.mjs')], check=True)
 
 import json
 import os
+import signal
 import tempfile
 import time
 
@@ -142,16 +143,44 @@ with tempfile.TemporaryDirectory(prefix='locks-state-') as tmp:
     git('update-ref', '--no-deref', 'refs/locks/state', old_root)
     git('update-ref', '-d', 'refs/private/other')
 
-    # Failure to create private index scratch space must preserve the root and
-    # emit one structured operational error, without leaking raw Git diagnostics.
+    # An unavailable scratch directory now prevents validating path identity
+    # before planning. It must emit a structured read error and preserve authority.
     result = subprocess.run([str(ROOT / 'bin/git-locks'), 'claim', '--job', 'failed', '--holder', 'alice', 'failed.md'],
                             cwd=tmp, env=dict(env, TMPDIR=str(Path(tmp) / 'missing-dir')),
                             text=True, capture_output=True, timeout=10)
     assert result.returncode == 2 and not result.stdout, result
     error = json.loads(result.stderr)
     VALIDATOR.validate(error)
-    assert error['reason'] == 'store-write'
+    assert error['reason'] == 'store-read'
     assert state() == (old_root, old_entries)
+
+    # Make scratch unwritable after snapshot validation, so the private index
+    # still has an independent, real-filesystem write-failure regression.
+    scratch = Path(tmp) / 'index-scratch'
+    scratch.mkdir()
+    gate = Path(tmp) / 'index-gate'
+    racer = subprocess.Popen([str(ROOT / 'bin/git-locks'), 'claim', '--job', 'failed-index', '--holder', 'alice', 'failed.md'],
+                             cwd=tmp, env=dict(env, TMPDIR=str(scratch), GIT_LOCKS_PAUSE_AFTER_READ=str(gate)),
+                             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    try:
+        deadline = time.monotonic() + 10
+        while not Path(str(gate) + '.ready').exists():
+            assert racer.poll() is None, racer.communicate()
+            assert time.monotonic() < deadline, 'snapshot gate not reached'
+            time.sleep(.02)
+        scratch.chmod(0o555)
+        gate.touch()
+        out, err = racer.communicate(timeout=10)
+        assert racer.returncode == 2 and not out, (out, err)
+        error = json.loads(err)
+        VALIDATOR.validate(error)
+        assert error['reason'] == 'store-write', error
+        assert state() == (old_root, old_entries)
+    finally:
+        scratch.chmod(0o755)
+        if racer.poll() is None:
+            os.killpg(racer.pid, signal.SIGKILL)
+            racer.wait()
 
     # Tree reachability, not loose-object grace, retains current records.
     git('gc', '--prune=now')

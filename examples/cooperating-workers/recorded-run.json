@@ -15,7 +15,7 @@
     ],
     "after-renewal.jsonl": [
       {
-        "acquisition": "1000000-00101-1482022605",
+        "acquisition": "1000000-10125-2186907500",
         "claimed": 1000000,
         "expires": 1000120,
         "holder": "alice",
@@ -25,7 +25,7 @@
           "generated/api.txt",
           "generated/types.txt"
         ],
-        "record": "9494a2e335ff7fb1a1e858f7c8639f4ae14fccfa",
+        "record": "9d0bc10a2166d581d2d7442d26df97103a3778ed",
         "remaining": 120,
         "state": "live"
       }
@@ -42,7 +42,7 @@
     ],
     "before-renewal.jsonl": [
       {
-        "acquisition": "1000000-00101-1482022605",
+        "acquisition": "1000000-10125-2186907500",
         "claimed": 1000000,
         "expires": 1000060,
         "holder": "alice",
@@ -52,7 +52,7 @@
           "generated/api.txt",
           "generated/types.txt"
         ],
-        "record": "7adcfc44ad3213b236d15bc30fe653ce221722b2",
+        "record": "9b4c4e83578286c9f3f65428e04fb818973aa52a",
         "remaining": 60,
         "state": "live"
       }
@@ -69,7 +69,7 @@
     ],
     "failing-entered.jsonl": [
       {
-        "acquisition": "1000000-00847-0919704508",
+        "acquisition": "1000000-10964-1742727907",
         "claimed": 1000000,
         "expires": 1014400,
         "holder": "alice",
@@ -77,14 +77,14 @@
         "paths": [
           "failed.txt"
         ],
-        "record": "7518eb3eed0c46ea9c89107c033afdf1dd470423",
+        "record": "98b6dbd1a2714c4f2c471775a053c20cb967c6a9",
         "remaining": 14400,
         "state": "live"
       }
     ],
     "failing-worker.jsonl": [
       {
-        "acquisition": "1000000-00847-0919704508",
+        "acquisition": "1000000-10964-1742727907",
         "claimed": 1000000,
         "event": "claimed",
         "expires": 1014400,
@@ -93,7 +93,7 @@
         "paths": [
           "failed.txt"
         ],
-        "record": "7518eb3eed0c46ea9c89107c033afdf1dd470423"
+        "record": "98b6dbd1a2714c4f2c471775a053c20cb967c6a9"
       },
       {
         "event": "released",
@@ -115,6 +115,7 @@
           "path-ref-elsewhere",
           "path-ref-orphan",
           "path-ref-stray",
+          "path-overlap",
           "parent-missing",
           "parent-expired",
           "parent-holder",
@@ -130,18 +131,18 @@
         "healthy": true,
         "hooks": {
           "configured_path": null,
-          "directory": "/tmp/git-locks-demo-tests-kinrkkg7/golden path with spaces/store.git/hooks",
+          "directory": "/tmp/git-locks-demo-tests-x3yswm8_/golden path with spaces/store.git/hooks",
           "disabled": true,
           "executables": [],
           "fsmonitor_disabled": true
         },
-        "store": "/tmp/git-locks-demo-tests-kinrkkg7/golden path with spaces/store.git"
+        "store": "/tmp/git-locks-demo-tests-x3yswm8_/golden path with spaces/store.git"
       }
     ],
     "final-list.jsonl": [],
     "independent-during.jsonl": [
       {
-        "acquisition": "1000000-00101-1482022605",
+        "acquisition": "1000000-10125-2186907500",
         "claimed": 1000000,
         "expires": 1000060,
         "holder": "alice",
@@ -151,14 +152,14 @@
           "generated/api.txt",
           "generated/types.txt"
         ],
-        "record": "7adcfc44ad3213b236d15bc30fe653ce221722b2",
+        "record": "9b4c4e83578286c9f3f65428e04fb818973aa52a",
         "remaining": 60,
         "state": "live"
       }
     ],
     "independent-entered.jsonl": [
       {
-        "acquisition": "1000000-00269-1036720977",
+        "acquisition": "1000000-10311-0001515157",
         "claimed": 1000000,
         "expires": 1014400,
         "holder": "bob",
@@ -167,14 +168,14 @@
         "paths": [
           "independent.txt"
         ],
-        "record": "da09a0aed3b17a66ff3204cfe83de8e42b9ed129",
+        "record": "ade71145ddeecb238541c8f045ce06085e5fcc6d",
         "remaining": 14400,
         "state": "live"
       }
     ],
     "independent.jsonl": [
       {
-        "acquisition": "1000000-00269-1036720977",
+        "acquisition": "1000000-10311-0001515157",
         "claimed": 1000000,
         "event": "claimed",
         "expires": 1014400,
@@ -184,7 +185,7 @@
         "paths": [
           "independent.txt"
         ],
-        "record": "da09a0aed3b17a66ff3204cfe83de8e42b9ed129"
+        "record": "ade71145ddeecb238541c8f045ce06085e5fcc6d"
       },
       {
         "event": "released",
@@ -194,7 +195,7 @@
     ],
     "old-entered.jsonl": [
       {
-        "acquisition": "1000000-00602-1197500129",
+        "acquisition": "1000000-10686-0646904405",
         "claimed": 1000000,
         "expires": 1014400,
         "holder": "alice",
@@ -202,7 +203,7 @@
         "paths": [
           "reused.txt"
         ],
-        "record": "674bc85ca841e92abec6978e5bfbea3755684b46",
+        "record": "b072851eb14880a00f4431addaabcd38ae0e5c33",
         "remaining": 14400,
         "state": "live"
       }
@@ -223,7 +224,7 @@
     ],
     "replacement-survives.jsonl": [
       {
-        "acquisition": "1000000-00710-1386811124",
+        "acquisition": "1000000-10807-0122425558",
         "claimed": 1000000,
         "expires": 1014400,
         "holder": "bob",
@@ -231,14 +232,14 @@
         "paths": [
           "reused.txt"
         ],
-        "record": "9432a53ef7aa4ec87251d54c44f321faed76fd9f",
+        "record": "e535160fa39d3b26aefbdda906e682b838b697ef",
         "remaining": 14400,
         "state": "live"
       }
     ],
     "replacement.jsonl": [
       {
-        "acquisition": "1000000-00710-1386811124",
+        "acquisition": "1000000-10807-0122425558",
         "claimed": 1000000,
         "event": "claimed",
         "expires": 1014400,
@@ -247,17 +248,17 @@
         "paths": [
           "reused.txt"
         ],
-        "record": "9432a53ef7aa4ec87251d54c44f321faed76fd9f"
+        "record": "e535160fa39d3b26aefbdda906e682b838b697ef"
       }
     ],
     "store.jsonl": [
       {
-        "store": "/tmp/git-locks-demo-tests-kinrkkg7/golden path with spaces/store.git"
+        "store": "/tmp/git-locks-demo-tests-x3yswm8_/golden path with spaces/store.git"
       }
     ],
     "superseded-worker.jsonl": [
       {
-        "acquisition": "1000000-00602-1197500129",
+        "acquisition": "1000000-10686-0646904405",
         "claimed": 1000000,
         "event": "claimed",
         "expires": 1014400,
@@ -266,10 +267,10 @@
         "paths": [
           "reused.txt"
         ],
-        "record": "674bc85ca841e92abec6978e5bfbea3755684b46"
+        "record": "b072851eb14880a00f4431addaabcd38ae0e5c33"
       },
       {
-        "acquisition": "1000000-00602-1197500129",
+        "acquisition": "1000000-10686-0646904405",
         "command_status": 0,
         "event": "lost",
         "job": "reused",
@@ -278,7 +279,7 @@
     ],
     "ttl-entered.jsonl": [
       {
-        "acquisition": "1000000-01008-2382104034",
+        "acquisition": "1000000-11142-1451511078",
         "claimed": 1000000,
         "expires": 1000001,
         "holder": "alice",
@@ -286,14 +287,14 @@
         "paths": [
           "short.txt"
         ],
-        "record": "d2b34fbc20e72895d146af63070d204732f8b08e",
+        "record": "8c09b6965187c3ec3030f407dfe209f97a15b6c9",
         "remaining": 1,
         "state": "live"
       }
     ],
     "ttl-worker.jsonl": [
       {
-        "acquisition": "1000000-01008-2382104034",
+        "acquisition": "1000000-11142-1451511078",
         "claimed": 1000000,
         "event": "claimed",
         "expires": 1000001,
@@ -302,7 +303,7 @@
         "paths": [
           "short.txt"
         ],
-        "record": "d2b34fbc20e72895d146af63070d204732f8b08e"
+        "record": "8c09b6965187c3ec3030f407dfe209f97a15b6c9"
       },
       {
         "event": "released",
@@ -318,7 +319,7 @@
     ],
     "worker-a-entered.jsonl": [
       {
-        "acquisition": "1000000-00101-1482022605",
+        "acquisition": "1000000-10125-2186907500",
         "claimed": 1000000,
         "expires": 1000060,
         "holder": "alice",
@@ -328,14 +329,14 @@
           "generated/api.txt",
           "generated/types.txt"
         ],
-        "record": "7adcfc44ad3213b236d15bc30fe653ce221722b2",
+        "record": "9b4c4e83578286c9f3f65428e04fb818973aa52a",
         "remaining": 60,
         "state": "live"
       }
     ],
     "worker-a.jsonl": [
       {
-        "acquisition": "1000000-00101-1482022605",
+        "acquisition": "1000000-10125-2186907500",
         "claimed": 1000000,
         "event": "claimed",
         "expires": 1000060,
@@ -346,7 +347,7 @@
           "generated/api.txt",
           "generated/types.txt"
         ],
-        "record": "7adcfc44ad3213b236d15bc30fe653ce221722b2"
+        "record": "9b4c4e83578286c9f3f65428e04fb818973aa52a"
       },
       {
         "event": "released",
@@ -373,10 +374,10 @@
   "external_adoption": "not run",
   "failing_worker_status": 17,
   "schema_validated_records": 30,
-  "source_revision": "93f2a5e0fa7c4293584450b1aba1c188f5ed49d2",
+  "source_revision": "c70be3f2b1d96cfb6cdf9602dc22c1dfc73eae5f",
   "source_revision_kind": "synthetic copied-input commit, with no upstream history",
   "source_sha256": {
-    "bin/git-locks": "71ad228287132a9c1ea9c67f0a6c4c8285482e259a45aadde1629514f5ee6117",
+    "bin/git-locks": "d6b08a59e1830a6b6cc7895832f553bb5fa7ab92add3dbbe0bc942f4abdcbd4d",
     "examples/cooperating-workers/demo.sh": "c11ef1d622be66c5c3878760559fea1bc92a645461231a712028ae58d05174d3",
     "examples/cooperating-workers/worker.sh": "ea25b29e1bafb66355e549b60c198e8f492f97e520abb3e73a396ffa8cc7cc3f"
   },
@@ -386,7 +387,7 @@
     "Superseded cleanup preserved the replacement acquisition.",
     "Worker exit 17 propagated; its reservation was released.",
     "TTL expired while the command remained active; automatic renewal is not provided.",
-    "Artifacts and JSONL receipts: /tmp/git-locks-demo-tests-kinrkkg7/golden path with spaces"
+    "Artifacts and JSONL receipts: /tmp/git-locks-demo-tests-x3yswm8_/golden path with spaces"
   ],
   "worker_active_after_expiry": true
 }
