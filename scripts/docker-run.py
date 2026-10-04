@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[1]
 IMAGE = "git-locks-tests:local"
 WORKER = "git-locks-tests"
 OWNER = "git-stunts.locks.tests"
-PROFILE = "3"
+PROFILE = "4"
 SOURCE_LIMIT = 64 * 1024 * 1024
-ARTIFACT_LIMIT = 128 * 1024 * 1024
+ARTIFACT_LIMIT = 80 * 1024 * 1024
 
 
 def run(*args, **kwargs):
@@ -66,11 +66,15 @@ def source_archive():
     return archive.getvalue()
 
 
+def retained_usage(receipts):
+    target = receipts / "artifacts"
+    return sum(max(p.stat().st_size, p.stat().st_blocks * 512) for p in target.rglob('*')) if target.exists() else 0
+
+
 def export_artifacts(receipts):
     """Retain explicitly named evidence, never overwrite an earlier receipt."""
-    target = receipts / "artifacts"
-    used = sum(p.stat().st_size for p in target.rglob('*') if p.is_file()) if target.exists() else 0
-    process = subprocess.Popen(["docker", "exec", WORKER, "tar", "cf", "-", "-C", "/work", "artifacts"], stdout=subprocess.PIPE)
+    used = retained_usage(receipts)
+    process = subprocess.Popen(["docker", "exec", WORKER, "tar", "cf", "-", "-C", "/evidence", "artifacts"], stdout=subprocess.PIPE)
     try:
         with tarfile.open(fileobj=process.stdout, mode="r|") as tar:
             for member in tar:
@@ -80,12 +84,15 @@ def export_artifacts(receipts):
                 destination = receipts / relative
                 if member.isdir():
                     destination.mkdir(parents=True, exist_ok=True)
+                    used += 4096
+                    if used > ARTIFACT_LIMIT:
+                        raise RuntimeError("retained evidence exceeds the 80 MiB project limit")
                     continue
                 if not member.isfile() or destination.exists():
                     raise RuntimeError(f"evidence is not new regular data: {relative}")
-                used += member.size
+                used += max(4096, (member.size + 4095) // 4096 * 4096)
                 if used > ARTIFACT_LIMIT:
-                    raise RuntimeError("retained evidence exceeds the 128 MiB project limit")
+                    raise RuntimeError("retained evidence exceeds the 80 MiB project limit")
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with destination.open('xb') as output:
                     shutil.copyfileobj(tar.extractfile(member), output)
@@ -108,6 +115,12 @@ def main():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("git-locks Docker worker is busy; wait for its current run") from exc
+        receipts = ROOT / ".test-results"
+        receipts.mkdir(exist_ok=True)
+        retained = retained_usage(receipts)
+        if retained > ARTIFACT_LIMIT - 16 * 1024**2:
+            raise RuntimeError("retained evidence leaves less than 16 MiB export reserve; archive owned evidence before running")
+        (receipts / "result.json").write_text(json.dumps({"exit_code": None, "state": "preparing"}) + "\n")
         payload = source_archive()
         recipe = ROOT / "scripts/docker/Dockerfile"
         fingerprint = hashlib.sha256(recipe.read_bytes()).hexdigest()
@@ -132,6 +145,8 @@ def main():
                 "--tmpfs", "/work:rw,exec,nosuid,nodev,size=512m,uid=1000,gid=1000",
                 "--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=512m,uid=1000,gid=1000",
                 "--tmpfs", "/home/node:rw,nosuid,nodev,size=32m,uid=1000,gid=1000",
+                "--tmpfs", "/evidence:rw,nosuid,nodev,size=16m,uid=1000,gid=1000",
+                "--env", "TMPDIR=/tmp",
                 "--log-opt", "max-size=1m", "--log-opt", "max-file=1",
                 "--env", "GIT_AUTHOR_NAME=git-locks tests", "--env", "GIT_AUTHOR_EMAIL=tests@example.invalid",
                 "--env", "GIT_COMMITTER_NAME=git-locks tests", "--env", "GIT_COMMITTER_EMAIL=tests@example.invalid",
@@ -142,7 +157,7 @@ def main():
                 or not config["ReadonlyRootfs"] or config["Privileged"] or not config["Init"]
                 or config["Memory"] != 2 * 1024**3 or config["NanoCpus"] != 2 * 10**9
                 or config["PidsLimit"] != 256
-                or set(config["Tmpfs"]) != {"/work", "/tmp", "/home/node"}):
+                or set(config["Tmpfs"]) != {"/work", "/tmp", "/home/node", "/evidence"}):
             raise RuntimeError("worker isolation or resource configuration differs from the required boundary")
         receipts = ROOT / ".test-results"
         receipts.mkdir(exist_ok=True)
@@ -153,23 +168,42 @@ def main():
         }, indent=2) + "\n")
         run("docker", "start", WORKER, stdout=subprocess.DEVNULL)
         try:
+            vm_df = subprocess.check_output(["docker", "exec", WORKER, "df", "-Pk", "/"], text=True)
+            vm_free = int(vm_df.splitlines()[-1].split()[3]) * 1024
+            if vm_free < 50 * 1024**3:
+                raise RuntimeError("less than 50 GiB Docker VM free space; refusing test work")
             run("docker", "exec", "-i", WORKER, "tar", "xf", "-", "-C", "/work", input=payload)
             run("docker", "exec", "-w", "/work/source", WORKER,
                 "bash", "scripts/docker-entry.sh")
-            run("docker", "exec", WORKER, "mkdir", "/work/artifacts")
+            run("docker", "exec", WORKER, "mkdir", "/evidence/artifacts")
+            run("docker", "exec", WORKER, "ln", "-s", "/evidence/artifacts", "/work/artifacts")
             command = sys.argv[1:] or ["make", "test-container"]
-            # The timeout wrapper runs inside Docker and bounds runaway suites.
-            # Logs and fixtures are on capped tmpfs, never a container layer.
-            result = subprocess.run([
-                "docker", "exec", "-w", "/work/source", WORKER, "bash", "-c",
-                'set -o pipefail; ulimit -f 16384; timeout --kill-after=10s 1800s "$@" 2>&1 | tee /work/test.log',
-                "docker-tests", *command,
-            ])
+            # The inner runner monitors the VM and quota filesystems. The host
+            # separately checks its own filesystem; no host path is mounted.
+            process = subprocess.Popen(["docker", "exec", "-e", f"TEST_LOG_BUDGET_BYTES={128 * 1024**2 - retained - 17 * 1024**2}", "-w", "/work/source", WORKER,
+                                        "python3", "scripts/docker-exec.py", *command])
+            host_guard = False
+            while process.poll() is None:
+                if shutil.disk_usage(ROOT).free < 50 * 1024**3:
+                    host_guard = True
+                    pid = subprocess.check_output(["docker", "exec", WORKER, "cat", "/evidence/runner.pid"], text=True).strip()
+                    if not pid.isdecimal() or int(pid) < 2:
+                        raise RuntimeError("invalid owned workload PID")
+                    run("docker", "exec", WORKER, "kill", "-TERM", pid)
+                    process.wait(timeout=20)
+                    break
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    pass
+            result_code = 2 if host_guard else process.returncode
             with (receipts / "latest.log").open("wb") as log:
-                run("docker", "exec", WORKER, "cat", "/work/test.log", stdout=log)
-            (receipts / "result.json").write_text(json.dumps({"exit_code": result.returncode}) + "\n")
+                run("docker", "exec", WORKER, "cat", "/evidence/test.log", stdout=log)
+            (receipts / "result.json").write_text(json.dumps({"exit_code": result_code, "host_guard": host_guard}) + "\n")
+            with (receipts / "resources.json").open("wb") as receipt:
+                run("docker", "exec", WORKER, "cat", "/evidence/resources.json", stdout=receipt)
             export_artifacts(receipts)
-            return result.returncode
+            return result_code
         finally:
             run("docker", "stop", "--time", "5", WORKER, stdout=subprocess.DEVNULL)
 

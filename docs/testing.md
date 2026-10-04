@@ -42,8 +42,11 @@ exporting receipts, which clears its temporary filesystems. Source changes
 do not rebuild the toolchain image.
 
 Resource limits are two CPUs, 2 GiB memory including swap, 256 processes,
-512 MiB each for `/work` and `/tmp`, and 32 MiB for the container home. The
-runner refuses new work below 50 GiB host free space. Inputs are limited to
+512 MiB each for `/work` and `/tmp`, 32 MiB for the container home, and a separate
+16 MiB tmpfs for live logs and exported evidence. `TMPDIR` is explicitly `/tmp`.
+The runner checks host and Docker VM backing-filesystem free space before work
+and monitors both during execution, stopping below 50 GiB. The smaller quota
+filesystems have their own limits and a 1 MiB remaining-space stop threshold. Inputs are limited to
 64 MiB; individual generated files and the test log are capped at 16 MiB.
 Each invocation has a 30-minute timeout. The project uses no compiler cache
 or data volumes; the toolchain image and its build cache must remain within
@@ -54,7 +57,14 @@ command, and Docker configuration. `latest.log` and `result.json` record the
 latest command. Write evidence that must survive teardown under
 `/work/artifacts/<unique-name>`; it is exported into
 `.test-results/artifacts/<unique-name>`. Existing evidence is never overwritten,
-and aggregate retained evidence is limited to 128 MiB. Other container files
+and aggregate retained evidence is limited to 80 MiB, counting allocated blocks.
+A new run reserves 16 MiB of export space before it starts. The live log/evidence
+filesystem, latest host log, and bounded Docker log leave the combined log
+budget below 128 MiB. A monitored conservative count also includes generated
+fixture files outside Git object storage; copied inputs are excluded. The
+runtime data filesystems plus host receipts total less than 1.2 GiB, below the
+4 GiB project data budget. `resources.json` records sampled peaks, minimum VM
+free space, output bytes, and any resource refusal. Other container files
 are disposable. Exported receipts are ignored by Git and never copied back
 into a later test input.
 
