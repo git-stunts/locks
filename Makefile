@@ -26,6 +26,7 @@ test-container:
 	python3 test/state-coherence.py
 	python3 test/time-arithmetic.py
 	python3 test/store-failures.py
+	python3 test/store-bootstrap.py
 	bash test/test.sh
 	python3 test/capacity.py
 	bash test/literal-paths.sh

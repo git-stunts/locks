@@ -791,17 +791,17 @@ R="$(mkrepo)"
 cd "${R}" || exit 2
 for i in $(seq 1 50); do git-locks claim --job "j${i}" --holder h "p${i}.md" >/dev/null 2>&1; done
 git_count git-locks list
-check "list of 50 locks spawns at most 6 git processes (lookup, root, tree type, tree entries, blobs)" "$((n <= 6))" "1"
+check "list of 50 locks spawns at most 7 git processes (lookup, store validation, root, tree type, tree entries, blobs)" "$((n <= 7))" "1"
 git_count git-locks check p1.md p2.md p3.md
-check "check of 3 paths spawns at most 9 git processes (snapshot plus one hash-object per path)" "$((n <= 9))" "1"
+check "check of 3 paths spawns at most 10 git processes (snapshot plus one hash-object per path)" "$((n <= 10))" "1"
 git_count git-locks show --job j7
-check "show spawns at most 6 git processes" "$((n <= 6))" "1"
+check "show spawns at most 7 git processes" "$((n <= 7))" "1"
 git_count git-locks claim --job jx --holder h a.md b.md c.md
-check "a 3-path claim spawns at most 15 git processes (lookup, immutable snapshot, hashes, record, index, root CAS)" "$((n <= 15))" "1"
+check "a 3-path claim spawns at most 15 git processes (lookup, store validation, immutable snapshot, hashes, record, index, root CAS)" "$((n <= 15))" "1"
 git-locks sem create s --capacity 5 >/dev/null 2>&1
 for i in 1 2 3; do git-locks sem acquire s --job "t${i}" --holder h >/dev/null 2>&1; done
 git_count git-locks sem show s
-check "sem show spawns at most 6 git processes" "$((n <= 6))" "1"
+check "sem show spawns at most 7 git processes" "$((n <= 7))" "1"
 out="$(git-locks list 2>&1)"
 lines n "${out}"
 check "the snapshot path lists every lock" "${n}" "51"
