@@ -73,9 +73,10 @@ doctor_slot_record() { # subject oid name job -> 0 when the record decodes as a 
 
 doctor_hook_policy() { # VAR -> report the configured hooks without invoking any
   local configured rc directory hook executables=() _j1 _j2 joined
-  # These two read-only Git commands inspect the unmodified configuration.
+  # These read-only commands inspect the store's local configuration, with the
+  # same environment isolation as its object operations but no hook override.
   # All object/index/ref operations use g(), which overrides core.hooksPath.
-  configured="$(git --git-dir="${STORE}" config --path --get core.hooksPath 2>&1)"
+  configured="$(store_git --git-dir="${STORE}" config --path --get core.hooksPath 2>&1)"
   rc=$?
   if ((rc == 1)); then
     _j1=null
@@ -84,7 +85,7 @@ doctor_hook_policy() { # VAR -> report the configured hooks without invoking any
   else
     store_error "cannot inspect hook configuration: ${configured}"
   fi
-  directory="$(git --git-dir="${STORE}" rev-parse --path-format=absolute --git-path hooks 2>&1)" || store_error "cannot inspect hook directory: ${directory}"
+  directory="$(store_git --git-dir="${STORE}" rev-parse --path-format=absolute --git-path hooks 2>&1)" || store_error "cannot inspect hook directory: ${directory}"
   for hook in reference-transaction post-index-change; do
     if [[ -f "${directory}/${hook}" && -x "${directory}/${hook}" ]]; then
       executables+=("\"${hook}\"")

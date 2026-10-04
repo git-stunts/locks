@@ -1846,6 +1846,20 @@ out="$(git-locks doctor 2>&1)"
 check 'doctor finds a slot for job meta healthy' "$?" 0
 unset GIT_LOCKS_STORE
 
+# Inherited hook state must not redirect the explicit reservation store.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+export GIT_LOCKS_STORE="${R}/isolated-store.git"
+git init -q --bare "${R}/foreign.git"
+out="$(GIT_COMMON_DIR="${R}/foreign.git" git-locks claim --job isolated --holder alice isolated.md 2>&1)"
+check 'claim ignores an inherited common directory for its explicit store' "$?" 0
+out="$(git-locks show --job isolated 2>&1)"
+check 'the intended store independently owns the claim' "$?" 0
+jfields 'the intended store preserves the original owner' "${out}" 'holder="alice"'
+got="$(git --git-dir="${R}/foreign.git" for-each-ref --format='%(refname)')"
+check 'the inherited common directory acquires no reservation refs' "${got}" ''
+unset GIT_LOCKS_STORE
+
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 if ((FAIL > 0)); then
   printf 'failed: %s\n' "${FAILED[@]}"

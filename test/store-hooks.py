@@ -76,11 +76,12 @@ def exercise(base, mode):
     locks('release', '--job', 'j')
     policy = locks('doctor')[-1]['hooks']
     assert policy['disabled'] is True and policy['fsmonitor_disabled'] is True
-    assert policy['configured_path'] == (None if mode in ('default', 'self', 'fsmonitor') else 'relative hooks' if mode == 'relative' else str(directory)), policy
-    assert policy['directory'] == str(directory), policy
-    assert policy['executables'] == ['reference-transaction', 'post-index-change'], policy
+    ignored_config = mode in ('global', 'environment')
+    assert policy['configured_path'] == (None if ignored_config or mode in ('default', 'self', 'fsmonitor') else 'relative hooks' if mode == 'relative' else str(directory)), policy
+    assert policy['directory'] == str(store / 'hooks' if ignored_config else directory), policy
+    assert policy['executables'] == ([] if ignored_config else ['reference-transaction', 'post-index-change']), policy
     # Report configured hooks without changing their files or Git configuration.
-    assert all((directory / name).is_file() for name in policy['executables'])
+    assert all((directory / name).is_file() for name in ('reference-transaction', 'post-index-change'))
 
 
 failures = []
