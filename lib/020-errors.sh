@@ -21,3 +21,10 @@ store_write_error() { # operational failure, never a contention/usage refusal
   printf '{"event":"error","reason":"store-write","detail":%s}\n' "${_j1}" >&2
   exit 2
 }
+
+clock_error() { # return so a waiting wrapper can release acquisitions before exiting
+  local _j1
+  json_str _j1 "$1"
+  printf '{"event":"error","reason":"clock","detail":%s}\n' "${_j1}" >&2
+  return 2
+}

@@ -42,6 +42,7 @@ parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], on
 }
 
 snapshot() {
+  NOW_CACHED='' # a lost publication or a new wait attempt needs a fresh lease clock
   local -A refs=() blobs=()
   local rows ref oid oids=() rc mode kind path symref
   rows="$(g for-each-ref --format='%(refname) %(objectname) %(symref)' "${NS}/" 2>&1)"

@@ -5,8 +5,8 @@
 # acquirers who both counted "n of N live" contend on one compare-and-swap and
 # exactly one commits. The other re-reads.
 
-valid_capacity() { # VAR value: record_uint (leading zeros are decimal, never octal; signed 64-bit range), and positive
-  record_uint "$1" "$2" && [[ "${!1}" != 0 ]]
+valid_capacity() { # VAR value: decimal_uint, and positive
+  decimal_uint "$1" "$2" && [[ "${!1}" != 0 ]]
 }
 
 sem_meta_ref() { printf '%s/sem/%s/meta' "${NS}" "$1"; }
@@ -135,6 +135,8 @@ sem_acquire_once() { # name job holder ttl -> 0 acquired (line printed), 1 refus
 sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacity), 2 lost the race
   ensure_snapshot       # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
   local name="$1" job="$2" holder="$3" ttl="$4" i at expires record oid _j1 _j2 _j3 _j4 _j5 own_oid='' own_live=0 slot_ref live_after acq=''
+  now_v at
+  expiry_v expires "${at}" "${ttl}"
   sem_read "${name}" || sem_missing "${name}"
   for i in "${!SLOT_JOBS[@]}"; do
     if [[ "${SLOT_JOBS[${i}]}" == "${job}" ]]; then
@@ -148,8 +150,6 @@ sem_acquire_attempt() { # one read-plan-transact; 0 acquired, 1 refused (capacit
     sem_refusal "${name}" capacity "${SEM_CAP}" "${SEM_LIVE}"
     return 1
   fi
-  now_v at
-  expires=$((at + ttl))
   record="$(printf 'schema: %s\nsemaphore: %s\njob: %s\nholder: %s\nclaimed: %s\nexpires: %s\nacquisition: %s' "${SLOT_SCHEMA}" "${name}" "${job}" "${holder}" "${at}" "${expires}" "${acq}")"
   write_blob oid "${record}" || fail 'could not write the slot record'
   plan_reset
@@ -320,7 +320,7 @@ cmd_sem() {
       valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
       valid_ttl ttl "${ttl}" || fail '--ttl is a positive number of seconds' 2
       valid_holder "${holder}" || fail 'holder must be one line' 2
-      [[ "${wait}" =~ ^[0-9]+$ ]] || fail '--wait is a number of seconds' 2
+      decimal_uint wait "${wait}" || fail '--wait is a decimal integer from 0 through 9223372036854775807 seconds' 2
       W_SEM="${name}"
       W_JOB="${job}"
       W_HOLDER="${holder}"

@@ -1,9 +1,13 @@
 # ---------------------------------------------------------------- with
 
 acquire_with_wait() { # kind(lock|sem) wait-seconds errfile -> 0 acquired (ACQUIRED_LINE set), else exits with the refusal
-  local kind="$1" wait="$2" errfile="$3" out rc clock deadline
-  clock="$(date +%s)" # the wait window is wall-clock time, whatever GIT_LOCKS_NOW says about lock expiry
-  deadline=$((clock + wait))
+  local kind="$1" wait="$2" errfile="$3" out rc clock deadline previous
+  system_now_v clock || return 2 # waiting uses real wall time, independent of the lease-clock override
+  time_sum_v deadline "${clock}" "${wait}" || {
+    path_error "--wait exceeds the available deadline range ($((INTEGER_MAX - clock)) seconds at this clock)"
+    return 2
+  }
+  previous="${clock}"
   while :; do
     SNAP_LOADED=0 # each attempt reads afresh; a subshell cannot invalidate for us
     if [[ "${kind}" == sem ]]; then
@@ -18,7 +22,12 @@ acquire_with_wait() { # kind(lock|sem) wait-seconds errfile -> 0 acquired (ACQUI
       ACQUIRED_LINE="${out}"
       return 0
     fi
-    clock="$(date +%s)"
+    system_now_v clock || return 2
+    if ((clock < previous)); then
+      clock_error 'system clock moved backwards while waiting'
+      return 2
+    fi
+    previous="${clock}"
     if ((rc != 1 || clock >= deadline)); then
       cat "${errfile}" >&2
       return "${rc}"
@@ -99,7 +108,7 @@ cmd_with() {
   [[ -n "${W_JOB}" && -n "${W_HOLDER}" ]] || usage
   ((${#command[@]} > 0)) || usage
   [[ -n "${W_SEM}" || ${#W_PATHS[@]} -gt 0 ]] || usage
-  [[ "${wait}" =~ ^[0-9]+$ ]] || fail '--wait is a number of seconds' 2
+  decimal_uint wait "${wait}" || fail '--wait is a decimal integer from 0 through 9223372036854775807 seconds' 2
   # Validate everything before acquiring anything: the semaphore path does not pass through claim_args or cmd_sem.
   valid_job "${W_JOB}" || fail "job id '${W_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   valid_holder "${W_HOLDER}" || fail 'holder must be one line' 2

@@ -199,7 +199,9 @@ Every JSON line git-locks writes, on stdout or stderr, matches exactly one defin
 
 Paths are repo-relative, `./` prefixes are stripped, and absolute or `..` paths are refused. A path ending in `/` is a prefix and covers everything under it. A path may contain spaces; it may not contain a newline. Job ids match `[A-Za-z0-9][A-Za-z0-9._-]*`. A holder is one line of text; any byte but a newline is stored whole and escaped on output. A note, given with `--note`, is one line saying why the lock is held; it rides on the claim, `show`, `list`, `check` and refusal lines, so the claimant who loses reads the reason and not only the name. A ttl is a decimal number of seconds; a leading zero is not octal.
 
-`GIT_LOCKS_NOW=<epoch seconds>` fixes the clock, for tests; `GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file>` makes every transaction wait for that file, so tests can force interleavings. Timestamps are epoch seconds.
+TTL, wait, capacity, and clock values use the same bounded decimal parser: `08` is eight and `010` is ten. TTLs must be positive; waits may be zero. Expiries and wait deadlines must fit `0..9223372036854775807`, with overflow rejected before publication. See [time boundaries](docs/time.md).
+
+`GIT_LOCKS_NOW=<epoch seconds>` fixes lease time for tests; it must be a nonnegative decimal epoch, and an explicitly empty value is an error. System-clock failures are structured `clock` errors. A new snapshot refreshes lease time, so publication retries do not reuse an old expiry. `GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file>` lets tests force interleavings.
 
 ## Versioning and releases
 
