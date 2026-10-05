@@ -20,6 +20,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- `doctor` reports an invalid job record without deriving stray-path findings from its unreadable contents. Valid stray and orphan path diagnostics remain available in the same snapshot (related to #75).
+
 - Reject empty or multiline `--acquisition` values in path and semaphore releases. An empty guard previously released the current reservation unconditionally; invalid guards now return exit 2 before changing any reservation (related to #74).
 
 - Reject NUL bytes in batch input before parsing or publication. Stored blobs and failed Git batch diagnostics with NUL bytes fail with structured JSON errors instead of losing bytes or leaking Bash warnings. Batch input uses a direct shell read, so signaling the CLI leaves no input-reader child or named capture file. Private snapshot capture files are removed after success or failure; wrapped-command binary streams remain unchanged.
