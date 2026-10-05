@@ -12,8 +12,8 @@ The build's RUN processes also need explicit membership in the owned cgroup. Doc
 
 Work required before enabling the prototype:
 
-- Put filesystem formatting and every other heavy setup phase under verified resource controls before execution. Check and clean partial setup when systemd activation or mounting fails.
-- Make monitor death stop the actual daemon, build processes, and test processes. The draft's `finally` cleanup and systemd timeouts do not cover abrupt monitor death. Add independent liveness enforcement and fault tests; killing only a client is insufficient.
+- Verify the new setup ordering and ownership tests. Formatting now uses the controlled command path after cgroup checks. Unit ownership is recorded before activation, mount state is checked after errors, and refusal cleanup leaves pre-existing resources untouched. These paths still need execution evidence in the privileged setup environment.
+- Prove monitor death stops the actual daemon, build processes, and test processes. A separate heartbeat watchdog is now implemented, with nonprivileged process-group fault tests for shutdown, stalled monitoring, watchdog death, and abrupt monitor death. These tests do not establish that real Docker descendants occupy the enforced cgroup. Killing only a client remains insufficient.
 - Integrate the intentionally small quota filesystem with both host and in-container free-space guards. They currently require 50 GiB free on the Docker backing filesystem and will correctly refuse the proposed 19 GiB volume. Any exception must verify a real quota and keep continuous checks on the physical backing disk; an environment-only bypass is not acceptable.
 - Audit every containerd, BuildKit, daemon, temporary, client, runtime, and log path. Include host-side receipts and setup logs in aggregate limits. Preserve earlier evidence and stop before a log reserve is consumed.
 - Prove cleanup after cancellation, timeout, exhausted quota, low physical space, malformed monitoring data, daemon failure, and failed export. Preserve mounted recovery data if process death or unmounting cannot be verified.

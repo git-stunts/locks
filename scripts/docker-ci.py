@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import platform
+import select
 import shutil
 import signal
 import subprocess
@@ -28,6 +29,61 @@ MEMORY_BYTES = 4 * 1024**3
 LOG_BYTES = 128 * 1024**2
 FREE_BYTES = 50 * 1024**3
 DEADLINE_SECONDS = 1800
+
+
+class LifetimeGuard:
+    """A separate process stops owned work when monitor heartbeats disappear."""
+    def __init__(self, stop, timeout=10):
+        incoming, outgoing = os.pipe()
+        acknowledged, acknowledge = os.pipe()
+        self.pid = os.fork()
+        if self.pid == 0:
+            os.close(outgoing)
+            os.close(acknowledged)
+            os.setsid()
+            code = 0
+            try:
+                while select.select([incoming], [], [], timeout)[0]:
+                    if os.read(incoming, 1) != b'.':
+                        break
+                    os.write(acknowledge, b'.')
+            except BaseException:
+                code = 2
+            finally:
+                try:
+                    stop()
+                except BaseException:
+                    code = 2
+                os._exit(code)
+        os.close(incoming)
+        os.close(acknowledge)
+        self.outgoing, self.acknowledged = outgoing, acknowledged
+
+    def pulse(self):
+        try:
+            os.write(self.outgoing, b'.')
+            if not select.select([self.acknowledged], [], [], 2)[0]:
+                raise RuntimeError('bootstrap watchdog stopped acknowledging the monitor')
+            if os.read(self.acknowledged, 1) != b'.':
+                raise RuntimeError('bootstrap watchdog exited')
+        except OSError as error:
+            raise RuntimeError('bootstrap watchdog pipe failed') from error
+
+    def close(self):
+        os.close(self.outgoing)
+        os.close(self.acknowledged)
+        deadline = time.monotonic() + 5
+        while True:
+            pid, status = os.waitpid(self.pid, os.WNOHANG)
+            if pid:
+                if status:
+                    raise RuntimeError('bootstrap watchdog could not stop owned work')
+                return
+            if time.monotonic() >= deadline:
+                os.kill(self.pid, signal.SIGKILL)
+                os.waitpid(self.pid, 0)
+                raise RuntimeError('bootstrap watchdog cleanup timed out')
+            time.sleep(.01)
 
 
 def run(command, **kwargs):
@@ -66,7 +122,9 @@ class Provider:
         self.started = time.monotonic()
         self.mounted = False
         self.slice_owned = False
+        self.unit_owned = False
         self.control_owned = False
+        self.watchdog = None
         self.minimum_free = shutil.disk_usage(ROOT).free
         self.peak_logs = 0
         self.unit_file = Path('/run/systemd/system') / SLICE
@@ -75,12 +133,28 @@ class Provider:
                        '--config', str(DATA / 'client')]
 
     def guard(self):
+        if self.watchdog is not None:
+            self.watchdog.pulse()
         free = min(shutil.disk_usage(ROOT).free, shutil.disk_usage(CONTROL).free)
         self.minimum_free = min(self.minimum_free, free)
         if free < FREE_BYTES:
             raise RuntimeError('host/Docker backing free space below 50 GiB')
         if time.monotonic() - self.started >= DEADLINE_SECONDS:
             raise RuntimeError('bootstrap and test deadline exceeded')
+        image = CONTROL / 'storage.ext4'
+        if image.exists() and image.stat().st_size != BUILD_BYTES:
+            raise RuntimeError('bootstrap image size changed')
+        control_bytes = 0
+        if CONTROL.exists():
+            for path in CONTROL.iterdir():
+                if path.name in ('data', 'storage.ext4'):
+                    continue
+                if path.is_dir():
+                    control_bytes += allocated(path)
+                elif path.is_file():
+                    control_bytes += max(path.stat().st_size, path.stat().st_blocks * 512)
+        if control_bytes > 64 * 1024**2:
+            raise RuntimeError('bootstrap control/output reserve exhausted')
         if self.slice_owned:
             quota, period = (CGROUP / 'cpu.max').read_text().split()
             if quota == 'max' or int(quota) > 2 * int(period):
@@ -105,7 +179,7 @@ class Provider:
                 size = path.stat().st_size
                 if size > 16 * 1024**2:
                     raise RuntimeError('bootstrap log exceeded 16 MiB')
-                logs += size
+                logs += 2 * size  # Reserve the receipt copy before exporting it.
         for path in (DATA / 'docker/containers').glob('*/*-json.log'):
             logs += path.stat().st_size
         self.peak_logs = max(self.peak_logs, logs)
@@ -121,8 +195,9 @@ class Provider:
                       '--property=RuntimeMaxSec=1800', '--working-directory', str(ROOT)]
         if user:
             invocation += ['--uid', str(self.uid), '--gid', str(self.gid)]
+        temporary = DATA / 'tmp' if self.mounted else CONTROL / 'tmp'
         environment = {'PATH': os.environ['PATH'], 'HOME': str(DATA / 'client'),
-                       'TMPDIR': str(DATA / 'tmp'), 'DOCKER_TMPDIR': str(DATA / 'tmp'),
+                       'TMPDIR': str(temporary), 'DOCKER_TMPDIR': str(temporary),
                        'DOCKER_HOST': 'unix://' + str(CONTROL / 'docker.sock'),
                        'DOCKER_CONFIG': str(DATA / 'client')}
         invocation += ['--setenv=' + key + '=' + value for key, value in environment.items()]
@@ -152,20 +227,41 @@ class Provider:
             raise RuntimeError('prior bootstrap resources exist; inspect their owner before reuse or cleanup')
         CONTROL.mkdir(mode=0o711)
         self.control_owned = True
+        (CONTROL / 'tmp').mkdir(mode=0o700)
+        with self.unit_file.open('x') as unit:
+            self.unit_owned = True
+            unit.write('[Unit]\nDescription=Owned git-locks CI resources\n'
+                       '[Slice]\nCPUQuota=200%\nCPUQuotaPeriodSec=100ms\n'
+                       'MemoryMax=4G\nMemorySwapMax=0\nTasksMax=2048\n')
+        run(['systemctl', 'daemon-reload'])
+        # Activation can create a cgroup even if systemctl later reports an
+        # error. From this point cleanup owns that newly declared slice.
+        self.slice_owned = True
+        run(['systemctl', 'start', SLICE])
+        self.guard()
+        (CONTROL / 'launch.json').write_text(json.dumps({
+            'phase': 'before filesystem formatting',
+            'control': str(CONTROL), 'filesystem_image': str(CONTROL / 'storage.ext4'),
+            'quota_mount': str(DATA), 'daemon_config': daemon_config(),
+            'slice': str(CGROUP), 'memory_bytes': MEMORY_BYTES, 'cpus': 2,
+            'build_filesystem_bytes': BUILD_BYTES, 'control_bytes_limit': 64 * 1024**2,
+            'runtime_bytes_limit': 4 * 1024**3, 'logs_bytes_limit': LOG_BYTES,
+            'timeout_seconds': DEADLINE_SECONDS, 'backing_free_bytes': self.minimum_free,
+            'cancellation': 'independent pipe watchdog, then cgroup.kill for all owned descendants',
+            'status': 'prototype disabled; this contract is not execution evidence',
+        }, indent=2) + '\n')
+        self.watchdog = LifetimeGuard(self.kill_owned)
         self.guard()
         image = CONTROL / 'storage.ext4'
         with image.open('xb') as output:
             output.truncate(BUILD_BYTES)
-        run(['mkfs.ext4', '-q', '-F', '-m', '0', str(image)], stdout=subprocess.DEVNULL)
+        self.command(['mkfs.ext4', '-q', '-F', '-m', '0', str(image)])
         DATA.mkdir()
-        run(['mount', '-o', 'loop,nosuid,nodev', str(image), str(DATA)])
-        self.mounted = True
-        self.unit_file.write_text('[Unit]\nDescription=Owned git-locks CI resources\n'
-                                  '[Slice]\nCPUQuota=200%\nCPUQuotaPeriodSec=100ms\n'
-                                  'MemoryMax=4G\nMemorySwapMax=0\nTasksMax=2048\n')
-        run(['systemctl', 'daemon-reload'])
-        run(['systemctl', 'start', SLICE])
-        self.slice_owned = True
+        try:
+            self.command(['mount', '-o', 'loop,nosuid,nodev', str(image), str(DATA)])
+        finally:
+            # A mount can complete before a later command/monitor failure.
+            self.mounted = os.path.ismount(DATA)
         self.guard()
         for name in ('client', 'tmp', 'home'):
             path = DATA / name
@@ -200,6 +296,8 @@ class Provider:
         (CONTROL / 'docker.sock').chmod(0o600)
 
     def cleanup(self):
+        if not self.control_owned:
+            return  # Setup refused pre-existing resources; none belong to us.
         self.kill_owned()
         if self.slice_owned:
             for unit in (COMMAND, DAEMON, SLICE):
@@ -207,15 +305,19 @@ class Provider:
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if CGROUP.exists() and 'populated 1' in (CGROUP / 'cgroup.events').read_text():
                 raise RuntimeError('owned processes remain; preserving mounted recovery data')
+        if self.watchdog is not None:
+            self.watchdog.close()
+            self.watchdog = None
         self.receipt.parent.mkdir(exist_ok=True)
-        self.receipt.write_text(json.dumps({
+        with self.receipt.open('x') as output:
+            output.write(json.dumps({
             'build_filesystem_bytes': BUILD_BYTES, 'memory_bytes': MEMORY_BYTES,
             'cpus': 2, 'timeout_seconds': DEADLINE_SECONDS,
             'minimum_backing_free_bytes': self.minimum_free, 'peak_counted_log_bytes': self.peak_logs,
             'command': sys.argv[1:], 'status': getattr(self, 'status', 'incomplete'),
-        }, indent=2) + '\n')
+            }, indent=2) + '\n')
         os.chown(self.receipt, self.uid, self.gid)
-        for name in ('daemon.log', 'command.log'):
+        for name in ('daemon.log', 'command.log', 'launch.json'):
             source = CONTROL / name
             if source.exists():
                 target = self.receipt.parent / ('bootstrap-' + name)
@@ -226,7 +328,7 @@ class Provider:
         if self.mounted:
             run(['umount', str(DATA)])
             self.mounted = False
-        if self.slice_owned:
+        if self.unit_owned:
             self.unit_file.unlink()
             run(['systemctl', 'daemon-reload'])
         if self.control_owned:
