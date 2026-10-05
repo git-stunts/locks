@@ -21,6 +21,8 @@ All workers must agree on names, even when two names address the same file.
 
 Holder names, notes, acquisition guards, batch input, and the selected store pathname must also be valid UTF-8. Malformed text is refused with exit 2 before any reservation is published. Existing authority records with malformed UTF-8 block ordinary operations; `doctor` reports the invalid records without changing them. Error output replaces each invalid diagnostic byte with U+FFFD, so external errors still form valid JSON. Reservation keys are never repaired or replaced. A wrapped program keeps control of its own arguments and output.
 
+Batch input must not contain NUL bytes. A bad batch fails with exit 2 before any reservation is written. Stored records with NUL bytes block all state reads, including `doctor`, with a structured `store-read` error. The CLI never removes NUL bytes to make a record valid. Wrapped programs retain control of their binary input and output.
+
 The default store is a separate bare repository under `~/.git-stunts/locks`.
 The subject repository's common directory determines its store; linked worktrees share it.
 Project refs remain separate from lock state.
