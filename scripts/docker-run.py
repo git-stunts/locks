@@ -9,10 +9,13 @@ import json
 import os
 from pathlib import Path
 import shutil
+import select
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +25,7 @@ OWNER = "git-stunts.locks.tests"
 PROFILE = "5"
 SOURCE_LIMIT = 64 * 1024 * 1024
 ARTIFACT_LIMIT = 80 * 1024 * 1024
+EXPORT_TIMEOUT = 30
 
 
 def run(*args, **kwargs):
@@ -76,9 +80,27 @@ def retained_usage(receipts):
 def export_artifacts(receipts):
     """Retain explicitly named evidence, never overwrite an earlier receipt."""
     used = retained_usage(receipts)
-    process = subprocess.Popen(["docker", "exec", WORKER, "tar", "cf", "-", "-C", "/evidence", "artifacts"], stdout=subprocess.PIPE)
+    command = ["docker", "exec", WORKER, "tar", "cf", "-", "-C", "/evidence", "artifacts"]
+    deadline = time.monotonic() + EXPORT_TIMEOUT
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, bufsize=0, start_new_session=True)
+
+    def remaining():
+        seconds = deadline - time.monotonic()
+        if seconds <= 0:
+            raise subprocess.TimeoutExpired(command, EXPORT_TIMEOUT)
+        if shutil.disk_usage(receipts).free < 50 * 1024**3:
+            raise RuntimeError("host backing free space below 50 GiB during artifact export")
+        return seconds
+
+    class Stream:
+        def read(self, size):
+            while True:
+                ready, _, _ = select.select([process.stdout], [], [], min(.25, remaining()))
+                if ready:
+                    return os.read(process.stdout.fileno(), min(size, 65536))
+
     try:
-        with tarfile.open(fileobj=process.stdout, mode="r|") as tar:
+        with tarfile.open(fileobj=Stream(), mode="r|") as tar:
             for member in tar:
                 relative = Path(member.name)
                 if relative.is_absolute() or '..' in relative.parts or relative.parts[0] != 'artifacts':
@@ -98,12 +120,32 @@ def export_artifacts(receipts):
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 with destination.open('xb') as output:
                     shutil.copyfileobj(tar.extractfile(member), output)
-        if process.wait():
+        while True:
+            try:
+                status = process.wait(timeout=min(.25, remaining()))
+                break
+            except subprocess.TimeoutExpired:
+                remaining()
+        if status:
             raise RuntimeError("could not export container evidence")
     finally:
-        if process.poll() is None:
-            process.terminate()
-        process.wait()
+        # Kill only this export client's group, including children that retain
+        # its pipe. main() separately stops remote processes via container stop.
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=2)
+            process.stdout.close()
 
 
 def load_bootstrap():
