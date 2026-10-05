@@ -216,3 +216,18 @@ for label, capacity, root_bytes, free, allowed in [
     checks += 1
     print('PASS inner capacity guard: ' + label, flush=True)
 print(f'Quota runner integration: {checks} synthetic cases passed', flush=True)
+
+# Execute the committed entrypoint in a child interpreter with an injected
+# main failure. This checks real exception dispatch and exit/diagnostic output,
+# without starting another Docker client or privileged operation.
+entry = (ROOT / 'scripts/docker-run.py').read_text().split('if __name__ == "__main__":', 1)[1]
+for failure in ("subprocess.TimeoutExpired('docker stop', 15)",
+                "subprocess.CalledProcessError(1, 'docker stop')",
+                "RuntimeError('guard refusal')"):
+    program = ('import subprocess, sys\ndef main():\n    raise ' + failure +
+               '\nif __name__ == "__main__":' + entry)
+    result = subprocess.run(['python3', '-c', program], capture_output=True, text=True, timeout=5)
+    assert result.returncode == 2, (failure, result.returncode, result.stderr)
+    assert result.stderr.startswith('Docker test runner: ') and 'Traceback' not in result.stderr, result.stderr
+    assert result.stdout == '', result.stdout
+print('Host runner entrypoint: timeout, process failure and guard refusal report exit2 without traceback')

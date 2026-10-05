@@ -333,6 +333,6 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (RuntimeError, subprocess.CalledProcessError) as error:
+    except (RuntimeError, subprocess.SubprocessError) as error:
         print(f"Docker test runner: {error}", file=sys.stderr)
         sys.exit(2)
