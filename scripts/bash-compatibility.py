@@ -39,9 +39,15 @@ def bounded(command, timeout, **kwargs):
         process.wait()
 
 
+def require(condition, detail):
+    if not condition:
+        raise RuntimeError(str(detail))
+
+
 def verify(path, digest, size):
-    assert path.is_file() and not path.is_symlink() and path.stat().st_size == size, path
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, path
+    require(path.is_file() and not path.is_symlink() and path.stat().st_size == size,
+            f'invalid archive type or size: {path}')
+    require(hashlib.sha256(path.read_bytes()).hexdigest() == digest, f'archive SHA-256 mismatch: {path}')
 
 
 def fetch():
@@ -53,16 +59,16 @@ def fetch():
         if target.exists():
             verify(target, digest, size)
             continue
-        assert shutil.disk_usage(args.sources).free >= 50 * 1024**3, 'less than 50 GiB free'
+        require(shutil.disk_usage(args.sources).free >= 50 * 1024**3, 'less than 50 GiB free')
         with tempfile.NamedTemporaryFile(dir=args.sources, prefix='download-') as output:
             url = f'https://ftp.gnu.org/gnu/bash/bash-{version}.tar.gz'
             with urllib.request.urlopen(url, timeout=10) as response:
                 while True:
-                    assert time.monotonic() < deadline, 'download deadline exceeded'
+                    require(time.monotonic() < deadline, 'download deadline exceeded')
                     block = response.read(65536)
                     if not block:
                         break
-                    assert output.tell() + len(block) <= size, 'archive exceeds pinned size'
+                    require(output.tell() + len(block) <= size, 'archive exceeds pinned size')
                     output.write(block)
             output.flush()
             verify(Path(output.name), digest, size)
@@ -74,12 +80,13 @@ def extract(archive, destination, version):
     prefix = f'bash-{version}'
     with tarfile.open(archive) as stream:
         members = stream.getmembers()
-        assert len(members) < 2000 and sum(m.size for m in members) < 32 * 1024**2
+        require(len(members) < 2000 and sum(m.size for m in members) < 32 * 1024**2,
+                'expanded archive exceeds member or byte limit')
         links = []
         for member in members:
             relative = Path(member.name)
-            assert not relative.is_absolute() and '..' not in relative.parts
-            assert relative.parts and relative.parts[0] == prefix
+            require(not relative.is_absolute() and '..' not in relative.parts, 'unsafe archive path')
+            require(relative.parts and relative.parts[0] == prefix, 'unexpected archive root')
             target = destination / relative
             if member.isdir():
                 target.mkdir(parents=True, exist_ok=True)
@@ -89,8 +96,8 @@ def extract(archive, destination, version):
                     shutil.copyfileobj(source, output)
                 target.chmod(member.mode & 0o777)
             else:
-                assert member.issym() and member.name == prefix + '/ChangeLog'
-                assert member.linkname == 'CWRU/changelog'
+                require(member.issym() and member.name == prefix + '/ChangeLog', 'unexpected archive link or type')
+                require(member.linkname == 'CWRU/changelog', 'unexpected archive link target')
                 links.append((target, member.linkname))
         for target, link in links:
             target.symlink_to(link)
@@ -98,6 +105,7 @@ def extract(archive, destination, version):
 
 def test():
     subprocess.run(['node', str(ROOT / 'scripts/require-docker.mjs')], check=True)
+    bounded(['python3', str(ROOT / 'test/bash-input-integrity.py')], timeout=120)
     # The runner supplies CPU/memory limits, tmpfs quotas, a process-tree
     # deadline, and continuous data/log guards. Never compile on the host.
     with tempfile.TemporaryDirectory(prefix='locks-bash-compat-') as scratch:
@@ -135,7 +143,7 @@ def test():
 
 
 if args.operation == 'fetch':
-    assert args.interpreters is None and not args.full, 'test options do not apply to fetch'
+    require(args.interpreters is None and not args.full, 'test options do not apply to fetch')
     fetch()
 else:
     test()
