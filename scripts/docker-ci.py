@@ -203,7 +203,7 @@ def cgroup_limits():
 def quota_admission(info, worker_pid):
     """Collect a verified boundary; callers must recheck it while work runs.
 
-    Not yet used to relax either runner's ordinary free-space floor.
+    The host runner uses this only for the private bootstrap filesystem.
     """
     if platform.system() != 'Linux':
         raise RuntimeError('bootstrap quota admission requires native Linux')

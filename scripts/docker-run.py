@@ -3,6 +3,7 @@
 
 import fcntl
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -104,6 +105,35 @@ def export_artifacts(receipts):
         process.wait()
 
 
+def load_bootstrap():
+    spec = importlib.util.spec_from_file_location('git_locks_bootstrap', ROOT / 'scripts/docker-ci.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class BootstrapBoundary:
+    """A small filesystem is admitted only with live host-side kernel proof."""
+    def __init__(self, info, worker_pid):
+        self.provider = load_bootstrap()
+        self.info, self.worker_pid = info, worker_pid
+        self.initial = self.snapshot()
+
+    def snapshot(self):
+        try:
+            return self.provider.quota_admission(self.info, self.worker_pid)
+        except Exception as error:
+            raise RuntimeError('bootstrap quota admission failed: ' + str(error)) from None
+
+    def check(self):
+        current = self.snapshot()
+        # Free bytes can change. Quota and process identities must not.
+        for key, value in self.initial.items():
+            if key != 'backing_free_bytes' and current.get(key) != value:
+                raise RuntimeError('bootstrap quota or process identity changed: ' + key)
+        return current
+
+
 def main():
     if shutil.disk_usage(ROOT).free < 50 * 1024**3:
         raise RuntimeError("less than 50 GiB host free space; refusing new test work")
@@ -171,8 +201,15 @@ def main():
         try:
             vm_df = subprocess.check_output(["docker", "exec", WORKER, "df", "-Pk", "/"], text=True)
             vm_free = int(vm_df.splitlines()[-1].split()[3]) * 1024
+            boundary = None
+            inner_options = []
             if vm_free < 50 * 1024**3:
-                raise RuntimeError("less than 50 GiB Docker VM free space; refusing test work")
+                info = json.loads(subprocess.check_output(
+                    ["docker", "info", "--format", "{{json .}}"], text=True, timeout=5))
+                running = inspect("container", WORKER)
+                boundary = BootstrapBoundary(info, running["State"]["Pid"])
+                inner_options = ["--verified-bootstrap-quota", str(boundary.initial["capacity_bytes"]), "--"]
+                (receipts / "quota-admission.json").write_text(json.dumps(boundary.initial, indent=2) + "\n")
             run("docker", "exec", "-i", WORKER, "tar", "xf", "-", "-C", "/work", input=payload)
             run("docker", "exec", "-w", "/work/source", WORKER,
                 "bash", "scripts/docker-entry.sh")
@@ -182,11 +219,18 @@ def main():
             # The inner runner monitors the VM and quota filesystems. The host
             # separately checks its own filesystem; no host path is mounted.
             process = subprocess.Popen(["docker", "exec", "-e", f"TEST_LOG_BUDGET_BYTES={128 * 1024**2 - retained - 18 * 1024**2}", "-w", "/work/source", WORKER,
-                                        "python3", "scripts/docker-exec.py", *command])
+                                        "python3", "scripts/docker-exec.py", *inner_options, *command])
             host_guard = False
+            host_guard_detail = None
             while process.poll() is None:
-                if shutil.disk_usage(ROOT).free < 50 * 1024**3:
+                try:
+                    if shutil.disk_usage(ROOT).free < 50 * 1024**3:
+                        raise RuntimeError("host free space below 50 GiB")
+                    if boundary is not None:
+                        boundary.check()
+                except Exception as error:
                     host_guard = True
+                    host_guard_detail = str(error)
                     pid = subprocess.check_output(["docker", "exec", WORKER, "cat", "/evidence/runner.pid"], text=True).strip()
                     if not pid.isdecimal() or int(pid) < 2:
                         raise RuntimeError("invalid owned workload PID")
@@ -197,10 +241,12 @@ def main():
                     process.wait(timeout=1)
                 except subprocess.TimeoutExpired:
                     pass
+            if boundary is not None and not host_guard:
+                boundary.check()
             result_code = 2 if host_guard else process.returncode
             with (receipts / "latest.log").open("wb") as log:
                 run("docker", "exec", WORKER, "cat", "/evidence/test.log", stdout=log)
-            (receipts / "result.json").write_text(json.dumps({"exit_code": result_code, "host_guard": host_guard}) + "\n")
+            (receipts / "result.json").write_text(json.dumps({"exit_code": result_code, "host_guard": host_guard, "host_guard_detail": host_guard_detail}) + "\n")
             with (receipts / "resources.json").open("wb") as receipt:
                 run("docker", "exec", WORKER, "cat", "/evidence/resources.json", stdout=receipt)
             export_artifacts(receipts)

@@ -19,6 +19,7 @@ LOG_LIMIT = 16 * 1024**2
 MOUNTS = ('/work', '/tmp', '/home/node', '/evidence', '/dev/shm')
 peaks = {mount: 0 for mount in MOUNTS}
 minimum_vm_free = None
+quota_capacity = None
 interrupted = False
 input_sizes = {}
 peak_generated_log_bytes = 0
@@ -53,8 +54,18 @@ def measure():
     backing = os.statvfs('/')
     free = backing.f_bavail * backing.f_frsize
     minimum_vm_free = free if minimum_vm_free is None else min(minimum_vm_free, free)
-    if free < MIN_FREE:
-        raise RuntimeError('Docker VM backing filesystem has less than 50 GiB free')
+    if quota_capacity is None:
+        if free < MIN_FREE:
+            raise RuntimeError('Docker VM backing filesystem has less than 50 GiB free')
+    else:
+        # Host admission verified the loop backing, physical disk, guardian,
+        # daemon and worker identities. It rechecks these while this runs.
+        # This inner check verifies the actual root capacity and free reserve.
+        if (type(quota_capacity) is not int or not 0 < quota_capacity <= 19 * 1024**3
+                or backing.f_frsize <= 0 or backing.f_blocks * backing.f_frsize != quota_capacity):
+            raise RuntimeError('root filesystem differs from the admitted bootstrap quota')
+        if free < 64 * 1024**2:
+            raise RuntimeError('bootstrap root filesystem reserve exhausted')
     for mount in MOUNTS:
         fs = os.statvfs(mount)
         used = (fs.f_blocks - fs.f_bfree) * fs.f_frsize
@@ -103,7 +114,9 @@ def stop_workload(existing):
         time.sleep(.01)
 
 
-def main(command=None, evidence=Path('/evidence')):
+def main(command=None, evidence=Path('/evidence'), admitted_capacity=None):
+    global quota_capacity
+    quota_capacity = admitted_capacity
     for path in ROOT.rglob('*'):
         if path.is_file():
             stat = path.stat()
@@ -151,10 +164,17 @@ def main(command=None, evidence=Path('/evidence')):
         # Quota reserve above leaves room for this receipt even on a refused run.
         (evidence / 'resources.json').write_text(json.dumps({
             'peak_tmpfs_bytes': peaks, 'minimum_vm_free_bytes': minimum_vm_free,
-            'stdout_bytes': written, 'guard_error': error,
+            'stdout_bytes': written, 'guard_error': error, 'bootstrap_quota_bytes': quota_capacity,
             'peak_generated_nonobject_bytes': peak_generated_log_bytes, 'runtime_log_budget_bytes': log_budget,
         }, indent=2) + '\n')
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    arguments = sys.argv[1:]
+    admitted = None
+    if arguments[:1] == ['--verified-bootstrap-quota']:
+        if len(arguments) < 4 or arguments[2] != '--':
+            raise RuntimeError('invalid internal bootstrap admission arguments')
+        admitted = int(arguments[1])
+        arguments = arguments[3:]
+    sys.exit(main(arguments, admitted_capacity=admitted))

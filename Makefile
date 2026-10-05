@@ -27,6 +27,7 @@ test-container:
 	python3 test/docker-quota.py
 	python3 test/docker-bootstrap-health.py
 	python3 test/docker-bootstrap-admission.py
+	python3 test/docker-quota-runners.py
 	python3 test/docker-resources.py
 	python3 test/state-coherence.py
 	python3 test/root-refs.py
