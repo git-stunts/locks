@@ -8,6 +8,7 @@ from pathlib import Path
 import fcntl
 import hashlib
 import json
+import math
 import os
 import platform
 import select
@@ -143,6 +144,47 @@ def quota_filesystem(data, image):
     return {'device': device, 'capacity_bytes': fs.f_blocks * fs.f_frsize, 'free_bytes': available}
 
 
+def process_identity(pid):
+    if type(pid) is not int or pid < 2:
+        raise RuntimeError('invalid bootstrap monitor PID')
+    directory = Path('/proc') / str(pid)
+    fields = (directory / 'stat').read_text().rsplit(')', 1)[1].split()
+    identities = [line.split()[1:] for line in (directory / 'status').read_text().splitlines()
+                  if line.startswith('Uid:')]
+    if identities != [['0', '0', '0', '0']] or fields[0] in ('Z', 'X', 'x'):
+        raise RuntimeError('bootstrap monitoring process is dead or not root-owned')
+    return {'pid': pid, 'parent': int(fields[1]), 'started': int(fields[19])}
+
+
+def monitor_health():
+    """Reject stale proof, dead processes, PID reuse, or a different guardian."""
+    path = CONTROL / 'health.json'
+    metadata = os.lstat(path)
+    if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0
+            or metadata.st_mode & 0o022 or metadata.st_nlink != 1 or metadata.st_size > 4096):
+        raise RuntimeError('bootstrap health record is not protected')
+    proof = json.loads(path.read_text())
+    if not isinstance(proof, dict):
+        raise RuntimeError('invalid bootstrap health record')
+    stamp = proof.get('monotonic')
+    if type(stamp) is not float or not math.isfinite(stamp):
+        raise RuntimeError('invalid bootstrap health timestamp')
+    age = time.monotonic() - stamp
+    if type(proof.get('protocol')) is not int or proof['protocol'] != 1 or not 0 <= age <= 5:
+        raise RuntimeError('bootstrap health record is stale or unsupported')
+    for role in ('monitor', 'watchdog'):
+        identity = proof.get(role)
+        if (not isinstance(identity, dict) or set(identity) != {'pid', 'parent', 'started'}
+                or any(type(value) is not int for value in identity.values())
+                or identity['pid'] < 2 or identity['parent'] < 0 or identity['started'] < 1):
+            raise RuntimeError('invalid bootstrap process identity')
+        if process_identity(identity['pid']) != identity:
+            raise RuntimeError('bootstrap monitoring process identity changed')
+    if proof['watchdog']['parent'] != proof['monitor']['pid']:
+        raise RuntimeError('bootstrap watchdog does not belong to this monitor')
+    return proof
+
+
 class Provider:
     def __init__(self, uid, gid):
         self.uid, self.gid = uid, gid
@@ -207,6 +249,17 @@ class Provider:
         # Reserve space for the ordinary worker's 16 MiB live log/evidence tmpfs.
         if logs > LOG_BYTES - 20 * 1024**2:
             raise RuntimeError('aggregate log reserve exhausted')
+        if self.mounted and self.watchdog is not None:
+            # Publish only after every resource check and watchdog acknowledgement.
+            # Readers must still verify quota identity and physical backing space.
+            proof = {'protocol': 1, 'monotonic': time.monotonic(),
+                     'monitor': process_identity(os.getpid()),
+                     'watchdog': process_identity(self.watchdog.pid)}
+            temporary = CONTROL / 'health.pending'
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+            with os.fdopen(descriptor, 'w') as output:
+                output.write(json.dumps(proof) + '\n')
+            os.replace(temporary, CONTROL / 'health.json')
 
     def command(self, command, user=False):
         self.guard()
