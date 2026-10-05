@@ -36,9 +36,11 @@ the cached time: a writer that loses publication, or a waiter taking another
 attempt, checks liveness and calculates expiry again. An expiry that would
 overflow after a retry is refused even if it fitted during the first attempt.
 
-`GIT_LOCKS_NOW` is a test override, normalized with the same parser. It fixes
-lease time but does not change the wait clock. Omit it to use the system clock;
-setting it to an empty string is an error.
+`GIT_LOCKS_NOW` is a test override. It requires `GIT_LOCKS_TEST_HOOKS=1` and uses
+the same decimal parser. It fixes lease time but does not change the wait clock.
+Without that opt-in, any supplied override returns a `usage` error before store
+access. Omit the override to use the system clock; an empty value is an error.
+Use test mode only with an isolated test store. See [test controls](testing.md#test-controls).
 
 ## Renewal
 

@@ -42,6 +42,7 @@
 # clients stopped. See docs/state-protocol.md.
 #
 # Exit codes: 0 done (or free), 1 refused / held, 2 usage or a store error.
+# Test controls require the explicit opt-in GIT_LOCKS_TEST_HOOKS=1.
 # GIT_LOCKS_NOW=<epoch seconds> fixes the clock (tests).
 # GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file> makes every transaction wait for that
 # file to exist before committing; GIT_LOCKS_PAUSE_AFTER_READ=<file> makes
@@ -127,7 +128,9 @@ output:  JSON Lines, always: one object per result on stdout, written as each re
 store:   GIT_LOCKS_STORE=<path|self>, else `git config locks.store`,
          else ${GIT_LOCKS_HOME:-~/.git-stunts}/locks/<main repo path>
          Relative paths use the shared main-repository anchor, not the current subdirectory.
-clock:   GIT_LOCKS_NOW=<nonnegative decimal epoch> (tests; empty is invalid)
+tests:   GIT_LOCKS_TEST_HOOKS=1 enables GIT_LOCKS_NOW, GIT_LOCKS_TRACE, and GIT_LOCKS_PAUSE_*.
+         Test controls without this opt-in are errors; use only with isolated test stores.
+clock:   GIT_LOCKS_NOW=<nonnegative decimal epoch> (test mode only; empty is invalid)
 numbers: decimal digits only, at most 9223372036854775807; TTL is positive,
          wait may be zero; expiry and wait-deadline sums must fit the same range
 exit:    0 done or free, 1 refused or held, 2 usage or a store error
@@ -300,6 +303,15 @@ time_sum_v() { # VAR canonical-base canonical-duration: check before addition
 expiry_v() { # VAR canonical-now canonical-ttl: fail before writing an invalid record
   time_sum_v "$1" "$2" "$3" || fail "--ttl exceeds the available expiry range ($((INTEGER_MAX - $2)) seconds at this clock)" 2
 }
+# ---------------------------------------------------------------- explicit test instrumentation
+
+test_hooks_enabled() { [[ "${GIT_LOCKS_TEST_HOOKS:-}" == 1 ]]; }
+
+validate_test_hooks() {
+  if ! test_hooks_enabled && [[ -n "${GIT_LOCKS_NOW+x}${GIT_LOCKS_TRACE+x}${GIT_LOCKS_PAUSE_AFTER_READ+x}${GIT_LOCKS_PAUSE_BEFORE_COMMIT+x}" ]]; then
+    fail 'test controls require GIT_LOCKS_TEST_HOOKS=1; unset them for normal use' 2
+  fi
+}
 # ---------------------------------------------------------------- time, refs, records
 
 system_now_v() { # VAR: one validated system-clock sample; errors return to the caller for cleanup
@@ -316,7 +328,7 @@ system_now_v() { # VAR: one validated system-clock sample; errors return to the 
 
 now_v() { # VAR: one validated clock value per snapshot; replanning refreshes it
   if [[ -z "${NOW_CACHED}" ]]; then
-    if [[ -n "${GIT_LOCKS_NOW+x}" ]]; then
+    if test_hooks_enabled && [[ -n "${GIT_LOCKS_NOW+x}" ]]; then
       NOW_CACHED="${GIT_LOCKS_NOW}"
     else
       system_now_v NOW_CACHED || exit 2
@@ -674,7 +686,7 @@ parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], on
   done
   R_PARSED["$1"]=1
   R_PATHS["$1"]="${paths%$'\n'}"
-  [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'parse %s\n' "$1" >>"${GIT_LOCKS_TRACE}"
+  test_hooks_enabled && [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'parse %s\n' "$1" >>"${GIT_LOCKS_TRACE}"
   return 0
 }
 
@@ -753,12 +765,12 @@ snapshot() {
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
   SNAP_LOADED=1
   ((DIAGNOSTIC_READ)) || validate_snapshot
-  [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'snapshot %s\n' "${#refs[@]}" >>"${GIT_LOCKS_TRACE}"
+  test_hooks_enabled && [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'snapshot %s\n' "${#refs[@]}" >>"${GIT_LOCKS_TRACE}"
   test_gate "${GIT_LOCKS_PAUSE_AFTER_READ:-}" # tests force an interleaving between a read and what follows it
 }
 
 test_gate() { # file-or-empty: when set, say so in <file>.ready and wait here until the file exists (at most 30 s); tests only
-  [[ -n "$1" ]] || return 0
+  test_hooks_enabled && [[ -n "$1" ]] || return 0
   : >"$1.ready" # the test waits for this before racing us: a sleep would let the racer win before we had read and planned
   local waited=0
   until [[ -e "$1" ]] || ((waited >= 600)); do
@@ -3423,6 +3435,7 @@ main() {
     fi
   done
   [[ "${cmd}" == doctor ]] && DIAGNOSTIC_READ=1
+  validate_test_hooks # fail before store discovery, initialization, or instrumentation writes
   if [[ -n "${GIT_LOCKS_NOW+x}" ]]; then
     decimal_uint GIT_LOCKS_NOW "${GIT_LOCKS_NOW}" || fail 'GIT_LOCKS_NOW must be a decimal epoch from 0 through 9223372036854775807' 2
   fi

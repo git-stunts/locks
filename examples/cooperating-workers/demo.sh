@@ -24,7 +24,7 @@ fi
 output="$(cd "${output}" && pwd)"
 mkdir -p "${output}/work/generated" "${output}/receipts" "${output}/gates" "${output}/tmp"
 export DEMO_RECEIPTS="${output}/receipts"
-export GIT_LOCKS_STORE="${output}/store.git" GIT_LOCKS_NOW=1000000
+export GIT_LOCKS_TEST_HOOKS=1 GIT_LOCKS_STORE="${output}/store.git" GIT_LOCKS_NOW=1000000
 export TMPDIR="${output}/tmp"
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_OBJECT_DIRECTORY GIT_NAMESPACE
 children=() gates=()

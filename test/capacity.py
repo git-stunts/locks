@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='git-locks-capacity-') as tmp:
     env = {key: value for key, value in os.environ.items()
            if not key.startswith('GIT_')}
     env.update(HOME=tmp, GIT_LOCKS_STORE=str(base / 'store.git'),
-               GIT_LOCKS_NOW='1000000', LC_ALL='C')
+               GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000', LC_ALL='C')
 
     def run(*args, expected=0):
         result = subprocess.run([str(CLI), *args], cwd=tmp, env=env,

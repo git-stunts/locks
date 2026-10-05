@@ -27,7 +27,7 @@ def run(env, *args):
 
 def setup(base):
     env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
-    env.update(GIT_LOCKS_STORE=str(base / 'store.git'), GIT_LOCKS_NOW='100')
+    env.update(GIT_LOCKS_STORE=str(base / 'store.git'), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='100')
     result = run(env, 'claim', '--job', 'j', '--holder', 'alice', '--ttl', '5', 'x.md')
     assert result.returncode == 0, result
     return env, json.loads(result.stdout)['acquisition']

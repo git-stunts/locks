@@ -3,6 +3,7 @@
 source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Independent small-store calibration before the informational large benchmark.
 set -euo pipefail
+export GIT_LOCKS_TEST_HOOKS=1
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX GIT_LOCKS_TRACE GIT_LOCKS_PAUSE_AFTER_READ GIT_LOCKS_PAUSE_BEFORE_COMMIT GIT_LOCKS_HOME
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture_git() { python3 "${ROOT}/test/store-fixture.py" "$@"; }

@@ -184,7 +184,7 @@ def stopped_demo_leaves_no_workers(output):
             time.sleep(.02)
         assert not session_members(proc.pid), "stopped demo left a process in its session"
         result = subprocess.run([str(ROOT / 'bin/git-locks'), 'list'], text=True, capture_output=True, timeout=5,
-                                env=dict(os.environ, GIT_LOCKS_STORE=str(output / 'store.git'), GIT_LOCKS_NOW='1000000'))
+                                env=dict(os.environ, GIT_LOCKS_STORE=str(output / 'store.git'), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000'))
         assert result.returncode == 0 and not result.stdout, result
     finally:
         stop_demo(proc)

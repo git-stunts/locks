@@ -36,7 +36,7 @@ def setup(base, mode='normal'):
     if mode == 'separate':
         args.append('--separate-git-dir=' + str(base / 'metadata.git'))
     git(subject, *args)
-    env = dict(ENV, HOME=str(home), GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null', GIT_LOCKS_NOW='100')
+    env = dict(ENV, HOME=str(home), GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL='/dev/null', GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='100')
     common = Path(git(subject, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
     anchor = common.parent if common.name == '.git' else common
     return subject, common, anchor, env

@@ -23,7 +23,7 @@ binary = str(Path(sys.argv[1]).resolve())
 for seed in (34, 1701, 20260922):
     rng = random.Random(seed)
     with tempfile.TemporaryDirectory(prefix="git-locks-family-model-") as tmp:
-        env = dict(os.environ, GIT_LOCKS_STORE=f"{tmp}/store.git", GIT_LOCKS_NOW="1000000")
+        env = dict(os.environ, GIT_LOCKS_STORE=f"{tmp}/store.git", GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW="1000000")
         jobs = {}
         acquisitions = {}
 

@@ -51,7 +51,7 @@ def publish(store, values):
 
 def setup(base):
     store = base / 'store.git'
-    env = dict(ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_NOW='100')
+    env = dict(ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='100')
     for args in (['claim', '--job', 'a', '--holder', 'alice', '--ttl', '60', 'src/a.md'],
                  ['claim', '--job', 'b', '--holder', 'alice', '--parent', 'a', '--ttl', '60', 'src/b.md'],
                  ['sem', 'create', 'gpu', '--capacity', '2'],

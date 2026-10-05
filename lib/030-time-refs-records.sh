@@ -14,7 +14,7 @@ system_now_v() { # VAR: one validated system-clock sample; errors return to the 
 
 now_v() { # VAR: one validated clock value per snapshot; replanning refreshes it
   if [[ -z "${NOW_CACHED}" ]]; then
-    if [[ -n "${GIT_LOCKS_NOW+x}" ]]; then
+    if test_hooks_enabled && [[ -n "${GIT_LOCKS_NOW+x}" ]]; then
       NOW_CACHED="${GIT_LOCKS_NOW}"
     else
       system_now_v NOW_CACHED || exit 2

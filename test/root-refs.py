@@ -33,7 +33,7 @@ def git(store, *args, data=None, status=0):
 def setup(base):
     store = base / 'store.git'
     git(store, 'init', '-q', '--bare', str(store))
-    return store, dict(ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_NOW='100')
+    return store, dict(ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='100')
 
 
 def locks(env, args):

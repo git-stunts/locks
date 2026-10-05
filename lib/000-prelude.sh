@@ -42,6 +42,7 @@
 # clients stopped. See docs/state-protocol.md.
 #
 # Exit codes: 0 done (or free), 1 refused / held, 2 usage or a store error.
+# Test controls require the explicit opt-in GIT_LOCKS_TEST_HOOKS=1.
 # GIT_LOCKS_NOW=<epoch seconds> fixes the clock (tests).
 # GIT_LOCKS_PAUSE_BEFORE_COMMIT=<file> makes every transaction wait for that
 # file to exist before committing; GIT_LOCKS_PAUSE_AFTER_READ=<file> makes
@@ -127,7 +128,9 @@ output:  JSON Lines, always: one object per result on stdout, written as each re
 store:   GIT_LOCKS_STORE=<path|self>, else `git config locks.store`,
          else ${GIT_LOCKS_HOME:-~/.git-stunts}/locks/<main repo path>
          Relative paths use the shared main-repository anchor, not the current subdirectory.
-clock:   GIT_LOCKS_NOW=<nonnegative decimal epoch> (tests; empty is invalid)
+tests:   GIT_LOCKS_TEST_HOOKS=1 enables GIT_LOCKS_NOW, GIT_LOCKS_TRACE, and GIT_LOCKS_PAUSE_*.
+         Test controls without this opt-in are errors; use only with isolated test stores.
+clock:   GIT_LOCKS_NOW=<nonnegative decimal epoch> (test mode only; empty is invalid)
 numbers: decimal digits only, at most 9223372036854775807; TTL is positive,
          wait may be zero; expiry and wait-deadline sums must fit the same range
 exit:    0 done or free, 1 refused or held, 2 usage or a store error

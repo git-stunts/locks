@@ -44,7 +44,7 @@ def refs(env):
 
 def environment(base, clock='1000000'):
     env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
-    env.update(GIT_LOCKS_STORE=str(base / 'store.git'), GIT_LOCKS_NOW=clock)
+    env.update(GIT_LOCKS_STORE=str(base / 'store.git'), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW=clock)
     assert invoke(env, 'sem', 'create', 'gpu', '--capacity', '2').returncode == 0
     assert invoke(env, 'claim', '--job', 'held', '--holder', 'alice', '--ttl', '1', 'held.md').returncode == 0
     return env
