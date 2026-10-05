@@ -25,7 +25,8 @@ initial = {'capacity_bytes': 19 << 30, 'device': 7,
            'worker': {'pid': 23, 'parent': 22, 'started': 60},
            'backing_free_bytes': 70 << 30}
 checks = 0
-for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired'):
+emergency_faults = ('missing runner PID', 'invalid runner PID', 'failed TERM', 'TERM timeout', 'failed worker stop', 'stuck Docker client')
+for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired', *emergency_faults):
     with tempfile.TemporaryDirectory(prefix='locks-quota-runner-') as scratch:
         root = Path(scratch)
         recipe = root / 'scripts/docker/Dockerfile'
@@ -60,20 +61,38 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
             returncode = 0 if fault == 'final health expired' else None
             def poll(self): return self.returncode
             def wait(self, timeout=None):
+                if fault in ('TERM timeout', 'stuck Docker client') and self.returncode is None:
+                    raise subprocess.TimeoutExpired('docker exec', timeout)
                 assert self.returncode is not None, 'wait before cancellation'
                 return self.returncode
+            def kill(self):
+                assert ('docker', 'stop', '--time', '5', runner.WORKER) in calls
+                assert fault == 'stuck Docker client'
+                self.returncode = -9
         process = Process()
         def run(*command, **kwargs):
             calls.append(command)
             if command[:5] == ('docker', 'exec', runner.WORKER, 'kill', '-TERM'):
-                process.returncode = 143
+                if fault == 'failed TERM':
+                    raise subprocess.CalledProcessError(1, command)
+                if fault not in ('TERM timeout', 'stuck Docker client'):
+                    process.returncode = 143
+            if command[:2] == ('docker', 'stop'):
+                if fault == 'failed worker stop':
+                    raise subprocess.CalledProcessError(1, command)
+                if fault != 'stuck Docker client':
+                    process.returncode = 137
             if kwargs.get('stdout') is not None and hasattr(kwargs['stdout'], 'write'):
                 kwargs['stdout'].write(b'{}\n')
             return SimpleNamespace(returncode=0)
         def output(command, **kwargs):
             if 'df' in command: return 'Filesystem blocks used available percent mount\nroot 1 0 131072 0% /\n'
             if command[1] == 'info': return '{"private": true}'
-            if command[-1] == '/evidence/runner.pid': return '100\n'
+            if command[-1] == '/evidence/runner.pid':
+                if fault in ('missing runner PID', 'failed worker stop'):
+                    raise subprocess.CalledProcessError(1, command)
+                if fault == 'invalid runner PID': return '1\n'
+                return '100\n'
             raise AssertionError(command)
         def launch(command):
             at = command.index('--verified-bootstrap-quota')
@@ -86,16 +105,36 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
              patch.object(runner.shutil, 'disk_usage', return_value=SimpleNamespace(free=70 << 30)), \
              patch.object(runner.subprocess, 'check_output', side_effect=output), \
              patch.object(runner.subprocess, 'Popen', side_effect=launch):
-            assert runner.main() == 2
+            if fault == 'failed worker stop':
+                try:
+                    runner.main()
+                except (RuntimeError, subprocess.CalledProcessError):
+                    pass
+                else:
+                    raise AssertionError('failed worker stop must not report success')
+            else:
+                assert runner.main() == 2
         result = json.loads((root / '.test-results/result.json').read_text())
         assert result['host_guard'] and result['host_guard_detail']
         assert len(snapshots) == 2
-        if fault == 'final health expired':
+        if fault in ('final health expired', 'missing runner PID', 'invalid runner PID', 'failed worker stop'):
             assert not any('kill' in command for command in calls)
         else:
             assert ('docker', 'exec', runner.WORKER, 'kill', '-TERM', '100') in calls
-        assert (root / '.test-results/latest.log').read_bytes() == b'{}\n'
-        assert (root / '.test-results/resources.json').read_bytes() == b'{}\n'
+        if fault in emergency_faults:
+            assert result['exit_code'] == 2 and result['cancellation_error']
+            assert result['evidence_unavailable']
+            if fault == 'failed worker stop':
+                assert result['worker_stop'] == 'failed' and result['stop_error']
+                assert process.returncode is None
+            else:
+                assert result['worker_stop'] == 'confirmed'
+                assert process.returncode is not None
+            assert not (root / '.test-results/latest.log').exists()
+            assert not (root / '.test-results/resources.json').exists()
+        else:
+            assert (root / '.test-results/latest.log').read_bytes() == b'{}\n'
+            assert (root / '.test-results/resources.json').read_bytes() == b'{}\n'
         assert ('docker', 'stop', '--time', '5', runner.WORKER) in calls
         checks += 1
         print('PASS running host guard cancels on ' + fault, flush=True)

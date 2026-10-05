@@ -198,6 +198,7 @@ def main():
             "mounts": worker["Mounts"], "command": sys.argv[1:] or ["make", "test-container"],
         }, indent=2) + "\n")
         run("docker", "start", WORKER, stdout=subprocess.DEVNULL)
+        worker_stopped = False
         try:
             vm_df = subprocess.check_output(["docker", "exec", WORKER, "df", "-Pk", "/"], text=True)
             vm_free = int(vm_df.splitlines()[-1].split()[3]) * 1024
@@ -231,11 +232,39 @@ def main():
                 except Exception as error:
                     host_guard = True
                     host_guard_detail = str(error)
-                    pid = subprocess.check_output(["docker", "exec", WORKER, "cat", "/evidence/runner.pid"], text=True).strip()
-                    if not pid.isdecimal() or int(pid) < 2:
-                        raise RuntimeError("invalid owned workload PID")
-                    run("docker", "exec", WORKER, "kill", "-TERM", pid)
-                    process.wait(timeout=20)
+                    try:
+                        pid = subprocess.check_output(["docker", "exec", WORKER, "cat", "/evidence/runner.pid"],
+                                                      text=True, timeout=5).strip()
+                        if not pid.isdecimal() or int(pid) < 2:
+                            raise RuntimeError("invalid owned workload PID")
+                        run("docker", "exec", WORKER, "kill", "-TERM", pid, timeout=5)
+                        process.wait(timeout=20)
+                    except Exception as cancellation_error:
+                        # Killing the local Docker client does not stop its remote
+                        # workload. Stop the owned container before reaping it.
+                        failure = {"exit_code": 2, "host_guard": True,
+                                   "host_guard_detail": host_guard_detail,
+                                   "cancellation_error": str(cancellation_error),
+                                   "worker_stop": "requested",
+                                   "evidence_unavailable": "Emergency worker stop discards tmpfs evidence before export"}
+                        result_path = receipts / "result.json"
+                        result_path.write_text(json.dumps(failure) + "\n")
+                        try:
+                            run("docker", "stop", "--time", "5", WORKER,
+                                stdout=subprocess.DEVNULL, timeout=15)
+                        except Exception as stop_error:
+                            failure.update(worker_stop="failed", stop_error=str(stop_error))
+                            result_path.write_text(json.dumps(failure) + "\n")
+                            raise RuntimeError("emergency worker stop failed: " + str(stop_error)) from None
+                        worker_stopped = True
+                        failure["worker_stop"] = "confirmed"
+                        result_path.write_text(json.dumps(failure) + "\n")
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=5)
+                        return 2
                     break
                 try:
                     process.wait(timeout=1)
@@ -248,15 +277,16 @@ def main():
                     host_guard = True
                     host_guard_detail = str(error)
             result_code = 2 if host_guard else process.returncode
+            (receipts / "result.json").write_text(json.dumps({"exit_code": result_code, "host_guard": host_guard, "host_guard_detail": host_guard_detail}) + "\n")
             with (receipts / "latest.log").open("wb") as log:
                 run("docker", "exec", WORKER, "cat", "/evidence/test.log", stdout=log)
-            (receipts / "result.json").write_text(json.dumps({"exit_code": result_code, "host_guard": host_guard, "host_guard_detail": host_guard_detail}) + "\n")
             with (receipts / "resources.json").open("wb") as receipt:
                 run("docker", "exec", WORKER, "cat", "/evidence/resources.json", stdout=receipt)
             export_artifacts(receipts)
             return result_code
         finally:
-            run("docker", "stop", "--time", "5", WORKER, stdout=subprocess.DEVNULL)
+            if not worker_stopped:
+                run("docker", "stop", "--time", "5", WORKER, stdout=subprocess.DEVNULL, timeout=15)
 
 
 if __name__ == "__main__":
