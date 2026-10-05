@@ -6,6 +6,22 @@ on:
   pull_request:
 
 jobs:
+  bash-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch size-limited, SHA-256-pinned GNU Bash sources
+        run: python3 scripts/bash-compatibility.py fetch
+      - name: Build and test actual Bash 4.3 and 4.4 inside the guarded worker
+        run: python3 scripts/docker-run.py python3 scripts/bash-compatibility.py test --full
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bash-compatibility-receipts
+          path: .test-results/
+          include-hidden-files: true
+
   unicode-without-en-us:
     runs-on: ubuntu-latest
     steps:
@@ -33,7 +49,7 @@ jobs:
           include-hidden-files: true
 
   release:
-    needs: [lint-and-test, unicode-without-en-us]
+    needs: [lint-and-test, unicode-without-en-us, bash-compatibility]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
