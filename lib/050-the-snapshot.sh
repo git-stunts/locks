@@ -44,10 +44,16 @@ parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], on
 snapshot() {
   NOW_CACHED='' # a lost publication or a new wait attempt needs a fresh lease clock
   local -A refs=() blobs=()
-  local rows ref oid oids=() rc mode kind path symref
+  local rows ref oid oids=() rc mode kind path symref root_target
   rows="$(g for-each-ref --format='%(refname) %(objectname) %(symref)' "${NS}/" 2>&1)"
   rc=$?
   ((rc == 0)) || store_error "for-each-ref exited ${rc}: ${rows}"
+  # Enumeration omits dangling and cyclic symbolic refs. Inspect the root
+  # itself without following it before treating an omitted root as absent.
+  root_target="$(g symbolic-ref --quiet --no-recurse "${STATE_REF}" 2>&1)"
+  rc=$?
+  ((rc != 0)) || store_error 'state authority must use a direct ref, not a symbolic ref'
+  [[ ${rc} == 1 && -z "${root_target}" ]] || store_error "cannot inspect state root: ${root_target}"
   STATE_OID=''
   while IFS=' ' read -r ref oid symref; do
     [[ -z "${ref}" ]] && continue

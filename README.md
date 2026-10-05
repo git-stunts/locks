@@ -73,6 +73,8 @@ refs/locks/state -> tree
 
 A writer reads that root, checks its complete state, builds a successor tree, and asks Git to replace the root only if it has not changed. That last comparison decides who wins. Failed publication grants nothing; the caller must read again. Unchanged subtrees are shared between versions. Bash and Git do all of this, without a daemon.
 
+The root must be a direct ref. Damaged or symbolic roots fail closed, and publication cannot follow a symbolic root into another ref. See the [state protocol](docs/state-protocol.md).
+
 To inspect the current state with Git, resolve the store and run `git --git-dir="$store" ls-tree -r refs/locks/state`. Read one record with `git --git-dir="$store" show refs/locks/state:jobs/alice-report`.
 
 ## Expiry, families, batches, and capacity

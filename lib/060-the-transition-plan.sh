@@ -72,7 +72,7 @@ transact() { # success, stale snapshot (return 1), or operational error (exit 2)
           printf 'create %s %s\n' "${STATE_REF}" "${next}"
         fi
         printf 'prepare\ncommit\n'
-      } | g -c core.filesRefLockTimeout=0 -c core.packedRefsTimeout=0 update-ref --stdin 2>&1
+      } | g -c core.filesRefLockTimeout=0 -c core.packedRefsTimeout=0 update-ref --no-deref --stdin 2>&1
     )"
     rc=$?
     SNAP_LOADED=0

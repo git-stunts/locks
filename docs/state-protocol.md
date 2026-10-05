@@ -29,7 +29,7 @@ existing schemas and acquisition identities.
    against its snapshot, including the combined expectations of a batch.
 4. Load the old tree into a private temporary Git index. Apply entry changes
    and write the successor tree. Git reuses identical blobs and subtrees.
-5. Publish with `update refs/locks/state <new> <observed>` in `update-ref --stdin`;
+5. Publish with `update refs/locks/state <new> <observed>` in `update-ref --no-deref --stdin`;
    first publication uses `create`. Report success only after publication.
 6. On a competing publication, discard the snapshot and replan within the retry
    bound. Unpublished candidate objects never grant a reservation.
@@ -40,6 +40,14 @@ causes replanning. See [store failures and contention](store-errors.md).
 
 The index is private scratch space, removed when tree construction finishes.
 It is not a shared coordination file and does not replace Git's ref locking.
+
+The root must be a direct ref. A separate `symbolic-ref --quiet --no-recurse`
+check detects dangling and cyclic symbolic roots that ordinary enumeration
+omits. Such stores fail with `store-read`, including in doctor and migration.
+Publication also uses `--no-deref`: if a symbolic ref appears after the read,
+Git must update the named root itself or refuse, without changing its target.
+The same rule covers every ref command in offline migration. Direct packed
+roots remain supported.
 
 ## Why this closes mixed membership
 
@@ -108,6 +116,8 @@ closed. Use Git's normal object retention grace when maintaining an active store
 structural sharing, controlled conflicting/disjoint publication races,
 semaphore-creation retries, invalid roots, legacy refusal, offline migration,
 SHA-256 stores, case-distinct job keys, and current-state retention through GC.
+`test/root-refs.py` checks damaged and symbolic roots, packed direct roots, and
+symbolic indirection introduced immediately before ordinary or migration publication.
 Record corruption fixtures use a separate `mktree` implementation; it is never
 on the production command's PATH. Existing CLI, family model, capacity, Unicode,
 and worker tests continue to exercise the real binary.
