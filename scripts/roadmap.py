@@ -87,7 +87,7 @@ def load():
         gates = re.findall(r'External gate: `([^`]+)`', prerequisite_text)
         require(gates == task['external_gates'], 'external gate prose drift')
         for dep in task['dependencies']:
-            require('[' + dep['id'] + '](' + dep['id'] + '.md): ' + dep['reason'] in body,
+            require('[' + dep['id'] + '](' + dep['id'] + '.md): ' + dep['reason'] in prerequisite_text,
                     'frontmatter and prerequisite text disagree: ' + task['id'])
         task.update(path=str(path.relative_to(ROOT)), sha256=hashlib.sha256(raw.encode()).hexdigest())
         tasks.append(task)

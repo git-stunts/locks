@@ -2,6 +2,10 @@
 """Reject unsafe graph claims and preserve the common prompt prefix."""
 from pathlib import Path
 import copy
+import json
+import os
+import shutil
+import tempfile
 import re
 import importlib.util
 import subprocess
@@ -57,10 +61,54 @@ projection = module.render(tasks, inventory)
 for path, expected in projection.items():
     assert (ROOT / path).read_bytes().decode('utf-8') == expected, path
     checks += 1
+# Each mutation uses a fresh, bounded fixture. Source paths are empty placeholders.
+with tempfile.TemporaryDirectory(prefix='roadmap-fixture-') as temporary:
+    fixture = Path(temporary)
+    shutil.copytree(ROOT / 'docs/tasks', fixture / 'docs/tasks')
+    shutil.copytree(ROOT / 'docs/planning', fixture / 'docs/planning')
+    shutil.copyfile(ROOT / 'ROADMAP.md', fixture / 'ROADMAP.md')
+    (fixture / 'scripts').mkdir(exist_ok=True)
+    shutil.copyfile(ROOT / 'scripts/roadmap.py', fixture / 'scripts/roadmap.py')
+    for task in tasks:
+        for source in task['sources']:
+            target = fixture / source
+            if not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if (ROOT / source).is_dir():
+                    target.mkdir()
+                else:
+                    target.touch()
+    def mutation(name, path, transform):
+        original = path.read_bytes()
+        try:
+            path.write_bytes(transform(original.decode('utf-8')).encode('utf-8'))
+            module.ROOT = fixture
+            rejected(name, module.load)
+        finally:
+            module.ROOT = ROOT
+            path.write_bytes(original)
+    card = fixture / 'docs/tasks/GL-001.md'
+    dependency = tasks[0]['dependencies'][0]
+    reason_line = '[' + dependency['id'] + '](' + dependency['id'] + '.md): ' + dependency['reason']
+    mutation('reason copied outside Prerequisites', card,
+             lambda text: text.replace(reason_line, reason_line.split(': ')[0] + ': stale reason')
+             .replace('## 4. Scope', '## 4. Scope\n\n' + reason_line))
+    mutation('prefix hash drift', card, lambda text: text.replace(tasks[0]['prompt_prefix_sha256'], '0' * 64, 1))
+    mutation('prompt text drift', card, lambda text: text.replace('```text\n', '```text\nChanged prefix.\n', 1))
+    mutation('issue coverage drift', fixture / 'docs/planning/inventory.json',
+             lambda text: json.dumps(dict(json.loads(text), issue_coverage={})))
+    mutation('missing source', card, lambda text: re.sub(r'^sources: .*$', 'sources: ["absent-source"]', text, flags=re.M))
+    mutation('missing prerequisite prose', card, lambda text: text.replace(reason_line, 'omitted'))
+    with (fixture / 'docs/tasks/DAG.md').open('ab') as stream:
+        stream.write(b'stale projection\n')
+    result = subprocess.run([sys.executable, str(fixture / 'scripts/roadmap.py'), '--check'],
+                            capture_output=True, timeout=10)
+    assert result.returncode != 0 and b'stale graph projection' in result.stderr
+    checks += 1
 prefix = (ROOT / 'docs/tasks/PROMPT.txt').read_bytes().decode('utf-8')
 for task in tasks:
     result = subprocess.run([sys.executable, str(ROOT / 'scripts/roadmap.py'), '--prompt', task['id']],
-                            text=True, capture_output=True, timeout=10)
+                            text=True, encoding="utf-8", capture_output=True, timeout=10)
     assert result.returncode == 0 and not result.stderr, result
     assert result.stdout.startswith(prefix + '\nTask: ' + task['id'] + ' — '), task['id']
     assert '## 7. Definition of Done' in result.stdout and '## 9. Related Issues' in result.stdout, task['id']
