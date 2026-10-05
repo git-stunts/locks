@@ -112,9 +112,12 @@ def allocated(directory):
     total = 0
     if directory.exists():
         for path in directory.rglob('*'):
-            if path.is_file() and not path.is_symlink():
-                stat = path.stat()
-                total += max(stat.st_size, stat.st_blocks * 512)
+            try:
+                if path.is_file() and not path.is_symlink():
+                    stat = path.stat()
+                    total += max(stat.st_size, stat.st_blocks * 512)
+            except FileNotFoundError:
+                continue  # The entry was removed after directory discovery.
     return total
 
 
@@ -268,10 +271,13 @@ class Provider:
             for path in CONTROL.iterdir():
                 if path.name in ('data', 'storage.ext4'):
                     continue
-                if path.is_dir():
-                    control_bytes += allocated(path)
-                elif path.is_file():
-                    control_bytes += max(path.stat().st_size, path.stat().st_blocks * 512)
+                try:
+                    if path.is_dir():
+                        control_bytes += allocated(path)
+                    elif path.is_file():
+                        control_bytes += max(path.stat().st_size, path.stat().st_blocks * 512)
+                except FileNotFoundError:
+                    continue  # The entry was removed after directory discovery.
         if control_bytes > 64 * 1024**2:
             raise RuntimeError('bootstrap control/output reserve exhausted')
         if self.slice_owned:
@@ -280,13 +286,19 @@ class Provider:
             quota_filesystem(DATA, CONTROL / 'storage.ext4')
         logs = allocated(ROOT / '.test-results')
         for path in (CONTROL / 'daemon.log', CONTROL / 'command.log'):
-            if path.exists():
-                size = path.stat().st_size
-                if size > 16 * 1024**2:
-                    raise RuntimeError('bootstrap log exceeded 16 MiB')
-                logs += 2 * size  # Reserve the receipt copy before exporting it.
+            try:
+                if path.exists():
+                    size = path.stat().st_size
+                    if size > 16 * 1024**2:
+                        raise RuntimeError('bootstrap log exceeded 16 MiB')
+                    logs += 2 * size  # Reserve the receipt copy before exporting it.
+            except FileNotFoundError:
+                continue  # The entry was removed after directory discovery.
         for path in (DATA / 'docker/containers').glob('*/*-json.log'):
-            logs += path.stat().st_size
+            try:
+                logs += path.stat().st_size
+            except FileNotFoundError:
+                continue  # The entry was removed after directory discovery.
         self.peak_logs = max(self.peak_logs, logs)
         # Reserve space for the ordinary worker's 16 MiB live log/evidence tmpfs.
         if logs > LOG_BYTES - 20 * 1024**2:
