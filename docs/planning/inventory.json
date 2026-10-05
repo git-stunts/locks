@@ -1,6 +1,6 @@
 {
-  "schema": "git-locks-inventory/1",
-  "graph_version": "2026-10-05.1",
+  "schema": "git-locks-inventory/2",
+  "graph_version": "2026-10-05.2",
   "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
   "captured_date": "2026-10-05",
   "issue_coverage": {
@@ -121,14 +121,46 @@
     ]
   },
   "external_gates": {
-    "workflow_permission": "The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.",
-    "privileged_linux": "Provide an explicitly authorized disposable Linux environment with the required kernel features, resource limits, and at least 50 GiB free. Mocked calls do not satisfy this gate.",
-    "repository_policy_approval": "James approves the concrete protection changes from GL-023 before an executor applies them. A task card alone does not authorize remote settings changes.",
-    "release_signing_setup": "The repository owner enables the selected release identity and required permissions. Do not export private keys or improvise signing identities.",
-    "consenting_trial_maintainer": "A real runner maintainer agrees to the named trial and its observations. Do not send recruitment messages without authorization.",
-    "elapsed_trial_observations": "This is a completion gate, not a gate on trial setup. The agreed repeated workday observations must exist. Simulated runs cannot satisfy elapsed real use.",
-    "release_publication_approval": "James approves the exact version, verified artifacts, and public release after reviewing the completion matrix.",
-    "native_probe_approval": "James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign."
+    "workflow_permission": {
+      "phase": "before-action",
+      "condition": "The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.",
+      "blocks": "Publish changes to GitHub workflow files."
+    },
+    "privileged_linux": {
+      "phase": "before-action",
+      "condition": "Provide an explicitly authorized disposable Linux environment with the required kernel features, resource limits, and at least 50 GiB free. Mocked calls do not satisfy this gate.",
+      "blocks": "Run the privileged Linux bootstrap experiment."
+    },
+    "repository_policy_approval": {
+      "phase": "before-action",
+      "condition": "James approves the concrete protection changes from GL-023 before an executor applies them. A task card alone does not authorize remote settings changes.",
+      "blocks": "Apply repository protection settings."
+    },
+    "release_signing_setup": {
+      "phase": "before-action",
+      "condition": "The repository owner enables the selected release identity and required permissions. Do not export private keys or improvise signing identities.",
+      "blocks": "Use the release signing identity."
+    },
+    "consenting_trial_maintainer": {
+      "phase": "before-action",
+      "condition": "A real runner maintainer agrees to the named trial and its observations. Do not send recruitment messages without authorization.",
+      "blocks": "Start the real maintainer trial."
+    },
+    "elapsed_trial_observations": {
+      "phase": "completion",
+      "condition": "This is a completion gate, not a gate on trial setup. The agreed repeated workday observations must exist. Simulated runs cannot satisfy elapsed real use.",
+      "blocks": "Declare the real trial complete."
+    },
+    "release_publication_approval": {
+      "phase": "completion",
+      "condition": "James approves the exact version, verified artifacts, and public release after reviewing the completion matrix.",
+      "blocks": "Record final release approval or publish the release."
+    },
+    "native_probe_approval": {
+      "phase": "before-action",
+      "condition": "James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign.",
+      "blocks": "Run the bounded native terminal probe."
+    }
   },
   "scope": "Open issue snapshot plus explicit hardening evidence gaps. Issue 67 closed during plan preparation. Issue 41 is a container, not a duplicate implementation task."
 }

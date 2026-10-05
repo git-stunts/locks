@@ -1,6 +1,6 @@
 ---
 schema: "git-locks-roadmap/1"
-graph_version: "2026-10-05.1"
+graph_version: "2026-10-05.2"
 status: "proposed"
 created: "2026-10-05"
 baseline_commit: "7ba2c09b9a09e86a8d811f391d6632b995df1450"
@@ -58,6 +58,7 @@ Edges mean correctness prerequisites. Their reasons appear in both frontmatter a
 The edges are evidence-backed proposals in this graph version, not a claim that GitHub already records or the owner individually approved them.
 A shared file, worker, API limit, or subject does not create a dependency.
 External approvals and environments are gates; the graph does not treat them as completed tasks.
+Each gate states its phase and blocked action. Completion gates permit preparation before the final evidence exists.
 
 | Workstream | Exclusive ownership | Boundary |
 | --- | --- | --- |

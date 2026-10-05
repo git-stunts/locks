@@ -15,7 +15,7 @@ The installed executable SHA-256 is `b23dd9a83bf7a2b4f59b411469ef1b8ed881f00f93a
 Local installation receipts remain outside tracked source. This statement is an observed snapshot, not an instruction to trust an old install.
 
 The earlier hardening work introduced the immutable authority root and stronger input, lifecycle, and state validation.
-See [state protocol](../state-protocol.md), [wrapper lifetime](../wrapper-lifetime.md), and [changelog](../../CHANGELOG.md).
+See [state protocol](https://github.com/git-stunts/locks/blob/7ba2c09b9a09e86a8d811f391d6632b995df1450/docs/state-protocol.md), [wrapper lifetime](https://github.com/git-stunts/locks/blob/7ba2c09b9a09e86a8d811f391d6632b995df1450/docs/wrapper-lifetime.md), and [changelog](https://github.com/git-stunts/locks/blob/7ba2c09b9a09e86a8d811f391d6632b995df1450/CHANGELOG.md).
 Finite synthetic observations and process tests do not establish all schedules or physical power-loss durability.
 
 ## Existing work to reuse
@@ -29,35 +29,56 @@ Do not rebuild toolchains or duplicate stores merely because a task has a new id
 
 ## External gates
 
+The inventory gives each gate a phase, condition, and blocked action.
+`before-action` gates apply to the named action. They permit prior preparation.
+`completion` gates apply to the task outcome. They do not block preparation.
+The release approval gate applies only to a release outcome, not a no-release decision.
+
 ### workflow_permission
+
+Phase: `before-action`. Blocked action: Publish changes to GitHub workflow files.
 
 The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.
 
 ### privileged_linux
 
+Phase: `before-action`. Blocked action: Run the privileged Linux bootstrap experiment.
+
 Provide an explicitly authorized disposable Linux environment with the required kernel features, resource limits, and at least 50 GiB free. Mocked calls do not satisfy this gate.
 
 ### repository_policy_approval
+
+Phase: `before-action`. Blocked action: Apply repository protection settings.
 
 James approves the concrete protection changes from GL-023 before an executor applies them. A task card alone does not authorize remote settings changes.
 
 ### release_signing_setup
 
+Phase: `before-action`. Blocked action: Use the release signing identity.
+
 The repository owner enables the selected release identity and required permissions. Do not export private keys or improvise signing identities.
 
 ### consenting_trial_maintainer
+
+Phase: `before-action`. Blocked action: Start the real maintainer trial.
 
 A real runner maintainer agrees to the named trial and its observations. Do not send recruitment messages without authorization.
 
 ### elapsed_trial_observations
 
+Phase: `completion`. Blocked action: Declare the real trial complete.
+
 This is a completion gate, not a gate on trial setup. The agreed repeated workday observations must exist. Simulated runs cannot satisfy elapsed real use.
 
 ### release_publication_approval
 
+Phase: `completion`. Blocked action: Record final release approval or publish the release.
+
 James approves the exact version, verified artifacts, and public release after reviewing the completion matrix.
 
 ### native_probe_approval
+
+Phase: `before-action`. Blocked action: Run the bounded native terminal probe.
 
 James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign.
 

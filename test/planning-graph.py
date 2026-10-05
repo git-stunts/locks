@@ -99,6 +99,16 @@ with tempfile.TemporaryDirectory(prefix='roadmap-fixture-') as temporary:
              lambda text: json.dumps(dict(json.loads(text), issue_coverage={})))
     mutation('missing source', card, lambda text: re.sub(r'^sources: .*$', 'sources: ["absent-source"]', text, flags=re.M))
     mutation('missing prerequisite prose', card, lambda text: text.replace(reason_line, 'omitted'))
+    mutation('unknown gate phase', fixture / 'docs/planning/inventory.json',
+             lambda text: text.replace('"before-action"', '"unknown"', 1))
+    mutation('gate phase prose drift', card,
+             lambda text: text.replace('`workflow_permission` (before-action)', '`workflow_permission` (completion)'))
+    completion_task = copy.deepcopy(next(task for task in tasks if task['id'] == 'GL-030'))
+    completion_task['dependencies'] = []
+    candidate_graph = json.loads(module.render([completion_task] + [task for task in tasks if task['id'] != 'GL-030'], inventory)['docs/tasks/graph.json'])
+    assert 'GL-030' in candidate_graph['candidates_without_action_gates']
+    assert 'GL-003' not in candidate_graph['candidates_without_action_gates']
+    checks += 2
     locale = dict(os.environ, LC_ALL='C', PYTHONUTF8='0', PYTHONCOERCECLOCALE='0', PYTHONIOENCODING='ascii')
     for arguments in (['--write'], ['--prompt', 'GL-001']):
         result = subprocess.run([sys.executable, str(fixture / 'scripts/roadmap.py'), *arguments],

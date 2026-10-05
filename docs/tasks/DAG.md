@@ -2,7 +2,7 @@
 
 Generated from task frontmatter by `scripts/roadmap.py`. Do not edit this projection directly.
 
-Graph version: `2026-10-05.1`. Edges point from prerequisite to dependent.
+Graph version: `2026-10-05.2`. Edges point from prerequisite to dependent.
 Each task has one workstream. External gates and resource conflicts are separate from edges.
 
 ## Dependency-ready candidates
@@ -12,7 +12,9 @@ Each task has one workstream. External gates and resource conflicts are separate
 These tasks have no unfinished task prerequisite. Inspect external gates before protected actions.
 A gate can permit preparation while it blocks an experiment, settings change, or final publication.
 
-Candidates without a recorded external gate: GL-004, GL-005, GL-006, GL-008, GL-009, GL-011, GL-013, GL-014, GL-015, GL-018, GL-019, GL-023.
+Candidates without a recorded action gate: GL-004, GL-005, GL-006, GL-008, GL-009, GL-011, GL-013, GL-014, GL-015, GL-018, GL-019, GL-023.
+
+Completion gates do not exclude preparation candidates. Inspect each gate condition before task closure.
 
 ## Topological antichains
 

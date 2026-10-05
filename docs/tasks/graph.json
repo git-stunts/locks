@@ -1,6 +1,6 @@
 {
-  "schema": "git-locks-task-graph/1",
-  "graph_version": "2026-10-05.1",
+  "schema": "git-locks-task-graph/2",
+  "graph_version": "2026-10-05.2",
   "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
   "edge_direction": "prerequisite-to-dependent",
   "edge_status": "see each task dependency_status",
@@ -13,7 +13,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -39,7 +39,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-001.md",
-      "sha256": "03cd2db5a902d24116988815c93155606b65fa109b12e4b0c1fa8e13860d1560"
+      "sha256": "457b7d702420a64fde2a17aa5c0421664cf0f3a0c7415f4c25776684b92b662f"
     },
     {
       "id": "GL-002",
@@ -49,7 +49,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -73,7 +73,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-002.md",
-      "sha256": "efcd33acbf77d4197010a28fa9e1c809e2f24d9b1c4faed8b458db6249690789"
+      "sha256": "8723324c4d18dd399aa45def676182c86f8b5485b9e9a394b433dc85417e1f97"
     },
     {
       "id": "GL-003",
@@ -83,7 +83,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -105,7 +105,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-003.md",
-      "sha256": "a64a74ea444b91b9715156bf69413403d8486accb94326061543b65d9759635f"
+      "sha256": "efe4ded24a6f730612b761550c36f8cad3c7786b22ebf0324dc4df509ff98e66"
     },
     {
       "id": "GL-004",
@@ -115,7 +115,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -134,7 +134,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-004.md",
-      "sha256": "44a9ca54a25ba3efdb7c26681f44a6d0715e9dd9dbf2f2073401a7fd790066f7"
+      "sha256": "e36ffaefd89f45fd1d76cfc4af4b11edffd79883634ab8ca01bbc21b2fa7d142"
     },
     {
       "id": "GL-005",
@@ -144,7 +144,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -163,7 +163,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-005.md",
-      "sha256": "9cc97b5bcdc1755fcce7304e0214e5cd9184519e972204be7637ceaafbbdc5d8"
+      "sha256": "5d3c5a3ee0de9e17f3ddc5ce81f606cb0f4725c9f09e25fa60aa324702331c89"
     },
     {
       "id": "GL-006",
@@ -173,7 +173,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -193,7 +193,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-006.md",
-      "sha256": "cfc933bdf959db855cbbd8aeaf14f7e2756ba71d65cc96c09b9ea19e4003c206"
+      "sha256": "c0e2f281e955b57cd67fb8b336a2e051615eaa074f4046d93bc29e379679c564"
     },
     {
       "id": "GL-007",
@@ -203,7 +203,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -228,7 +228,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-007.md",
-      "sha256": "d1b3d900404b500dd1c913ce68ab93ad5d39d36357db66042789054b05cdccc6"
+      "sha256": "bebce6ca0e7ae70f47ed201a4e707c40cf0dba88b78a1a3ac30c64991cf3dc95"
     },
     {
       "id": "GL-008",
@@ -238,7 +238,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -257,7 +257,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-008.md",
-      "sha256": "1f38aeb5daa770841e866c35f4ae307d6c9355905993742da07a91ee35ee8c61"
+      "sha256": "c864830628db5c9525610082a0692f41d2e487aba717faacd022aff32abe3e60"
     },
     {
       "id": "GL-009",
@@ -267,7 +267,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -286,7 +286,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-009.md",
-      "sha256": "9dea28fc2e02685f60ab51cf616b4f0eaca209697ff2f303bfd22b90def3666c"
+      "sha256": "fde57bab1e9407b4e512ce5fee559dd932d2ce6c6b6c5a015fb7d2b940ecab06"
     },
     {
       "id": "GL-010",
@@ -296,7 +296,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -319,7 +319,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-010.md",
-      "sha256": "fa0d61fb9984b1451d0a3ec4cd19630e4d4412979df86d2f4b07c97f56efcd62"
+      "sha256": "45c15cac428950e93c9f444e3b32e36fa7b6c066d3cb6e5f5c41d5483a2a05d3"
     },
     {
       "id": "GL-011",
@@ -329,7 +329,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -348,7 +348,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-011.md",
-      "sha256": "8341a51ef49171c1f199bf3862ed5fcf55033f39f19a0e0de5b4f152e0735d8f"
+      "sha256": "ecbaf083c1a1df66b68422b1c22a2714c5823f1ee1f70c5f12f564068f61ebb0"
     },
     {
       "id": "GL-012",
@@ -358,7 +358,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -381,7 +381,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-012.md",
-      "sha256": "417810f5289b0e00434ff5f3c5419c0acebb4ca7907956bf91948644a372ed2e"
+      "sha256": "ba455c4f6de33cea46fbada7ff782716fffac09fffcd624e8fe91413c3779a07"
     },
     {
       "id": "GL-013",
@@ -391,7 +391,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -409,7 +409,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-013.md",
-      "sha256": "4e7c7514da6e3b2042b1aceb8f5245e5f94e5425f25ecf1996cf098ad93a40f5"
+      "sha256": "e1c645f117a4ed3791f569783feddfb0fb749b995eff011879106fc8f03b0faf"
     },
     {
       "id": "GL-014",
@@ -419,7 +419,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -437,7 +437,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-014.md",
-      "sha256": "be79d60deed0c70bb6312b9b8c2cbc4bc5260b9d1a2b036a3a75b71db766484d"
+      "sha256": "b10b48c50dc5fee7fc4131a9797a256f1384d84219368f1fb72310c51e2af63a"
     },
     {
       "id": "GL-015",
@@ -447,7 +447,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -466,7 +466,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-015.md",
-      "sha256": "41a6f521a514f7941b9b189073606074822fb930083f7d9ff23475f55ce0094b"
+      "sha256": "d7ace44d2101d433109bf06a314552428f36958094a2c1ab9feb3a7eb124ec80"
     },
     {
       "id": "GL-016",
@@ -476,7 +476,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -501,7 +501,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-016.md",
-      "sha256": "01d478d2af04c0daefece2e4c1d94f0a165aee962cad008d73eefbc50d337ff2"
+      "sha256": "d1071cba8024479a2fb6c0b6d421b330c5788fd62dcfc7d38a150872b2322a23"
     },
     {
       "id": "GL-017",
@@ -511,7 +511,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -535,7 +535,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-017.md",
-      "sha256": "cf45c1a6484fc6726c357f3697e47926de69343b7a190cae8365c51b7a6dcebc"
+      "sha256": "ba3f47464498415df345185badb21ebce32a88d3763e0ff5949f188cb62ab501"
     },
     {
       "id": "GL-018",
@@ -545,7 +545,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -563,7 +563,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-018.md",
-      "sha256": "f3c9e1b9a68359e7b7a117c4ec9b9a9f97b9aaf8ace8d7508945219acc71c51c"
+      "sha256": "c8ebd3ddad253ed208680e54ec22315a7240a69afbd5fa218c7aafb8e6c16365"
     },
     {
       "id": "GL-019",
@@ -573,7 +573,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -592,7 +592,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-019.md",
-      "sha256": "042fef0a3cd07e329797890408473b55e36fb28d8981aae1dab7837728825e49"
+      "sha256": "2444cbab5b4e379da7876f3d44a474daf5f806083e5e32c81fda0966c57b83cd"
     },
     {
       "id": "GL-020",
@@ -602,7 +602,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -627,7 +627,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-020.md",
-      "sha256": "4acb71e3470e5a7a750636b436b637a0799363511299f6b7199aeeb410d59655"
+      "sha256": "441898a64ff13ae97f255d7808250ea55ed8c1855fb3bbe204a59782d75b6983"
     },
     {
       "id": "GL-021",
@@ -637,7 +637,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -661,7 +661,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-021.md",
-      "sha256": "a6b7225040c20fc2c4c712efe7784126c0468d844740e785af9dd28c17bf2a0d"
+      "sha256": "5ebcea8a27810d1f9e0b92d589986da1ba49022250c1693c0db999679be37c3c"
     },
     {
       "id": "GL-022",
@@ -671,7 +671,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -702,7 +702,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-022.md",
-      "sha256": "23fea11dffe158d08e24789008048485c15e217fd03bcce928eea2d3824d3c48"
+      "sha256": "aa4b3996d6afd8534f1ffeb6af98034c93c96817f42992bd08cbe6fd1954e3c6"
     },
     {
       "id": "GL-023",
@@ -712,7 +712,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -730,7 +730,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-023.md",
-      "sha256": "3889ec3255048583b12bcac40d885602ea9e84e189d97774d546d57287be85b2"
+      "sha256": "b586eb7e3c84067c7c493940c49a6d241a7ce9f0b87d4c762e271089e1fde01e"
     },
     {
       "id": "GL-024",
@@ -740,7 +740,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -765,7 +765,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-024.md",
-      "sha256": "f7cbec2bf3ff1bd609dedfd77f09be3922fb567446914966ec6705cb2c5d4c76"
+      "sha256": "25a12386078d5c298c797913bd3118ce145d7aa0a1dbf39882ce0dd427f7dda1"
     },
     {
       "id": "GL-025",
@@ -775,7 +775,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -794,7 +794,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-025.md",
-      "sha256": "bebf8aa12d17b70e19bab5740d151953ab788a88332a1c1f6420f6245726cff7"
+      "sha256": "7cbc574ab196b0e31625926b226e97f0ee16f43fbb566c45f27cd7f218395ffd"
     },
     {
       "id": "GL-026",
@@ -804,7 +804,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -829,7 +829,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-026.md",
-      "sha256": "bbb6a162fdb3ce639fe3ccdc9b8c6952f4f7478aec6b10d5169bf6b7f572dbc7"
+      "sha256": "bfc35c8cb0b3ecd853b95a8c3a87dac98687dcf390196d17abeb0ae3a0967faa"
     },
     {
       "id": "GL-027",
@@ -839,7 +839,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -862,7 +862,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-027.md",
-      "sha256": "362a9fbad40207f128643b0b6c009f9f445afce798701af1f98b18c7b8aafd22"
+      "sha256": "c185d3055d17981958bd10f99f81672fc174e0ee764896db34b9558355b312a9"
     },
     {
       "id": "GL-028",
@@ -872,7 +872,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -897,7 +897,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-028.md",
-      "sha256": "221c60e97885aed965e000e704702fe630f9fa5b5781ca2da06073994a543cef"
+      "sha256": "9047fa0dc587860826573ebda22ed0b1ce284fa1232e20bd0da8d4b13f721434"
     },
     {
       "id": "GL-029",
@@ -907,7 +907,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -964,7 +964,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-029.md",
-      "sha256": "2888eb435b28e079b93eee93bd2998cdcda8d905b37be10c3c0b8f32aee3241f"
+      "sha256": "c5eb0bd110cc0da8b6ea31133990a5b8aa4a0eab3d5602195bcc81d6de2a4971"
     },
     {
       "id": "GL-030",
@@ -974,7 +974,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1088,7 +1088,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-030.md",
-      "sha256": "a3aac122303ef3e6ede7490ae5cbbf67ff2fe124e6e70e9e2ece152a2f7255ef"
+      "sha256": "2dc6a1e6860d9236d491060bb094f86ed6b34aeff7531c41d0de24107d3b1bef"
     },
     {
       "id": "GL-031",
@@ -1098,7 +1098,7 @@
       "horizon": "short",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1116,7 +1116,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-031.md",
-      "sha256": "361ff11e4219f21e633b7f256ea92637dce512467fa0ed14869aec71992da43b"
+      "sha256": "2dd0dd736b0790f706938160ad3e36921a670526d63d31b49eb74b2c140cd122"
     },
     {
       "id": "GL-032",
@@ -1126,7 +1126,7 @@
       "horizon": "medium",
       "release_required": true,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1189,7 +1189,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-032.md",
-      "sha256": "1c7ff6a0d6adaddb0296fa97895703291341ac9d83032c82ddd3b6326b340531"
+      "sha256": "dbd1640a22991959cc40fdd9fff78229281cd6e47830b2b6ac6f70a1302af062"
     },
     {
       "id": "GL-033",
@@ -1199,7 +1199,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1222,7 +1222,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-033.md",
-      "sha256": "d54d9da89ed816fe09df94daf4302fb11ff3a2d1b2bcd2a657830ecd77ca884a"
+      "sha256": "d6ea2596450020a9839f60648fd5e240920090dc22f667e270f2f47b32a5d346"
     },
     {
       "id": "GL-034",
@@ -1232,7 +1232,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1260,7 +1260,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-034.md",
-      "sha256": "e5cc134c875e7d86c8b5baf28f4ff26e41c9aab0647cc5113896e7a3244aa6b5"
+      "sha256": "89c20d7dc3fc2d26dd5bd81315a8a8483e2e610bea53162f97455e00716b9312"
     },
     {
       "id": "GL-035",
@@ -1270,7 +1270,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1293,7 +1293,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-035.md",
-      "sha256": "3870c7b43476b49871f251d54598fce068963ec0c59283d550d696d6e65345b3"
+      "sha256": "46cbf7be6ed74b42bec284f0ef094eabcfe47f14745b186c0a10d3ea0fe9788c"
     },
     {
       "id": "GL-036",
@@ -1303,7 +1303,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1326,7 +1326,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-036.md",
-      "sha256": "42201ccc1a994a1416e07315a42e9c3849ee01ca4ab5de66fb573b9fd9fb1966"
+      "sha256": "401d427ea5be0b07d32ee1817159c7047fe72de514713206d45509495b7ad192"
     },
     {
       "id": "GL-037",
@@ -1336,7 +1336,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1359,7 +1359,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-037.md",
-      "sha256": "b03e1bf84724f84411610b7cd6dc71241f096596261bb1edf8af8fe7087c6b4f"
+      "sha256": "5d2a32cb3ffff21ee1799cbab5665c51f32e7b6c6f707f151fd49c957c32dccb"
     },
     {
       "id": "GL-038",
@@ -1369,7 +1369,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1392,7 +1392,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-038.md",
-      "sha256": "5d258b91fcf12bd25e9cfd51019476b7b1759556940b327420cd8e11176aed5e"
+      "sha256": "a4760af1a45b74747b0cf97ac23ef77782b415302013cf5fe857d87e711d68e9"
     },
     {
       "id": "GL-039",
@@ -1402,7 +1402,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1425,7 +1425,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-039.md",
-      "sha256": "4928aad366febe17d02864631060e0332c7d09823279ecc2b3e474c992b93c4b"
+      "sha256": "b53cb70f964bb261986ee2b701075a97ae947b299e0521a9cad14d9e4699823f"
     },
     {
       "id": "GL-040",
@@ -1435,7 +1435,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1458,7 +1458,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-040.md",
-      "sha256": "d9099ef13fd2666fecc6d858697b27652d0377feeeb605f19ce36581b2d15362"
+      "sha256": "8ca2da4abc957647383642bc45afa972059d80e80bf9c90afcc57ea50dc95e03"
     },
     {
       "id": "GL-041",
@@ -1468,7 +1468,7 @@
       "horizon": "long",
       "release_required": false,
       "schema": "git-locks-task/1",
-      "graph_version": "2026-10-05.1",
+      "graph_version": "2026-10-05.2",
       "status": "planned",
       "owner": "unassigned",
       "created": "2026-10-05",
@@ -1491,7 +1491,7 @@
       "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
       "completion_evidence": [],
       "path": "docs/tasks/GL-041.md",
-      "sha256": "45b3d0452b11848d9dbd83cfb0afbe188a65706394fc6fbf8f32464d303b3e08"
+      "sha256": "fcb77f96bd4004b5ec52a05a4f66043d8e47ea73bd9cfe3793223cd4c5769254"
     }
   ],
   "edges": [
@@ -2033,7 +2033,7 @@
     "GL-025",
     "GL-031"
   ],
-  "ungated_candidates": [
+  "candidates_without_action_gates": [
     "GL-004",
     "GL-005",
     "GL-006",
@@ -2048,14 +2048,46 @@
     "GL-023"
   ],
   "external_gates": {
-    "workflow_permission": "The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.",
-    "privileged_linux": "Provide an explicitly authorized disposable Linux environment with the required kernel features, resource limits, and at least 50 GiB free. Mocked calls do not satisfy this gate.",
-    "repository_policy_approval": "James approves the concrete protection changes from GL-023 before an executor applies them. A task card alone does not authorize remote settings changes.",
-    "release_signing_setup": "The repository owner enables the selected release identity and required permissions. Do not export private keys or improvise signing identities.",
-    "consenting_trial_maintainer": "A real runner maintainer agrees to the named trial and its observations. Do not send recruitment messages without authorization.",
-    "elapsed_trial_observations": "This is a completion gate, not a gate on trial setup. The agreed repeated workday observations must exist. Simulated runs cannot satisfy elapsed real use.",
-    "release_publication_approval": "James approves the exact version, verified artifacts, and public release after reviewing the completion matrix.",
-    "native_probe_approval": "James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign."
+    "workflow_permission": {
+      "phase": "before-action",
+      "condition": "The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.",
+      "blocks": "Publish changes to GitHub workflow files."
+    },
+    "privileged_linux": {
+      "phase": "before-action",
+      "condition": "Provide an explicitly authorized disposable Linux environment with the required kernel features, resource limits, and at least 50 GiB free. Mocked calls do not satisfy this gate.",
+      "blocks": "Run the privileged Linux bootstrap experiment."
+    },
+    "repository_policy_approval": {
+      "phase": "before-action",
+      "condition": "James approves the concrete protection changes from GL-023 before an executor applies them. A task card alone does not authorize remote settings changes.",
+      "blocks": "Apply repository protection settings."
+    },
+    "release_signing_setup": {
+      "phase": "before-action",
+      "condition": "The repository owner enables the selected release identity and required permissions. Do not export private keys or improvise signing identities.",
+      "blocks": "Use the release signing identity."
+    },
+    "consenting_trial_maintainer": {
+      "phase": "before-action",
+      "condition": "A real runner maintainer agrees to the named trial and its observations. Do not send recruitment messages without authorization.",
+      "blocks": "Start the real maintainer trial."
+    },
+    "elapsed_trial_observations": {
+      "phase": "completion",
+      "condition": "This is a completion gate, not a gate on trial setup. The agreed repeated workday observations must exist. Simulated runs cannot satisfy elapsed real use.",
+      "blocks": "Declare the real trial complete."
+    },
+    "release_publication_approval": {
+      "phase": "completion",
+      "condition": "James approves the exact version, verified artifacts, and public release after reviewing the completion matrix.",
+      "blocks": "Record final release approval or publish the release."
+    },
+    "native_probe_approval": {
+      "phase": "before-action",
+      "condition": "James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign.",
+      "blocks": "Run the bounded native terminal probe."
+    }
   },
   "limits": "Layers are antichains, not maximum antichains or resource schedules. Ready is not authorization."
 }

@@ -55,6 +55,10 @@ def load():
     prefix = (ROOT / 'docs/tasks/PROMPT.txt').read_bytes().decode('utf-8')
     prefix_hash = hashlib.sha256(prefix.encode()).hexdigest()
     inventory = json.loads((ROOT / 'docs/planning/inventory.json').read_bytes().decode('utf-8'))
+    require(inventory['schema'] == 'git-locks-inventory/2', 'unknown inventory schema')
+    for gate in inventory['external_gates'].values():
+        require(gate['phase'] in ['before-action', 'completion'], 'unknown gate phase')
+        require(bool(gate['condition'].strip()) and bool(gate['blocks'].strip()), 'empty gate condition or action')
     tasks = []
     for path in sorted((ROOT / 'docs/tasks').glob('GL-*.md')):
         raw = path.read_bytes().decode('utf-8')
@@ -86,6 +90,9 @@ def load():
         require(declared == [d['id'] for d in task['dependencies']], 'extra or missing prerequisite in prose')
         gates = re.findall(r'External gate: `([^`]+)`', prerequisite_text)
         require(gates == task['external_gates'], 'external gate prose drift')
+        for gate in task['external_gates']:
+            phase = inventory['external_gates'][gate]['phase']
+            require('External gate: `' + gate + '` (' + phase + ').' in prerequisite_text, 'gate phase prose drift')
         for dep in task['dependencies']:
             require('[' + dep['id'] + '](' + dep['id'] + '.md): ' + dep['reason'] in prerequisite_text,
                     'frontmatter and prerequisite text disagree: ' + task['id'])
@@ -113,14 +120,16 @@ def render(tasks, inventory):
     done = {t['id'] for t in tasks if t['status'] == 'done'}
     ready = sorted(t['id'] for t in tasks if t['status'] in ['planned', 'active']
                    and {d['id'] for d in t['dependencies']} <= done)
-    graph = {'schema': 'git-locks-task-graph/1', 'graph_version': inventory['graph_version'],
+    graph = {'schema': 'git-locks-task-graph/2', 'graph_version': inventory['graph_version'],
              'baseline_commit': inventory['baseline_commit'],
              'edge_direction': 'prerequisite-to-dependent', 'edge_status': 'see each task dependency_status',
              'tasks': tasks, 'edges': [{'from': d['id'], 'to': t['id'], 'reason': d['reason'],
                                        'status': t['dependency_status']} for t in tasks for d in t['dependencies']],
              'workstreams': {lane: [t['id'] for t in tasks if t['workstream'] == lane] for lane in LANES},
              'topological_antichains': layers, 'dependency_ready': ready,
-             'ungated_candidates': [key for key in ready if not by_id[key]['external_gates']],
+             'candidates_without_action_gates': [key for key in ready
+                 if not any(inventory['external_gates'][gate]['phase'] == 'before-action'
+                            for gate in by_id[key]['external_gates'])],
              'external_gates': inventory['external_gates'],
              'limits': 'Layers are antichains, not maximum antichains or resource schedules. Ready is not authorization.'}
     md = '# Task dependency graph\n\nGenerated from task frontmatter by `scripts/roadmap.py`. Do not edit this projection directly.\n\n'
@@ -130,7 +139,8 @@ def render(tasks, inventory):
     md += ', '.join('[' + key + '](' + key + '.md)' for key in ready) + '.\n\n'
     md += 'These tasks have no unfinished task prerequisite. Inspect external gates before protected actions.\n'
     md += 'A gate can permit preparation while it blocks an experiment, settings change, or final publication.\n\n'
-    md += 'Candidates without a recorded external gate: ' + ', '.join(graph['ungated_candidates']) + '.\n\n'
+    md += 'Candidates without a recorded action gate: ' + ', '.join(graph['candidates_without_action_gates']) + '.\n\n'
+    md += 'Completion gates do not exclude preparation candidates. Inspect each gate condition before task closure.\n\n'
     md += '## Topological antichains\n\n'
     md += 'Each row has no internal dependency path. Rows do not prove simultaneous resource availability.\n\n'
     md += '| Layer | Tasks |\n| --- | --- |\n'
