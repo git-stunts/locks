@@ -22,6 +22,7 @@ test test-docker:
 test-container:
 	node scripts/require-docker.mjs
 	python3 test/docker-boundary.py
+	python3 test/docker-bootstrap.py
 	python3 test/docker-resources.py
 	python3 test/state-coherence.py
 	python3 test/root-refs.py

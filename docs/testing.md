@@ -68,6 +68,12 @@ worker is never restarted automatically. Each run stops the worker after
 exporting receipts, which clears its temporary filesystems. Source changes
 do not rebuild the toolchain image.
 
+A matching toolchain image is a prerequisite. Missing images and Dockerfile
+fingerprint changes fail before any build or pull. Worker creation uses the
+verified image ID with `--pull never`, so a tag change cannot select another
+image or start an implicit download. Toolchain provisioning must enforce the
+resource budget separately; an ordinary `docker build` is not a guarded setup.
+
 Resource limits are two CPUs, 2 GiB memory including swap, 256 processes,
 512 MiB each for `/work` and `/tmp`, 32 MiB for the container home, and a separate
 16 MiB tmpfs for live logs and exported evidence. Private `/dev/shm` is also

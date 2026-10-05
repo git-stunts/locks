@@ -126,8 +126,8 @@ def main():
         fingerprint = hashlib.sha256(recipe.read_bytes()).hexdigest()
         image = inspect("image", IMAGE)
         if not image or (image["Config"].get("Labels") or {}).get(OWNER) != fingerprint:
-            run("docker", "build", "--label", f"{OWNER}={fingerprint}", "--tag", IMAGE, str(recipe.parent))
-            image = inspect("image", IMAGE)
+            raise RuntimeError("toolchain image is missing or stale; refusing unguarded Docker bootstrap. "
+                               "Provision a matching image with resource-enforced setup before retrying")
         worker = inspect("container", WORKER)
         if worker:
             if (worker["Config"].get("Labels") or {}).get(OWNER) != "1":
@@ -138,7 +138,7 @@ def main():
                 run("docker", "rm", WORKER)
                 worker = None
         if worker is None:
-            run("docker", "create", "--name", WORKER, "--label", f"{OWNER}=1", "--label", f"{OWNER}.profile={PROFILE}",
+            run("docker", "create", "--pull", "never", "--name", WORKER, "--label", f"{OWNER}=1", "--label", f"{OWNER}.profile={PROFILE}",
                 "--init", "--network", "none", "--read-only", "--ipc", "private", "--shm-size", "16m", "--cpus", "2", "--memory", "2g",
                 "--memory-swap", "2g", "--pids-limit", "256", "--cap-drop", "ALL",
                 "--security-opt", "no-new-privileges", "--user", "1000:1000",
@@ -150,7 +150,7 @@ def main():
                 "--log-opt", "max-size=1m", "--log-opt", "max-file=1",
                 "--env", "GIT_AUTHOR_NAME=git-locks tests", "--env", "GIT_AUTHOR_EMAIL=tests@example.invalid",
                 "--env", "GIT_COMMITTER_NAME=git-locks tests", "--env", "GIT_COMMITTER_EMAIL=tests@example.invalid",
-                "--env", "GIT_LOCKS_TEST_REQUIRE_UTF8=1", IMAGE, stdout=subprocess.DEVNULL)
+                "--env", "GIT_LOCKS_TEST_REQUIRE_UTF8=1", image["Id"], stdout=subprocess.DEVNULL)
         worker = inspect("container", WORKER)
         config = worker["HostConfig"]
         if (worker["Mounts"] or config["Binds"] or config["NetworkMode"] != "none"
