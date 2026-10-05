@@ -340,7 +340,8 @@ def main():
                     host_guard = True
                     host_guard_detail = str(error)
             result_code = 2 if host_guard else process.returncode
-            result = {"exit_code": result_code, "workload_exit_code": process.returncode,
+            result = {"exit_code": None, "pending_exit_code": result_code, "worker_stop": "pending",
+                      "workload_exit_code": process.returncode,
                       "host_guard": host_guard, "host_guard_detail": host_guard_detail,
                       "evidence_errors": {}}
             result_path = receipts / "result.json"
@@ -364,12 +365,32 @@ def main():
             except Exception as error:
                 result["evidence_errors"]["artifacts"] = str(error)
             if result["evidence_errors"]:
-                result["exit_code"] = 2
+                result["pending_exit_code"] = 2
             result_path.write_text(json.dumps(result) + "\n")
-            return result["exit_code"]
+            return result["pending_exit_code"]
         finally:
             if not worker_stopped:
-                run("docker", "stop", "--time", "5", WORKER, stdout=subprocess.DEVNULL, timeout=15)
+                result_path = receipts / "result.json"
+                receipt_error = None
+                try:
+                    final_result = json.loads(result_path.read_text())
+                    if not isinstance(final_result, dict):
+                        raise ValueError("runner result is not an object")
+                except (OSError, ValueError) as error:
+                    receipt_error = str(error)
+                    final_result = {"exit_code": 2, "result_error": receipt_error}
+                planned_exit = final_result.pop("pending_exit_code", final_result.get("exit_code"))
+                try:
+                    run("docker", "stop", "--time", "5", WORKER, stdout=subprocess.DEVNULL, timeout=15)
+                except Exception as error:
+                    final_result.update(exit_code=2, worker_stop="failed", stop_error=str(error))
+                    raise
+                else:
+                    final_result.update(exit_code=planned_exit, worker_stop="confirmed")
+                finally:
+                    result_path.write_text(json.dumps(final_result) + "\n")
+                if receipt_error is not None:
+                    raise RuntimeError("could not read runner result before container stop: " + receipt_error)
 
 
 if __name__ == "__main__":

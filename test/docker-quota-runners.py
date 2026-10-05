@@ -25,9 +25,10 @@ initial = {'capacity_bytes': 19 << 30, 'device': 7,
            'worker': {'pid': 23, 'parent': 22, 'started': 60},
            'backing_free_bytes': 70 << 30}
 checks = 0
+stop_faults = ('final stop failure', 'final stop timeout')
 export_faults = ('missing test log', 'missing resource receipt', 'artifact export failure', 'early child refusal')
 emergency_faults = ('missing runner PID', 'invalid runner PID', 'failed TERM', 'TERM timeout', 'failed worker stop', 'stuck Docker client')
-for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired', 'initial publication failure', 'refresh publication failure', 'successful refresh', *emergency_faults, *export_faults):
+for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired', 'initial publication failure', 'refresh publication failure', 'successful refresh', *emergency_faults, *export_faults, *stop_faults):
     with tempfile.TemporaryDirectory(prefix='locks-quota-runner-') as scratch:
         root = Path(scratch)
         recipe = root / 'scripts/docker/Dockerfile'
@@ -48,7 +49,7 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
         def admission(info, pid):
             assert pid == 23 and info == {'private': True}
             snapshots.append(pid)
-            if fault in export_faults or len(snapshots) <= 2 or fault in ('initial publication failure', 'refresh publication failure', 'successful refresh'):
+            if fault in stop_faults or fault in export_faults or len(snapshots) <= 2 or fault in ('initial publication failure', 'refresh publication failure', 'successful refresh'):
                 return copy.deepcopy(initial)
             if fault in ('expired health', 'final health expired'):
                 raise RuntimeError('health expired')
@@ -61,7 +62,7 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
         publications = []
         launches = []
         class Process:
-            returncode = 1 if fault == 'early child refusal' else (0 if fault == 'final health expired' or fault in export_faults else None)
+            returncode = 1 if fault == 'early child refusal' else (0 if fault == 'final health expired' or fault in export_faults or fault in stop_faults else None)
             def poll(self): return self.returncode
             def wait(self, timeout=None):
                 if fault == 'successful refresh' and self.returncode is None:
@@ -95,6 +96,12 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
                 if fault not in ('TERM timeout', 'stuck Docker client'):
                     process.returncode = 143
             if command[:2] == ('docker', 'stop'):
+                if fault in stop_faults:
+                    pending = json.loads((root / '.test-results/result.json').read_text())
+                    assert pending['exit_code'] is None and pending['worker_stop'] == 'pending', pending
+                    if fault == 'final stop timeout':
+                        raise subprocess.TimeoutExpired(command, 15)
+                    raise subprocess.CalledProcessError(1, command)
                 if fault == 'failed worker stop':
                     raise subprocess.CalledProcessError(1, command)
                 if fault != 'stuck Docker client':
@@ -130,16 +137,24 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
              patch.object(runner.shutil, 'disk_usage', return_value=SimpleNamespace(free=70 << 30)), \
              patch.object(runner.subprocess, 'check_output', side_effect=output), \
              patch.object(runner.subprocess, 'Popen', side_effect=launch):
-            if fault == 'failed worker stop':
+            if fault == 'failed worker stop' or fault in stop_faults:
                 try:
                     runner.main()
-                except (RuntimeError, subprocess.CalledProcessError):
+                except (RuntimeError, subprocess.SubprocessError):
                     pass
                 else:
                     raise AssertionError('failed worker stop must not report success')
             else:
                 assert runner.main() == (0 if fault == 'successful refresh' else 2)
         result = json.loads((root / '.test-results/result.json').read_text())
+        assert result['worker_stop'] == ('failed' if fault == 'failed worker stop' or fault in stop_faults else 'confirmed'), result
+        if fault in stop_faults:
+            assert result['exit_code'] == 2 and result['workload_exit_code'] == 0, result
+            assert result['worker_stop'] == 'failed' and result['stop_error'], result
+            assert len(exports) == 1 and result['evidence_errors'] == {}, result
+            checks += 1
+            print('PASS final container stop: ' + fault, flush=True)
+            continue
         if fault in export_faults:
             assert result['exit_code'] == 2 and result['workload_exit_code'] == (1 if fault == 'early child refusal' else 0), result
             assert result['evidence_errors'] and not result['host_guard'], result
