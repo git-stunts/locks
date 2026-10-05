@@ -88,8 +88,8 @@ class LifetimeGuard:
             time.sleep(.01)
 
 
-def run(command, **kwargs):
-    return subprocess.run(command, check=True, timeout=30, **kwargs)
+def run(command, *, timeout=30, **kwargs):
+    return subprocess.run(command, check=True, timeout=timeout, **kwargs)
 
 
 def daemon_config():

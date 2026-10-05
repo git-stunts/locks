@@ -37,6 +37,8 @@ for fault in cases:
         calls = []
         def run(command, **kwargs):
             calls.append(command)
+            if command[0] in ('umount', 'systemctl') and command[1] != 'stop':
+                assert kwargs['timeout'] == 30 and kwargs['check'] is True, kwargs
             if command[0] == 'umount' and (fault == 'unmount failure' or
                     (fault == 'nested mounts' and '--recursive' not in command)):
                 raise subprocess.CalledProcessError(32, command)
@@ -59,7 +61,6 @@ for fault in cases:
             return real_copy(source, target)
         with patch.object(provider, 'ROOT', root), patch.object(provider, 'CONTROL', control), \
              patch.object(provider, 'DATA', data), patch.object(provider, 'CGROUP', cgroup), \
-             patch.object(provider, 'run', side_effect=run), \
              patch.object(provider.subprocess, 'run', side_effect=run), \
              patch.object(provider.shutil, 'copyfile', side_effect=copy), \
              patch.object(Path, 'read_bytes', mount_table):
