@@ -256,6 +256,17 @@ def verify_unmounted(directory):
             raise RuntimeError('owned mounts remain; preserving recovery data')
 
 
+def collected_unit(unit):
+    """An unloaded transient unit needs no stop; failed queries prove nothing."""
+    result = subprocess.run(['systemctl', 'show', '--all', '--no-pager',
+                             '--property=LoadState,ActiveState,Job', unit],
+                            check=False, capture_output=True, text=True, timeout=5)
+    # --all keeps the empty Job= property. Exact rows also reject duplicates,
+    # missing properties, active units and outstanding systemd jobs.
+    return result.returncode == 0 and sorted(result.stdout.splitlines()) == [
+        'ActiveState=inactive', 'Job=', 'LoadState=not-found']
+
+
 class Provider:
     def __init__(self, uid, gid):
         self.uid, self.gid = uid, gid
@@ -445,6 +456,7 @@ class Provider:
         if not self.control_owned:
             return  # Setup refused pre-existing resources; none belong to us.
         errors = []
+        collected = []
         safe_to_unmount = True
         try:
             self.kill_owned()
@@ -456,7 +468,10 @@ class Provider:
                     result = subprocess.run(['systemctl', 'stop', unit], timeout=20, check=False,
                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     if result.returncode:
-                        errors.append('stop ' + unit + ': exit ' + str(result.returncode))
+                        if unit in (COMMAND, DAEMON) and collected_unit(unit):
+                            collected.append(unit)
+                        else:
+                            errors.append('stop ' + unit + ': exit ' + str(result.returncode))
                 except (OSError, subprocess.SubprocessError) as error:
                     errors.append('stop ' + unit + ': ' + str(error))
         if self.watchdog is not None:
@@ -486,6 +501,7 @@ class Provider:
                 'minimum_backing_free_bytes': self.minimum_free, 'peak_counted_log_bytes': self.peak_logs,
                 'command': sys.argv[1:], 'status': 'cleanup-failed' if errors else getattr(self, 'status', 'incomplete'),
                 'cleanup_errors': errors, 'processes_stopped': safe_to_unmount,
+                'collected_units': collected,
                 }, indent=2) + '\n')
             os.chown(self.receipt, self.uid, self.gid)
             for name in ('daemon.log', 'command.log', 'launch.json'):

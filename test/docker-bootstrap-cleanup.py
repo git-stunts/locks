@@ -120,7 +120,8 @@ print('PASS mount table escaping and subtree boundary', flush=True)
 
 # Stop failures must not skip other units, watchdog shutdown or evidence export.
 # Mount and systemd operations remain synthetic; data is tiny local fixtures.
-for fault in ('timeout empty', 'timeout populated', 'timeout unreadable', 'timeout malformed', 'nonzero empty'):
+unit_cases = ('timeout empty', 'timeout populated', 'timeout unreadable', 'timeout malformed', 'nonzero empty', 'collected command', 'collected daemon', 'not-found active', 'not-found job', 'show failure', 'show timeout', 'show malformed', 'show duplicate')
+for fault in unit_cases:
     with tempfile.TemporaryDirectory(prefix='locks-unit-stop-') as scratch:
         root = Path(scratch)
         control = root / 'control'
@@ -138,7 +139,19 @@ for fault in ('timeout empty', 'timeout populated', 'timeout unreadable', 'timeo
         closed = []
         def command(args, **kwargs):
             calls.append(args)
-            if args == ['systemctl', 'stop', provider.COMMAND]:
+            if args[:2] == ['systemctl', 'show']:
+                assert kwargs['timeout'] == 5 and kwargs['check'] is False
+                if fault == 'show timeout':
+                    raise subprocess.TimeoutExpired(args, 5)
+                body = 'LoadState=not-found\nActiveState=inactive\nJob=\n'
+                if fault == 'not-found active': body = body.replace('inactive', 'active')
+                if fault == 'not-found job': body = body.replace('Job=\n', 'Job=123\n')
+                if fault == 'show malformed': body = 'LoadState=not-found\n'
+                if fault == 'show duplicate': body += 'LoadState=not-found\n'
+                if fault == 'nonzero empty': body = body.replace('not-found', 'loaded')
+                return SimpleNamespace(returncode=1 if fault == 'show failure' else 0, stdout=body)
+            failed_unit = provider.DAEMON if fault == 'collected daemon' else provider.COMMAND
+            if args == ['systemctl', 'stop', failed_unit]:
                 if fault.startswith('timeout'):
                     raise subprocess.TimeoutExpired(args, 20)
                 return SimpleNamespace(returncode=1)
@@ -150,20 +163,25 @@ for fault in ('timeout empty', 'timeout populated', 'timeout unreadable', 'timeo
             instance.control_owned = instance.unit_owned = instance.slice_owned = instance.mounted = True
             instance.unit_file = unit
             instance.watchdog = SimpleNamespace(close=lambda: closed.append(True))
+            instance.status = 'passed'
+            collected = fault.startswith('collected')
             try:
                 instance.cleanup()
             except (RuntimeError, subprocess.SubprocessError):
-                pass
+                assert not collected, 'a proven collected unit caused cleanup failure'
             else:
-                raise AssertionError('unit stop failure was reported as success')
+                assert collected, 'unit stop failure was reported as success'
         assert all(['systemctl', 'stop', name] in calls for name in (provider.COMMAND, provider.DAEMON, provider.SLICE)), calls
         assert closed == [True], 'watchdog cleanup was skipped'
         receipt = json.loads((root / '.test-results/bootstrap.json').read_text())
-        assert receipt['status'] == 'cleanup-failed' and receipt['cleanup_errors'], receipt
+        assert receipt['status'] == ('passed' if collected else 'cleanup-failed'), receipt
+        assert bool(receipt['cleanup_errors']) != collected, receipt
+        expected_collected = [provider.DAEMON if fault == 'collected daemon' else provider.COMMAND] if collected else []
+        assert receipt['collected_units'] == expected_collected, receipt
         assert (root / '.test-results/bootstrap-daemon.log').read_text() == 'preserve this evidence'
-        safe = fault.endswith(' empty')
+        safe = fault not in ('timeout populated', 'timeout unreadable', 'timeout malformed')
         assert (['umount', '--recursive', '--', str(data)] in calls) == safe, calls
         assert instance.mounted != safe and unit.exists() != safe
         assert control.exists() != safe, 'uncertain mounted data must survive'
         print('PASS unit stop recovery: ' + fault, flush=True)
-print('Bootstrap unit stop recovery: 5 synthetic cases passed')
+print(f'Bootstrap unit stop recovery: {len(unit_cases)} synthetic cases passed')
