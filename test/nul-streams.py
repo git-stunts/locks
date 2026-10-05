@@ -6,12 +6,15 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 subprocess.run(['node', str(ROOT / 'scripts/require-docker.mjs')], check=True)
 
+import array
+import fcntl
 import json
 import os
 import shlex
 import shutil
 import signal
 import tempfile
+import termios
 import time
 
 import jsonschema
@@ -257,26 +260,40 @@ def parent_cancel(base, sig):
     cat.chmod(0o755)
     env.update(PATH=str(shim) + os.pathsep + env['PATH'], BASH_ENV=str(startup),
                READ_READY=str(ready), CAT_PID=str(cat_pid))
-    process = subprocess.Popen([CLI, 'batch'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+    input_read, input_write = os.pipe()
+    process = subprocess.Popen([CLI, 'batch'], env=env, stdin=input_read, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, start_new_session=True)
     try:
-        process.stdin.write(b'job: partial\nholder: alice\npaths:\n')
-        process.stdin.flush()
+        os.write(input_write, b'job: partial\nholder: alice\npaths:\n')
         deadline = time.monotonic() + 3
-        while not ready.exists() and not cat_pid.exists():
-            assert process.poll() is None and time.monotonic() < deadline, 'input reader never became ready'
+        while True:
+            assert process.poll() is None, 'CLI exited before reading input'
+            queued = array.array('i', [0])
+            fcntl.ioctl(input_read, termios.FIONREAD, queued, True)
+            # A marker alone precedes read. Draining the pipe proves the reader
+            # entered read; without NUL or EOF its input operation cannot finish.
+            if (ready.exists() or cat_pid.exists()) and queued[0] == 0:
+                break
+            assert time.monotonic() < deadline, 'input reader did not consume partial input'
             time.sleep(.01)
+        os.close(input_read)
+        input_read = None
         process.send_signal(sig)  # Signal only the CLI PID. Keep the input pipe open.
         assert process.wait(timeout=2) in (-sig, 128 + sig)
-        time.sleep(.1)
-        if cat_pid.exists():
-            status = Path('/proc') / cat_pid.read_text().strip() / 'status'
-            assert not status.exists() or '\nState:\tZ' in status.read_text(), 'input reader survived CLI cancellation'
+        # With the parent's read fd closed, EPIPE proves all child reader fds
+        # closed. This detects orphan readers on Linux and macOS without /proc.
+        try:
+            os.write(input_write, b'x')
+        except BrokenPipeError:
+            pass
+        else:
+            raise AssertionError('input reader survived CLI cancellation')
         clean_capture(env)
         assert root(env) == before and objects(env) == before_objects
     finally:
-        process.stdin.close()
-        process.stdin = None
+        if input_read is not None:
+            os.close(input_read)
+        os.close(input_write)
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
