@@ -3303,7 +3303,7 @@ cmd_doctor() {
   ensure_snapshot
   local rows ref oid job name rest at refs_n=0 recs_n="${#BLOB[@]}" hook_policy
   doctor_hook_policy hook_policy
-  local -A JOB_OID=() OID_JOBS=() PATHREF_OID=() EXPECTED_PATHREF=() JOB_OK=()
+  local -A JOB_OID=() OID_JOBS=() PATHREF_OID=() EXPECTED_PATHREF=() JOB_OK=() LOCK_OK=()
   local -A SEM_META=() SEM_GEN=() SEM_SLOT_OIDS=() SEM_SLOT_JOBS=() SEM_NAMES=()
   local jobs=() sems=() pathrefs=() all_paths=() p paths
   now_v at
@@ -3350,6 +3350,7 @@ cmd_doctor() {
     oid="${JOB_OID[${job}]}"
     doctor_lock_record "${job}" "${oid}" || continue
     JOB_OK["${job}"]=1
+    LOCK_OK["${oid}"]=1
     field_v rest "${oid}" job
     [[ "${rest}" == "${job}" ]] || finding job-ref-name "${job}" "the job ref points at a record for job '${rest}'"
     record_paths_v paths "${oid}"
@@ -3385,7 +3386,7 @@ cmd_doctor() {
     oid="${PATHREF_OID[${ref}]}"
     if [[ -z "${OID_JOBS[${oid}]+x}" ]]; then
       finding path-ref-orphan "${ref}" "points at record ${oid}, which no job ref points at: the path reads as held by nothing a release can name"
-    elif key="${ref}|${oid}" && [[ -z "${EXPECTED_PATHREF[${key}]+x}" ]]; then
+    elif [[ -n "${LOCK_OK[${oid}]+x}" ]] && key="${ref}|${oid}" && [[ -z "${EXPECTED_PATHREF[${key}]+x}" ]]; then
       finding path-ref-stray "${ref}" "points at record ${oid} (job ${OID_JOBS[${oid}]% }) which lists no path hashing to this ref"
     fi
   done
