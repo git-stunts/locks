@@ -77,13 +77,17 @@ The source baseline is the commit in frontmatter. These references describe stat
 [PR #123](https://github.com/git-stunts/locks/pull/123) corrected semaphore guard aliasing at this baseline.
 Its full guarded suite passed, including 31 release-guard cases. The four RED failures represented three distinct failure scenarios.
 This evidence does not prove that every historical deployment uses the current generator pattern.
-No new runtime experiment was performed for this document. A dedicated nonnumeric stored-identity migration case remains to be added during contract implementation.
+The guarded `test/acquisition-identity.py` run passed four synthetic compatibility cases on 2026-10-05.
+It tested path locks and semaphore slots with nonnumeric ASCII and Unicode identifiers.
+Each case preserved the complete root through offline migration, preserved identity through a record rewrite, rejected stale guards, and released with the matching acquisition.
+The fixtures include a combining character and retain its exact representation. They do not establish the contents of real historical stores.
 
 ## Implementation boundary
 
 GL-007 must align the output schema, command reference, and event tables with this decision after acceptance.
 It must express the text constraints without imposing the numeric generator pattern.
-It must test nonnumeric stored identities through migration, renewal, and guarded release for both reservation types where supported.
+It must retain the nonnumeric stored-identity tests through migration, renewal, and guarded release for both reservation types.
+It must add any missing cases required by schema or event-contract changes.
 It must preserve exact identity bytes and the independent record/acquisition comparisons introduced by PR #123.
 It must distinguish malformed input, absent authority, stale identity, expired renewal, and damaged stored records.
 
