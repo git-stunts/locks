@@ -19,11 +19,12 @@ spec.loader.exec_module(module)
 checks = 0
 
 
-def rejected(name, action):
+def rejected(name, action, expected):
     global checks
     try:
         action()
-    except ValueError:
+    except ValueError as error:
+        assert expected in str(error), (name, expected, str(error))
         checks += 1
         print('PASS rejects ' + name)
     else:
@@ -37,24 +38,24 @@ assert module.layers_for(valid) == [['a', 'c'], ['b']]
 checks += 1
 bad = copy.deepcopy(valid)
 bad[0]['dependencies'] = [{'id': 'b', 'reason': 'cycle'}]
-rejected('cycle', lambda: module.layers_for(bad))
+rejected('cycle', lambda: module.layers_for(bad), 'dependency cycle')
 bad = copy.deepcopy(valid)
 bad[1]['dependencies'][0]['id'] = 'missing'
-rejected('unknown dependency', lambda: module.layers_for(bad))
+rejected('unknown dependency', lambda: module.layers_for(bad), 'unknown dependency')
 bad = copy.deepcopy(valid)
 bad[1]['dependencies'][0]['id'] = 'b'
-rejected('self dependency', lambda: module.layers_for(bad))
+rejected('self dependency', lambda: module.layers_for(bad), 'self dependency')
 bad = copy.deepcopy(valid)
 bad[1]['dependencies'].append(dict(bad[1]['dependencies'][0]))
-rejected('duplicate edge', lambda: module.layers_for(bad))
+rejected('duplicate edge', lambda: module.layers_for(bad), 'duplicate dependency')
 bad = copy.deepcopy(valid)
 bad[1]['dependencies'][0]['reason'] = ''
-rejected('unexplained edge', lambda: module.layers_for(bad))
+rejected('unexplained edge', lambda: module.layers_for(bad), 'missing dependency reason')
 bad = copy.deepcopy(valid)
 bad[1]['dependencies'][0]['id'] = 'c'
-rejected('optional work on release path', lambda: module.layers_for(bad))
-rejected('duplicate task id', lambda: module.layers_for(valid + [valid[0]]))
-rejected('duplicate metadata key', lambda: module.metadata('---\nid: "a"\nid: "b"\n---\n'))
+rejected('optional work on release path', lambda: module.layers_for(bad), 'required task depends on optional work')
+rejected('duplicate task id', lambda: module.layers_for(valid + [valid[0]]), 'duplicate task id')
+rejected('duplicate metadata key', lambda: module.metadata('---\nid: "a"\nid: "b"\n---\n'), 'invalid or duplicate frontmatter key')
 
 tasks, inventory = module.load()
 projection = module.render(tasks, inventory)
@@ -78,12 +79,12 @@ with tempfile.TemporaryDirectory(prefix='roadmap-fixture-') as temporary:
                     target.mkdir()
                 else:
                     target.touch()
-    def mutation(name, path, transform):
+    def mutation(name, path, transform, expected):
         original = path.read_bytes()
         try:
             path.write_bytes(transform(original.decode('utf-8')).encode('utf-8'))
             module.ROOT = fixture
-            rejected(name, module.load)
+            rejected(name, module.load, expected)
         finally:
             module.ROOT = ROOT
             path.write_bytes(original)
@@ -92,17 +93,17 @@ with tempfile.TemporaryDirectory(prefix='roadmap-fixture-') as temporary:
     reason_line = '[' + dependency['id'] + '](' + dependency['id'] + '.md): ' + dependency['reason']
     mutation('reason copied outside Prerequisites', card,
              lambda text: text.replace(reason_line, reason_line.split(': ')[0] + ': stale reason')
-             .replace('## 4. Scope', '## 4. Scope\n\n' + reason_line))
-    mutation('prefix hash drift', card, lambda text: text.replace(tasks[0]['prompt_prefix_sha256'], '0' * 64, 1))
-    mutation('prompt text drift', card, lambda text: text.replace('```text\n', '```text\nChanged prefix.\n', 1))
+             .replace('## 4. Scope', '## 4. Scope\n\n' + reason_line), 'frontmatter and prerequisite text disagree')
+    mutation('prefix hash drift', card, lambda text: text.replace(tasks[0]['prompt_prefix_sha256'], '0' * 64, 1), 'wrong prompt prefix hash')
+    mutation('prompt text drift', card, lambda text: text.replace('```text\n', '```text\nChanged prefix.\n', 1), 'prompt prefix or task id drift')
     mutation('issue coverage drift', fixture / 'docs/planning/inventory.json',
-             lambda text: json.dumps(dict(json.loads(text), issue_coverage={})))
-    mutation('missing source', card, lambda text: re.sub(r'^sources: .*$', 'sources: ["absent-source"]', text, flags=re.M))
-    mutation('missing prerequisite prose', card, lambda text: text.replace(reason_line, 'omitted'))
+             lambda text: json.dumps(dict(json.loads(text), issue_coverage={})), 'task missing from issue map')
+    mutation('missing source', card, lambda text: re.sub(r'^sources: .*$', 'sources: ["absent-source"]', text, flags=re.M), 'source path missing')
+    mutation('missing prerequisite prose', card, lambda text: text.replace(reason_line, 'omitted'), 'extra or missing prerequisite in prose')
     mutation('unknown gate phase', fixture / 'docs/planning/inventory.json',
-             lambda text: text.replace('"before-action"', '"unknown"', 1))
+             lambda text: text.replace('"before-action"', '"unknown"', 1), 'unknown gate phase')
     mutation('gate phase prose drift', card,
-             lambda text: text.replace('`workflow_permission` (before-action)', '`workflow_permission` (completion)'))
+             lambda text: text.replace('`workflow_permission` (before-action)', '`workflow_permission` (completion)'), 'gate phase prose drift')
     completion_task = copy.deepcopy(next(task for task in tasks if task['id'] == 'GL-030'))
     completion_task['dependencies'] = []
     candidate_graph = json.loads(module.render([completion_task] + [task for task in tasks if task['id'] != 'GL-030'], inventory)['docs/tasks/graph.json'])
