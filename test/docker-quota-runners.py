@@ -25,7 +25,7 @@ initial = {'capacity_bytes': 19 << 30, 'device': 7,
            'worker': {'pid': 23, 'parent': 22, 'started': 60},
            'backing_free_bytes': 70 << 30}
 checks = 0
-for fault in ('changed identity', 'expired health', 'unreadable kernel state'):
+for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired'):
     with tempfile.TemporaryDirectory(prefix='locks-quota-runner-') as scratch:
         root = Path(scratch)
         recipe = root / 'scripts/docker/Dockerfile'
@@ -48,7 +48,7 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state'):
             snapshots.append(pid)
             if len(snapshots) == 1:
                 return copy.deepcopy(initial)
-            if fault == 'expired health':
+            if fault in ('expired health', 'final health expired'):
                 raise RuntimeError('health expired')
             if fault == 'unreadable kernel state':
                 raise OSError('kernel state unreadable')
@@ -57,7 +57,7 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state'):
             return changed
         calls = []
         class Process:
-            returncode = None
+            returncode = 0 if fault == 'final health expired' else None
             def poll(self): return self.returncode
             def wait(self, timeout=None):
                 assert self.returncode is not None, 'wait before cancellation'
@@ -90,7 +90,12 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state'):
         result = json.loads((root / '.test-results/result.json').read_text())
         assert result['host_guard'] and result['host_guard_detail']
         assert len(snapshots) == 2
-        assert ('docker', 'exec', runner.WORKER, 'kill', '-TERM', '100') in calls
+        if fault == 'final health expired':
+            assert not any('kill' in command for command in calls)
+        else:
+            assert ('docker', 'exec', runner.WORKER, 'kill', '-TERM', '100') in calls
+        assert (root / '.test-results/latest.log').read_bytes() == b'{}\n'
+        assert (root / '.test-results/resources.json').read_bytes() == b'{}\n'
         assert ('docker', 'stop', '--time', '5', runner.WORKER) in calls
         checks += 1
         print('PASS running host guard cancels on ' + fault, flush=True)

@@ -242,7 +242,11 @@ def main():
                 except subprocess.TimeoutExpired:
                     pass
             if boundary is not None and not host_guard:
-                boundary.check()
+                try:
+                    boundary.check()
+                except Exception as error:
+                    host_guard = True
+                    host_guard_detail = str(error)
             result_code = 2 if host_guard else process.returncode
             with (receipts / "latest.log").open("wb") as log:
                 run("docker", "exec", WORKER, "cat", "/evidence/test.log", stdout=log)
