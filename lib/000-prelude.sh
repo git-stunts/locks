@@ -31,6 +31,8 @@
 # GIT_LOCKS_STORE=self (the subject's own common git dir, shared by its
 # worktrees), or persistently with `git config locks.store <path|self>`.
 # Precedence: environment, then config, then the default.
+# Relative selectors and GIT_LOCKS_HOME use the shared main-repository anchor,
+# never a worker's subdirectory. See docs/store-initialization.md for layouts.
 #
 # Immutable reservation blobs are indexed by jobs, paths, and semaphore slots
 # inside a Git tree. refs/locks/state is the sole mutable authority. Commands
@@ -124,6 +126,7 @@ output:  JSON Lines, always: one object per result on stdout, written as each re
          line. A command wrapped by with owns stdout.
 store:   GIT_LOCKS_STORE=<path|self>, else `git config locks.store`,
          else ${GIT_LOCKS_HOME:-~/.git-stunts}/locks/<main repo path>
+         Relative paths use the shared main-repository anchor, not the current subdirectory.
 clock:   GIT_LOCKS_NOW=<nonnegative decimal epoch> (tests; empty is invalid)
 numbers: decimal digits only, at most 9223372036854775807; TTL is positive,
          wait may be zero; expiry and wait-deadline sums must fit the same range

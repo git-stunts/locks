@@ -1,5 +1,31 @@
 # Store initialization
 
+Store selection is shared across subdirectories and linked worktrees. The
+anchor is Git's absolute common directory with a final `/.git` removed: the
+main repository top level in the ordinary layout, and the common directory
+itself for bare repositories and separate metadata layouts. This is also the
+identity used by the default store. A relative `GIT_LOCKS_STORE`, `locks.store`,
+or `GIT_LOCKS_HOME` resolves against that anchor. Absolute overrides retain
+their location; `self` selects the common Git directory. Outside a repository,
+the physical current directory is the anchor. Paths containing newlines are
+refused instead of being silently shortened by shell command substitution.
+
+For example, `locks.store=.reservations/store.git` in a normal repository at
+`/projects/app` selects `/projects/app/.reservations/store.git` from the root,
+any subdirectory, and its linked worktrees. This changes earlier behavior that
+selected a separate relative store in each invocation directory. Before
+upgrading a launcher that used relative paths, stop its workers and inspect
+those earlier stores. Point every worker at one existing store with an absolute
+override, or resolve existing reservations before moving to the shared location.
+No old stores are moved or merged automatically.
+
+Repository discovery and configuration failures return `store-read` before
+initialization or reservation output. Only Git's ordinary repository-absence
+diagnostic permits directory-based operation, and even then nearby Git metadata
+or an explicit Git repository environment prevents fallback. An absent
+`locks.store` key is allowed; other configuration read errors are not treated as
+an unset key. Subject discovery continues to honor the caller's Git environment.
+
 A missing store is initialized automatically on first use, including `store`.
 Use an absent path for a new store. An existing destination must already be a
 valid bare Git repository, or the subject's common Git directory in `self` mode.
@@ -34,3 +60,9 @@ paused, injected initialization failure, existing invalid destinations,
 unwritable parents, exclusion of custom templates, and removal of unused
 preparations. Every resulting race store is inspected through real Git-backed
 commands.
+
+The store-selection suite verifies shared authority through competing claims
+from roots, subdirectories and linked worktrees, including bare and separate
+metadata layouts. It also covers malformed/unreadable configuration, broken
+repository metadata, injected discovery errors, outside-repository operation,
+selection precedence, and newline rejection.

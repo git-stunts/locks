@@ -14,23 +14,83 @@ store_git() ( # isolate store plumbing; subject discovery and wrapped commands k
   exec git "$@"
 )
 
+outside_repository() { # accept only Git's ordinary absence, never a failed repository discovery
+  [[ -z "${GIT_DIR+x}${GIT_COMMON_DIR+x}${GIT_WORK_TREE+x}" ]] || return 1
+  case "$1" in
+    'fatal: not a git repository (or any of the parent directories): .git') ;;
+    'fatal: not a git repository (or any parent up to mount point '*$'\n''Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).') ;;
+    *) return 1 ;;
+  esac
+  # Git can report ordinary absence when HEAD or other repository metadata is
+  # damaged. Never choose a new directory-based authority beside that metadata.
+  local dir
+  dir="$(pwd -P && printf x)" || return 1
+  dir="${dir%x}"
+  dir="${dir%$'\n'}"
+  [[ "${dir}" != *$'\n'* ]] || return 1
+  while :; do
+    [[ ! -e "${dir}/.git" && ! -L "${dir}/.git" ]] || return 1
+    if [[ -e "${dir}/HEAD" || -L "${dir}/HEAD" ]]; then
+      [[ ! -e "${dir}/objects" && ! -e "${dir}/refs" && ! -e "${dir}/config" ]] || return 1
+    fi
+    [[ "${dir}" != / ]] || break
+    dir="${dir%/*}"
+    [[ -n "${dir}" ]] || dir=/
+  done
+}
+
 resolve_store() { # sets STORE; creates the default or a custom store on first use
-  local common='' sel key
-  common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || common='' # empty outside a repository
+  local common='' sel key rc home_root
+  # The sentinel preserves trailing newlines in paths, so they can be refused
+  # instead of silently selecting a different path after command substitution.
+  common="$(git rev-parse --path-format=absolute --git-common-dir 2>&1 && printf x)"
+  rc=$?
+  if ((rc == 0)); then
+    common="${common%x}"
+    common="${common%$'\n'}"
+    [[ "${common}" == /* && "${common}" != *$'\n'* ]] || store_error 'invalid subject repository path'
+  else
+    if ((rc != 128)) || ! outside_repository "${common}"; then
+      store_error "cannot discover the subject repository: ${common}"
+    fi
+    common=''
+  fi
   sel="${GIT_LOCKS_STORE:-}"
   if [[ -z "${sel}" ]]; then
-    sel="$(git config --get locks.store 2>/dev/null)" || sel=''
+    sel="$(git config --get locks.store 2>&1 && printf x)"
+    rc=$?
+    if ((rc == 0)); then
+      sel="${sel%x}"
+      sel="${sel%$'\n'}"
+    else
+      [[ ${rc} == 1 && -z "${sel}" ]] || store_error "cannot read locks.store: ${sel}"
+    fi
   fi
-  if [[ -n "${common}" ]]; then key="${common%/.git}"; else key="${PWD}"; fi # main repo when there is one, else the directory
+  [[ "${sel}" != *$'\n'* ]] || store_error 'the store selector must not contain a newline'
+  if [[ -n "${common}" ]]; then
+    # The shared anchor is the same as the default store's identity. Ordinary
+    # and linked worktrees use the main repository top level; bare/separate
+    # metadata layouts use the common Git directory itself.
+    key="${common%/.git}"
+  else
+    key="$(pwd -P && printf x)" || store_error 'cannot resolve the working directory'
+    key="${key%x}"
+    key="${key%$'\n'}"
+  fi
   case "${sel}" in
-    '') STORE="${GIT_LOCKS_HOME:-${HOME}/.git-stunts}/locks${key}" ;;
+    '')
+      home_root="${GIT_LOCKS_HOME:-${HOME}/.git-stunts}"
+      [[ "${home_root}" == /* ]] || home_root="${key}/${home_root}"
+      STORE="${home_root}/locks${key}"
+      ;;
     self)
       [[ -n "${common}" ]] || fail 'GIT_LOCKS_STORE=self needs a git repository; this directory is not in one' 2
       STORE="${common}"
       ;;
     /*) STORE="${sel}" ;;
-    *) STORE="${PWD}/${sel}" ;;
+    *) STORE="${key}/${sel}" ;;
   esac
+  [[ "${STORE}" != *$'\n'* ]] || store_error 'the store path must not contain a newline'
   # A trailing slash must not turn a missing destination into mv's directory form.
   while [[ "${STORE}" != / && "${STORE}" == */ ]]; do STORE="${STORE%/}"; done
   if [[ ! -e "${STORE}" && ! -L "${STORE}" ]]; then

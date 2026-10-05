@@ -20,6 +20,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Relative store overrides and `GIT_LOCKS_HOME` use the same shared repository anchor as the default store, so workers in subdirectories and linked worktrees coordinate (#60). Discovery/configuration failures return `store-read` before initialization; damaged metadata is not treated as an outside-repository invocation. Newline-containing store selectors are refused without truncation. Existing relative overrides require reviewing the documented upgrade guidance; earlier stores are never merged automatically.
 - Dangling and cyclic symbolic state roots fail with `store-read` instead of appearing empty or healthy. Root publication and offline migration disable symbolic-ref dereferencing, preventing a ref introduced after the snapshot from redirecting writes into its target. Docker regressions cover damaged roots, publication interleavings, and packed direct roots.
 
 - Every reservation read and plan validates relationships within its immutable root: matching job/path indexes, existing same-holder acyclic parents, complete semaphore metadata/generations, capacity, and exclusive live prefixes. Damaged authority returns `store-read` before output, object writes, or command launch; ordinary release/sweep do not silently repair it. Doctor remains available and now diagnoses live prefix overlap. Path identity is checked in one batched Git call and reused by the planner.
