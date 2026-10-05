@@ -444,16 +444,38 @@ class Provider:
     def cleanup(self):
         if not self.control_owned:
             return  # Setup refused pre-existing resources; none belong to us.
-        self.kill_owned()
+        errors = []
+        safe_to_unmount = True
+        try:
+            self.kill_owned()
+        except OSError as error:
+            errors.append('cgroup kill: ' + str(error))
         if self.slice_owned:
             for unit in (COMMAND, DAEMON, SLICE):
-                subprocess.run(['systemctl', 'stop', unit], timeout=20, check=False,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if CGROUP.exists() and 'populated 1' in (CGROUP / 'cgroup.events').read_text():
-                raise RuntimeError('owned processes remain; preserving mounted recovery data')
+                try:
+                    result = subprocess.run(['systemctl', 'stop', unit], timeout=20, check=False,
+                                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if result.returncode:
+                        errors.append('stop ' + unit + ': exit ' + str(result.returncode))
+                except (OSError, subprocess.SubprocessError) as error:
+                    errors.append('stop ' + unit + ': ' + str(error))
         if self.watchdog is not None:
-            self.watchdog.close()
-            self.watchdog = None
+            try:
+                self.watchdog.close()
+                self.watchdog = None
+            except (OSError, RuntimeError) as error:
+                errors.append('watchdog cleanup: ' + str(error))
+                safe_to_unmount = False
+        if self.slice_owned:
+            try:
+                if CGROUP.exists():
+                    rows = [line.split() for line in (CGROUP / 'cgroup.events').read_text().splitlines()]
+                    populated = [row for row in rows if row and row[0] == 'populated']
+                    if populated != [['populated', '0']]:
+                        raise RuntimeError('owned processes remain or cgroup state is invalid')
+            except (OSError, RuntimeError) as error:
+                errors.append('process verification: ' + str(error))
+                safe_to_unmount = False
         exported = False
         try:
             self.receipt.parent.mkdir(exist_ok=True)
@@ -462,7 +484,8 @@ class Provider:
                 'build_filesystem_bytes': BUILD_BYTES, 'memory_bytes': MEMORY_BYTES,
                 'cpus': 2, 'timeout_seconds': DEADLINE_SECONDS,
                 'minimum_backing_free_bytes': self.minimum_free, 'peak_counted_log_bytes': self.peak_logs,
-                'command': sys.argv[1:], 'status': getattr(self, 'status', 'incomplete'),
+                'command': sys.argv[1:], 'status': 'cleanup-failed' if errors else getattr(self, 'status', 'incomplete'),
+                'cleanup_errors': errors, 'processes_stopped': safe_to_unmount,
                 }, indent=2) + '\n')
             os.chown(self.receipt, self.uid, self.gid)
             for name in ('daemon.log', 'command.log', 'launch.json'):
@@ -477,15 +500,18 @@ class Provider:
         finally:
             # Export collisions and I/O failures must not retain live resources.
             # Keep unexported evidence for recovery; never remove mounted data.
-            if self.mounted:
-                run(['umount', '--recursive', '--', str(DATA)], timeout=30)
-                verify_unmounted(DATA)
-                self.mounted = False
-            if self.unit_owned:
-                self.unit_file.unlink()
-                run(['systemctl', 'daemon-reload'])
-            if exported:
-                shutil.rmtree(CONTROL)
+            if safe_to_unmount:
+                if self.mounted:
+                    run(['umount', '--recursive', '--', str(DATA)], timeout=30)
+                    verify_unmounted(DATA)
+                    self.mounted = False
+                if self.unit_owned:
+                    self.unit_file.unlink()
+                    run(['systemctl', 'daemon-reload'])
+                if exported:
+                    shutil.rmtree(CONTROL)
+        if errors:
+            raise RuntimeError('bootstrap cleanup failed: ' + '; '.join(errors))
 
 
 def main():

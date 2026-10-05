@@ -131,7 +131,7 @@ with tempfile.TemporaryDirectory(prefix='locks-bootstrap-ownership-') as scratch
         instance.unit_file = unit
         calls = []
         with patch.object(provider, 'run', side_effect=lambda command, **kw: calls.append(command)), \
-             patch.object(provider.subprocess, 'run', side_effect=lambda command, **kw: calls.append(command)):
+             patch.object(provider.subprocess, 'run', side_effect=lambda command, **kw: (calls.append(command), subprocess.CompletedProcess(command, 0))[1]):
             instance.cleanup()
         assert (cgroup / 'cgroup.kill').read_text() == '1\n'
         assert not unit.exists() and not control.exists()

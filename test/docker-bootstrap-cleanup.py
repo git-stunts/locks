@@ -9,6 +9,8 @@ subprocess.run(['node', str(ROOT / 'scripts/require-docker.mjs')], check=True)
 import importlib.util
 import os
 import tempfile
+import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('cleanup_provider', ROOT / 'scripts/docker-ci.py')
@@ -42,6 +44,7 @@ for fault in cases:
             if command[0] == 'umount' and (fault == 'unmount failure' or
                     (fault == 'nested mounts' and '--recursive' not in command)):
                 raise subprocess.CalledProcessError(32, command)
+            return SimpleNamespace(returncode=0)
         real_read = Path.read_bytes
         def mount_table(path):
             if path != Path('/proc/self/mountinfo'):
@@ -114,3 +117,53 @@ for directory, encoded, mounted in [('/owned space', b'/owned\\040space', True),
         else:
             assert not mounted
 print('PASS mount table escaping and subtree boundary', flush=True)
+
+# Stop failures must not skip other units, watchdog shutdown or evidence export.
+# Mount and systemd operations remain synthetic; data is tiny local fixtures.
+for fault in ('timeout empty', 'timeout populated', 'timeout unreadable', 'timeout malformed', 'nonzero empty'):
+    with tempfile.TemporaryDirectory(prefix='locks-unit-stop-') as scratch:
+        root = Path(scratch)
+        control = root / 'control'
+        data = control / 'data'
+        data.mkdir(parents=True)
+        (control / 'daemon.log').write_text('preserve this evidence')
+        cgroup = root / 'cgroup'
+        cgroup.mkdir()
+        (cgroup / 'cgroup.kill').touch()
+        if fault != 'timeout unreadable':
+            (cgroup / 'cgroup.events').write_text('populated ' + ('1' if fault == 'timeout populated' else 'invalid' if fault == 'timeout malformed' else '0') + '\n')
+        unit = root / 'owned.slice'
+        unit.touch()
+        calls = []
+        closed = []
+        def command(args, **kwargs):
+            calls.append(args)
+            if args == ['systemctl', 'stop', provider.COMMAND]:
+                if fault.startswith('timeout'):
+                    raise subprocess.TimeoutExpired(args, 20)
+                return SimpleNamespace(returncode=1)
+            return SimpleNamespace(returncode=0)
+        with patch.object(provider, 'ROOT', root), patch.object(provider, 'CONTROL', control), \
+             patch.object(provider, 'DATA', data), patch.object(provider, 'CGROUP', cgroup), \
+             patch.object(provider.subprocess, 'run', side_effect=command):
+            instance = provider.Provider(os.getuid(), os.getgid())
+            instance.control_owned = instance.unit_owned = instance.slice_owned = instance.mounted = True
+            instance.unit_file = unit
+            instance.watchdog = SimpleNamespace(close=lambda: closed.append(True))
+            try:
+                instance.cleanup()
+            except (RuntimeError, subprocess.SubprocessError):
+                pass
+            else:
+                raise AssertionError('unit stop failure was reported as success')
+        assert all(['systemctl', 'stop', name] in calls for name in (provider.COMMAND, provider.DAEMON, provider.SLICE)), calls
+        assert closed == [True], 'watchdog cleanup was skipped'
+        receipt = json.loads((root / '.test-results/bootstrap.json').read_text())
+        assert receipt['status'] == 'cleanup-failed' and receipt['cleanup_errors'], receipt
+        assert (root / '.test-results/bootstrap-daemon.log').read_text() == 'preserve this evidence'
+        safe = fault.endswith(' empty')
+        assert (['umount', '--recursive', '--', str(data)] in calls) == safe, calls
+        assert instance.mounted != safe and unit.exists() != safe
+        assert control.exists() != safe, 'uncertain mounted data must survive'
+        print('PASS unit stop recovery: ' + fault, flush=True)
+print('Bootstrap unit stop recovery: 5 synthetic cases passed')
