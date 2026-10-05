@@ -142,7 +142,7 @@ dir_tokens() { # subject-repo -> the number of directory token refs
   fixture_git --git-dir="${store}" for-each-ref --format='%(refname)' 'refs/locks/dirs/' | wc -l | tr -d ' '
 }
 
-export GIT_LOCKS_NOW=1000000
+export GIT_LOCKS_TEST_HOOKS=1 GIT_LOCKS_NOW=1000000
 REAL_HOME="${HOME}"
 HOME="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-home.XXXXXX")"
 export HOME

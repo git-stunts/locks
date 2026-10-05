@@ -20,6 +20,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Test clocks, pause gates, and trace writes require the literal opt-in `GIT_LOCKS_TEST_HOOKS=1` (#58). Supplied controls without opt-in fail with a structured usage error before store access or command launch. Tests and benchmarks enable controls only in their fixture environments; the flag is protection against accidental configuration, not caller authentication.
 - Relative store overrides and `GIT_LOCKS_HOME` use the same shared repository anchor as the default store, so workers in subdirectories and linked worktrees coordinate (#60). Discovery/configuration failures return `store-read` before initialization; damaged metadata is not treated as an outside-repository invocation. Newline-containing store selectors are refused without truncation. Existing relative overrides require reviewing the documented upgrade guidance; earlier stores are never merged automatically.
 - Dangling and cyclic symbolic state roots fail with `store-read` instead of appearing empty or healthy. Root publication and offline migration disable symbolic-ref dereferencing, preventing a ref introduced after the snapshot from redirecting writes into its target. Docker regressions cover damaged roots, publication interleavings, and packed direct roots.
 

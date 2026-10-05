@@ -37,6 +37,7 @@ main() {
     fi
   done
   [[ "${cmd}" == doctor ]] && DIAGNOSTIC_READ=1
+  validate_test_hooks # fail before store discovery, initialization, or instrumentation writes
   if [[ -n "${GIT_LOCKS_NOW+x}" ]]; then
     decimal_uint GIT_LOCKS_NOW "${GIT_LOCKS_NOW}" || fail 'GIT_LOCKS_NOW must be a decimal epoch from 0 through 9223372036854775807' 2
   fi

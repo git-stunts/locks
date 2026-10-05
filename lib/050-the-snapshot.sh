@@ -37,7 +37,7 @@ parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], on
   done
   R_PARSED["$1"]=1
   R_PATHS["$1"]="${paths%$'\n'}"
-  [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'parse %s\n' "$1" >>"${GIT_LOCKS_TRACE}"
+  test_hooks_enabled && [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'parse %s\n' "$1" >>"${GIT_LOCKS_TRACE}"
   return 0
 }
 
@@ -116,12 +116,12 @@ snapshot() {
   for oid in "${!blobs[@]}"; do BLOB["${oid}"]="${blobs[${oid}]}"; done
   SNAP_LOADED=1
   ((DIAGNOSTIC_READ)) || validate_snapshot
-  [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'snapshot %s\n' "${#refs[@]}" >>"${GIT_LOCKS_TRACE}"
+  test_hooks_enabled && [[ -n "${GIT_LOCKS_TRACE:-}" ]] && printf 'snapshot %s\n' "${#refs[@]}" >>"${GIT_LOCKS_TRACE}"
   test_gate "${GIT_LOCKS_PAUSE_AFTER_READ:-}" # tests force an interleaving between a read and what follows it
 }
 
 test_gate() { # file-or-empty: when set, say so in <file>.ready and wait here until the file exists (at most 30 s); tests only
-  [[ -n "$1" ]] || return 0
+  test_hooks_enabled && [[ -n "$1" ]] || return 0
   : >"$1.ready" # the test waits for this before racing us: a sleep would let the racer win before we had read and planned
   local waited=0
   until [[ -e "$1" ]] || ((waited >= 600)); do

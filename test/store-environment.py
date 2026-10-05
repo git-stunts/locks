@@ -47,7 +47,7 @@ def setup(base, existing=True):
         git('init', '-q', '--bare', store)
     config = base / 'foreign.config'
     config.write_text('[core]\n\tbare = false\n[init]\n\tdefaultObjectFormat = sha256\n')
-    env = dict(BASE_ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_NOW='1000000')
+    env = dict(BASE_ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000')
     return env, subject, foreign, store, config
 
 
@@ -100,7 +100,7 @@ def subject_discovery(base, selection):
     before = snapshot(foreign), (subject / '.git/index').read_bytes()
     assert locks(env, 'store', cwd=base)[0]['store'] == str(selected)
     locks(env, 'claim', '--job', 'held', '--holder', 'alice', 'x.md', cwd=base)
-    clean = dict(BASE_ENV, GIT_LOCKS_STORE=str(selected), GIT_LOCKS_NOW='1000000')
+    clean = dict(BASE_ENV, GIT_LOCKS_STORE=str(selected), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000')
     if selection == 'self':
         clean['GIT_LOCKS_STORE'] = 'self'
     assert locks(clean, 'show', '--job', 'held', cwd=subject)[0]['holder'] == 'alice'
@@ -148,7 +148,7 @@ def alternate_objects(base):
 def sha256_store(base):
     store = base / 'sha256.git'
     git('init', '-q', '--bare', '--object-format=sha256', store)
-    env = dict(BASE_ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_NOW='1000000', GIT_DEFAULT_HASH='sha1')
+    env = dict(BASE_ENV, GIT_LOCKS_STORE=str(store), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000', GIT_DEFAULT_HASH='sha1')
     row = locks(env, 'claim', '--job', 'held', '--holder', 'alice', 'x.md')[0]
     assert len(row['record']) == 64
     locks(env, 'check', 'x.md', status=1)

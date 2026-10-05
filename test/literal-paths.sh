@@ -45,7 +45,7 @@ trap cleanup EXIT
 
 export HOME="${TEST_ROOT}/home"
 mkdir -p "${HOME}"
-export GIT_LOCKS_NOW=1000000
+export GIT_LOCKS_TEST_HOOKS=1 GIT_LOCKS_NOW=1000000
 
 new_case() {
   CASE_NUMBER=$((CASE_NUMBER + 1))

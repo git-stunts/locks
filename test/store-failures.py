@@ -51,7 +51,7 @@ def blobs(env):
 
 def setup(base):
     env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
-    env.update(GIT_LOCKS_STORE=str(base / 'store.git'), GIT_LOCKS_NOW='1000000')
+    env.update(GIT_LOCKS_STORE=str(base / 'store.git'), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000')
     for args in [('claim', '--job', 'held', '--holder', 'alice', '--ttl', '1', 'held.md'),
                  ('sem', 'create', 'gpu', '--capacity', '2'),
                  ('sem', 'acquire', 'gpu', '--job', 'held', '--holder', 'alice', '--ttl', '1')]:

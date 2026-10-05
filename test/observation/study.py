@@ -105,7 +105,7 @@ def write_refs(path, refs):
 def scenario(case, domain, seed, binary):
     case.mkdir(parents=True)
     store = case / "store.git"
-    env = dict(os.environ, HOME=str(case / "home"), GIT_LOCKS_STORE=str(store), GIT_LOCKS_NOW=str(NOW))
+    env = dict(os.environ, HOME=str(case / "home"), GIT_LOCKS_STORE=str(store), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW=str(NOW))
     env.pop("GIT_LOCKS_HOME", None)
     for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY", "GIT_NAMESPACE"):
         env.pop(key, None)

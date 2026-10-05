@@ -26,7 +26,7 @@ def exercise(base, mode):
         store = repo / '.git'
     else:
         subprocess.run(['git', 'init', '-q', '--bare', str(store)], check=True)
-    env.update(GIT_LOCKS_STORE='self' if mode in ('self', 'fsmonitor') else str(store), GIT_LOCKS_NOW='1000000', HOOK_LOG=str(base / 'hook.log'))
+    env.update(GIT_LOCKS_STORE='self' if mode in ('self', 'fsmonitor') else str(store), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000', HOOK_LOG=str(base / 'hook.log'))
     directory = repo / 'relative hooks' if mode == 'relative' else store / 'hooks' if mode in ('default', 'self', 'fsmonitor') else base / 'custom hooks'
     directory.mkdir(exist_ok=True)
     for name in ('reference-transaction', 'post-index-change'):

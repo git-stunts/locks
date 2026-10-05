@@ -19,7 +19,7 @@ VALIDATOR = jsonschema.Draft202012Validator(json.loads((ROOT / 'schema/git-locks
 with tempfile.TemporaryDirectory(prefix='locks-state-') as tmp:
     store = Path(tmp) / 'store.git'
     env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_')}
-    env.update(GIT_LOCKS_STORE=str(store), GIT_LOCKS_NOW='1000000')
+    env.update(GIT_LOCKS_STORE=str(store), GIT_LOCKS_TEST_HOOKS='1', GIT_LOCKS_NOW='1000000')
 
     def locks(*args, expected=0):
         result = subprocess.run([str(ROOT / 'bin/git-locks'), *args], cwd=tmp, env=env, text=True, capture_output=True, timeout=20)

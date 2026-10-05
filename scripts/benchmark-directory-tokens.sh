@@ -4,6 +4,7 @@ source "${BASH_SOURCE[0]%/*}/../scripts/require-docker.sh" || exit 1
 # Informational benchmark. Large fixtures are synthetic loose Git objects/refs,
 # calibrated against real claim/release by test/directory-token-churn.sh.
 set -euo pipefail
+export GIT_LOCKS_TEST_HOOKS=1
 export LC_ALL=C
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
 # git-locks test hooks: an inherited trace adds I/O to timed commands, a pause gate hangs them.

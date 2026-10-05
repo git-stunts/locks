@@ -18,6 +18,33 @@ through a local adapter. Setting `GIT_STUNTS_DOCKER=1` or `GITHUB_ACTIONS=true`
 on the host does not bypass the adapter. Production `bin/git-locks` has no
 Docker or Node dependency.
 
+## Test controls
+
+Tests that use a fixed clock, pause gates, or tracing must set
+`GIT_LOCKS_TEST_HOOKS=1` in their fixture environment. Use an isolated, disposable
+store. Never enable these controls on a shared production store.
+
+| Control | Effect in test mode |
+| --- | --- |
+| `GIT_LOCKS_NOW` | Sets lease time to a decimal Unix epoch; does not change wait time |
+| `GIT_LOCKS_PAUSE_AFTER_READ` | Writes `<value>.ready`, then waits up to 30 seconds for `<value>` to exist |
+| `GIT_LOCKS_PAUSE_BEFORE_COMMIT` | Uses the same gate before each publication attempt |
+| `GIT_LOCKS_TRACE` | Appends snapshot and record-parse events to a file |
+
+Without the literal opt-in value `1`, any supplied control, including an empty
+value, returns a structured `usage` error and exit 2. This check runs before store
+discovery, initialization, trace or gate writes, and wrapped-command launch.
+Static help, version, and schema output remain available.
+
+This opt-in prevents accidental use of inherited test settings. It does not
+authenticate callers: a caller that controls the environment can also enable
+test mode. The opt-in check does not remove test settings from a wrapped
+command's environment.
+`test/test-hooks.py` checks refusal before side effects, live reservation
+preservation, explicit clock and gate operation, and normal wrapper cleanup.
+
+## Worker isolation and limits
+
 The runner copies current tracked files and nonignored new files, including
 uncommitted changes. It excludes Git metadata and generated output and refuses
 symlinks. It does not mount the host checkout, host home, Docker socket, caches,

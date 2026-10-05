@@ -167,7 +167,7 @@ trap cleanup EXIT
 
 export HOME="${TEST_ROOT}/home"
 export GIT_LOCKS_STORE="${TEST_ROOT}/store.git"
-export GIT_LOCKS_NOW=1000000
+export GIT_LOCKS_TEST_HOOKS=1 GIT_LOCKS_NOW=1000000
 mkdir -p "${HOME}" "${TEST_ROOT}/work"
 git -C "${TEST_ROOT}/work" init -q -b main
 cd "${TEST_ROOT}/work" || exit 2
