@@ -9,6 +9,7 @@ subprocess.run(['node', str(ROOT / 'scripts/require-docker.mjs')], check=True)
 import json
 import os
 import tempfile
+import unicodedata
 
 BASE = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
 
@@ -70,8 +71,13 @@ def exercise(directory, kind, identity):
     renewed = root()
     stale = locks(*release, '--record', record, '--acquisition', identity)[0]
     assert stale['reason'] == 'superseded' and root() == renewed
-    stale = locks(*release, '--acquisition', identity + '-other')[0]
-    assert stale['reason'] == 'superseded' and root() == renewed
+    mismatches = [identity + '-other']
+    normalized = unicodedata.normalize('NFC', identity)
+    if normalized != identity:
+        mismatches.append(normalized)
+    for mismatch in mismatches:
+        stale = locks(*release, '--acquisition', mismatch)[0]
+        assert stale['reason'] == 'superseded' and root() == renewed
     assert locks(*release, '--acquisition', identity)[0]['event'] == 'released'
     assert root() != renewed
     locks('doctor')

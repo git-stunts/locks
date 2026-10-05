@@ -80,7 +80,7 @@ This evidence does not prove that every historical deployment uses the current g
 The guarded `test/acquisition-identity.py` run passed four synthetic compatibility cases on 2026-10-05.
 It tested path locks and semaphore slots with nonnumeric ASCII and Unicode identifiers.
 Each case preserved the complete root through offline migration, preserved identity through a record rewrite, rejected stale guards, and released with the matching acquisition.
-The fixtures include a combining character and retain its exact representation. They do not establish the contents of real historical stores.
+The Unicode fixtures include a combining character. The tests also require rejection of its distinct NFC-normalized representation. They do not establish the contents of real historical stores.
 
 ## Implementation boundary
 
