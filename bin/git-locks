@@ -702,6 +702,35 @@ declare -A R_INVALID=() # oid -> structural parse error (duplicate field, header
 SNAP_LOADED=0
 DIAGNOSTIC_READ=0
 
+capture_text() ( # COMMAND... -> complete non-NUL output, or plain error detail and nonzero status
+  # Command substitution and ordinary read discard NUL bytes. Capture bytes in
+  # a private file first, then use NUL as read's delimiter to detect them.
+  local temporary='' text='' rc read_rc
+  temporary="$(mktemp "${TMPDIR:-/tmp}/git-locks-read.XXXXXXXX" 2>&1)" || {
+    printf 'cannot prepare text capture: %s' "${temporary}"
+    return 2
+  }
+  trap 'rm -f -- "${temporary}"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  "$@" >"${temporary}" 2>&1
+  rc=$?
+  IFS= read -r -d '' text <"${temporary}"
+  read_rc=$?
+  if ((read_rc == 0)); then
+    printf 'input contains a NUL byte'
+    ((rc != 0)) || rc=2
+    return "${rc}"
+  fi
+  ((read_rc == 1)) || {
+    printf 'cannot read text capture (status %s)' "${read_rc}"
+    return 2
+  }
+  printf '%s' "${text}"
+  return "${rc}"
+)
+
 parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
   [[ -n "${R_PARSED[$1]+x}" ]] && return 0
   local text="${BLOB[$1]:-}" line key paths='' in_paths=0
@@ -779,7 +808,12 @@ snapshot() {
   fi
   if ((${#oids[@]} > 0)); then
     local out
-    out="$(printf '%s\n' "${oids[@]}" | sort -u | g cat-file --batch 2>&1 && printf x)" # the x keeps trailing newlines
+    out="$(
+      printf '%s\n' "${oids[@]}" | sort -u | capture_text g cat-file --batch 2>&1
+      rc=$?
+      printf x # preserve trailing newlines on success and failure
+      exit "${rc}"
+    )"
     rc=$?
     ((rc == 0)) || store_error "cat-file --batch exited ${rc}: ${out%x}"
     out="${out%x}"
@@ -1839,6 +1873,32 @@ plan_batch() { # plans every parsed record against the current snapshot; B_LINES
 
 cmd_batch() {
   (($# == 0)) || usage
+  local input rc temporary read_error='' error_read='' error_write='' error_rc
+  # Read stdin in this shell: a command-substitution reader could survive a
+  # signal sent only to the CLI PID. Keep diagnostics in an anonymous file,
+  # with independent read/write offsets, and unlink it before waiting on input.
+  temporary="$(mktemp "${TMPDIR:-/tmp}/git-locks-read.XXXXXXXX" 2>&1)" || fail "batch: cannot prepare input diagnostics: ${temporary}" 2
+  # The new file is empty; sharing its bytes with separate offsets is intentional.
+  # shellcheck disable=SC2094
+  if ! { exec {error_write}>"${temporary}" {error_read}<"${temporary}"; } 2>/dev/null; then
+    [[ -z "${error_read}" ]] || exec {error_read}<&-
+    [[ -z "${error_write}" ]] || exec {error_write}>&-
+    rm -f -- "${temporary}" 2>/dev/null
+    fail 'batch: cannot open input diagnostics' 2
+  fi
+  if ! rm -f -- "${temporary}" 2>/dev/null; then
+    exec {error_read}<&- {error_write}>&-
+    fail 'batch: cannot unlink input diagnostics' 2
+  fi
+  IFS= read -r -d '' input 2>&"${error_write}"
+  rc=$?
+  IFS= read -r -d '' read_error <&"${error_read}" 2>/dev/null
+  error_rc=$?
+  exec {error_read}<&- {error_write}>&-
+  ((error_rc == 1)) || fail 'batch: cannot read input diagnostics' 2
+  [[ -z "${read_error}" ]] || fail "batch: cannot read stdin: ${read_error}" 2
+  ((rc != 0)) || fail 'batch: input contains a NUL byte' 2
+  ((rc == 1)) || fail "batch: cannot read stdin (status ${rc})" 2
   local line key val job='' holder='' ttl='' parent='' note='' paths=() in_paths=0 count=0
   finish_record() {
     if [[ -z "${job}" && -z "${holder}" && -z "${ttl}" && -z "${parent}" && -z "${note}" && ${#paths[@]} -eq 0 ]]; then return 0; fi # only a wholly empty record is skipped; one with just parent: or ttl: is malformed
@@ -1887,7 +1947,7 @@ cmd_batch() {
       paths) in_paths=1 ;;
       *) fail "batch: unknown line '${line}'" 2 ;;
     esac
-  done
+  done <<<"${input}"
   finish_record
   ((count > 0)) || fail 'batch: no records on stdin' 2
   commit_claims plan_batch

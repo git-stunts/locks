@@ -27,6 +27,7 @@ test-container:
 	python3 test/root-refs.py
 	python3 test/test-hooks.py
 	python3 test/utf8-json.py
+	python3 test/nul-streams.py
 	python3 test/time-arithmetic.py
 	python3 test/store-failures.py
 	python3 test/store-bootstrap.py

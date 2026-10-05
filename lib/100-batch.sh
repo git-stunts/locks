@@ -26,6 +26,32 @@ plan_batch() { # plans every parsed record against the current snapshot; B_LINES
 
 cmd_batch() {
   (($# == 0)) || usage
+  local input rc temporary read_error='' error_read='' error_write='' error_rc
+  # Read stdin in this shell: a command-substitution reader could survive a
+  # signal sent only to the CLI PID. Keep diagnostics in an anonymous file,
+  # with independent read/write offsets, and unlink it before waiting on input.
+  temporary="$(mktemp "${TMPDIR:-/tmp}/git-locks-read.XXXXXXXX" 2>&1)" || fail "batch: cannot prepare input diagnostics: ${temporary}" 2
+  # The new file is empty; sharing its bytes with separate offsets is intentional.
+  # shellcheck disable=SC2094
+  if ! { exec {error_write}>"${temporary}" {error_read}<"${temporary}"; } 2>/dev/null; then
+    [[ -z "${error_read}" ]] || exec {error_read}<&-
+    [[ -z "${error_write}" ]] || exec {error_write}>&-
+    rm -f -- "${temporary}" 2>/dev/null
+    fail 'batch: cannot open input diagnostics' 2
+  fi
+  if ! rm -f -- "${temporary}" 2>/dev/null; then
+    exec {error_read}<&- {error_write}>&-
+    fail 'batch: cannot unlink input diagnostics' 2
+  fi
+  IFS= read -r -d '' input 2>&"${error_write}"
+  rc=$?
+  IFS= read -r -d '' read_error <&"${error_read}" 2>/dev/null
+  error_rc=$?
+  exec {error_read}<&- {error_write}>&-
+  ((error_rc == 1)) || fail 'batch: cannot read input diagnostics' 2
+  [[ -z "${read_error}" ]] || fail "batch: cannot read stdin: ${read_error}" 2
+  ((rc != 0)) || fail 'batch: input contains a NUL byte' 2
+  ((rc == 1)) || fail "batch: cannot read stdin (status ${rc})" 2
   local line key val job='' holder='' ttl='' parent='' note='' paths=() in_paths=0 count=0
   finish_record() {
     if [[ -z "${job}" && -z "${holder}" && -z "${ttl}" && -z "${parent}" && -z "${note}" && ${#paths[@]} -eq 0 ]]; then return 0; fi # only a wholly empty record is skipped; one with just parent: or ttl: is malformed
@@ -74,7 +100,7 @@ cmd_batch() {
       paths) in_paths=1 ;;
       *) fail "batch: unknown line '${line}'" 2 ;;
     esac
-  done
+  done <<<"${input}"
   finish_record
   ((count > 0)) || fail 'batch: no records on stdin' 2
   commit_claims plan_batch
