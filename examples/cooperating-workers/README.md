@@ -37,7 +37,7 @@ cat .test-results/artifacts/locks-workers-review/receipts/expired-while-running.
 cat .test-results/artifacts/locks-workers-review/receipts/final-doctor.jsonl
 ```
 
-Each run records CLI `version`, selected store and checkout revision. The [recorded example](recorded-run.json) retains one observed run's CLI records and results against its named source revision. Object IDs and acquisition IDs change on later runs; compare their relationships and the actual outcomes.
+Each run records CLI `version`, selected store and the copied-input fixture revision. The fixture commit has no upstream history; the recorded source SHA-256 hashes identify the actual binary and demo scripts. The [recorded example](recorded-run.json) retains one observed run's CLI records and results against its named source revision. Object IDs and acquisition IDs change on later runs; compare their relationships and the actual outcomes.
 
 ## What the launcher does
 
@@ -56,11 +56,11 @@ The gates control order without guessing how long a worker will take. Alice rema
 
 The launcher renews Alice's live reservation with `extend --acquisition`, using the identity from her original acquisition receipt. The before/after records have different `record` object IDs and the same `acquisition` ID. When Alice's gate opens, her wrapper releases that original acquisition despite the renewal. Both generated paths become free.
 
-A separate case starts a wrapper with job name `reused`, then creates a replacement acquisition under that name. The old wrapper's cleanup reports `nothing` with `reason: superseded`; the replacement stays live and is released explicitly by its own acquisition ID.
+A separate case starts a wrapper with job name `reused`, then creates a replacement acquisition under that name. The old wrapper reports `lost` with `reason: superseded` and exits 125; the replacement stays live and is released explicitly by its own acquisition ID.
 
 The failed-worker case returns status 17 after writing partial output. `with` propagates 17 and releases the reservation. Cleanup does not roll back the worker's file changes: `failed.txt` intentionally remains as partial output.
 
-Finally, a worker with TTL 1 waits at a gate. An observation at a simulated later clock reports the reservation expired while the command is still active. The launcher then opens the gate and lets cleanup complete. The example fixes `GIT_LOCKS_NOW=1000000` and explicitly advances one observation to `1000002`; this is a deterministic TTL demonstration, not a two-second benchmark. Real integrations should use the normal clock. `with` neither renews automatically nor terminates a command when its reservation expires. Choose a TTL appropriate to the workload and put any renewal policy in the runner.
+Finally, a worker with TTL 1 waits at a gate. An observation at a simulated later clock reports the reservation expired while the command is still active. The launcher then opens the gate and lets cleanup complete. The example fixes `GIT_LOCKS_NOW=1000000` and explicitly advances one observation to `1000002`; this is a deterministic TTL demonstration, not a two-second benchmark. The wrapper itself still sees the fixed earlier clock in this demonstration. The lifecycle tests separately advance the wrapper's own clock and require exit 125 on expiry. Real integrations should use the normal clock. `with` neither renews automatically nor terminates a command when its reservation expires. Choose a TTL appropriate to the workload and put any renewal policy in the runner.
 
 ## Store and worktree meaning
 
@@ -68,7 +68,7 @@ This example coordinates two workers accessing the same physical artifact direct
 
 In a project integration, the default separate store keeps coordination refs out of the project and is shared by linked worktrees. Reserving the same relative path across linked worktrees coordinates logical ownership; the files may be physically different. A runner must choose whether that shared logical ownership is the intended policy. Using distinct explicit stores intentionally creates independent coordination domains. Workers that should coordinate must select the same store and agree on relative path meaning.
 
-The reservations are cooperative. Other programs can write the files without using the launcher. These controlled runs do not prove the reader coherence or arbitrary interleaving properties tracked by #45.
+The reservations are cooperative. Other programs can write the files without using the launcher. These controlled runs complement the state-root regressions and do not prove safety for arbitrary external writers.
 
 ## Repeatable verification
 
@@ -81,7 +81,7 @@ The Python test requires the same `jsonschema` dependency as the existing suite;
 
 The oracle parses the real command receipts and validates lifecycle JSON against the public schema. It checks acquisition before mutation, both reserved paths, refusal holder/note, absence of Bob's blocked mutation marker, unrelated progress during Alice's acquisition, renewal identity, release after renewal, superseded cleanup, status-17 cleanup, simulated expiry, and final store health.
 
-The golden run uses an output path containing spaces, and its receipt set and transcript must still match [recorded-run.json](recorded-run.json), whose records must remain schema-valid. An existing-directory case checks preservation of a sentinel file. A demonstration stopped while Alice's worker is gated must leave no launcher or worker process behind. Two complete demonstrations then run concurrently with separate stores and both must satisfy the same behavioral assertions. That is bounded stress of this example and its isolation, not arbitrary-schedule fuzzing or evidence of external adoption.
+The golden run uses an output path containing spaces, and its receipt set, transcript, normalized events and acquisition relationships must still match [recorded-run.json](recorded-run.json), whose records must remain schema-valid. An existing-directory case checks preservation of a sentinel file. A demonstration sent TERM while Alice's worker is gated must leave no live process in its session and no reservation behind. Two complete demonstrations then run concurrently with separate stores and both must satisfy the same behavioral assertions. That is bounded stress of this example and its isolation, not arbitrary-schedule fuzzing or evidence of external adoption.
 
 ## Adoption experiment, not yet run
 

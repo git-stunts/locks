@@ -87,9 +87,9 @@ Existing per-ref stores require an [offline migration](docs/state-protocol.md#up
 
 ## Wrapping a command: claim, run, release
 
-`with` places acquisition in the command launcher and attempts cleanup when the command exits. Its reservation remains subject to the TTL, process termination, and store errors.
+`with` acquires every requested resource in one Git publication, verifies ownership before launch, and releases its acquisitions when the command exits. A live job or semaphore slot with the same name is refused, including after a competing publication.
 
-`git locks with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <command>...` claims the paths (and a semaphore slot if asked), runs the command, and releases on exit, on failure, and on Ctrl-C or a termination signal, then exits with the command's own status. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
+`git locks with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <command>...` claims the paths and any requested semaphore slot together, runs the command, and checks ownership during cleanup. Healthy cleanup preserves the command's status. Lost reservations or failed lifecycle checks return 125 with a structured diagnostic. INT and TERM reach the command's process group, with a two-second grace period before KILL; cancellation returns 130 or 143. The command owns stdout; git-locks reports its claim and release on stderr, so a pipeline reading the command's output sees only that output:
 
 ```text
 $ git locks with --job build --holder alice --ttl 60 dist/bundle.js -- sh -c 'echo building'
@@ -100,7 +100,7 @@ building
 
 `--wait <seconds>` turns a refusal into a retry once a second until the requested paths and, if `--sem` is given, a semaphore slot are available or the wait runs out; without it, a held path or a full semaphore exits 1 immediately and the command never runs.
 
-In this transcript, `building` is the command's stdout; both lifecycle JSON lines are on stderr. `with` remembers its acquisition and releases by that identity, including after renewal. A command running longer than `--ttl 60` would outlive this reservation unless it explicitly renewed. An uncatchable kill or a store failure can prevent cleanup; expiry still bounds the reservation.
+In this transcript, `building` is the command's stdout; both lifecycle JSON lines are on stderr. `with` remembers its acquisition and releases by that identity, including after renewal. A command running longer than `--ttl 60` would outlive this reservation unless it explicitly renewed. Expiry is reported as a lost reservation during cleanup. An uncatchable kill or a store failure can prevent cleanup; expiry still bounds the reservation. See [wrapper lifetime and exit semantics](docs/wrapper-lifetime.md).
 
 ## A runnable cooperating-worker example
 
@@ -180,7 +180,7 @@ Output is JSON Lines on every command; there is no text mode.
 | `claim … --parent <id>` | make the lock a child: the parent must be live and held by the same holder when planned, and its record unchanged at commit (the clock is not rechecked), and must not be the job itself or one of its descendants; the child is released or swept with it | as `claim`, with `parent` | 0, 1 if refused |
 | `batch < records` | claim several locks in one transaction, or none; records are blank-line separated `job:`, `holder:`, `ttl:`, `parent:`, then `paths:` with one path per line | one `claimed` object per record | 0, 1 if any is refused, 2 on a malformed record |
 | `release --job <id> [--record <oid> OR --acquisition <id>] [--job <id>...]` | release the jobs and descendants; `--acquisition` survives renewal, while `--record` requires the exact stored version; give one condition per job (if both are given, both must match) | one object per job, `cascaded` lists descendants, `nothing` with `reason: superseded` when the record no longer matches | 0 |
-| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <cmd>...` | claim, run the command, release by the acquisition it made; `--wait` retries once a second until the requested paths and, if `--sem` is given, a semaphore slot are available or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | the command's exit status; 1 if never acquired; 130/143 on INT/TERM after releasing |
+| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <cmd>...` | claim, run the command, release by the acquisition it made; `--wait` retries once a second until the requested paths and, if `--sem` is given, a semaphore slot are available or the wait runs out | the command's own stdout; git-locks' `claimed`, `released` and refusals go to **stderr** | command status after healthy cleanup; 1 refused, 2 admission error, 125 lifecycle failure; 130/143 on INT/TERM |
 | `version` | tool name and version | one object | 0 |
 | `schema` | the JSON Schema every line above conforms to | the schema document | 0 |
 | `migrate --offline` | import legacy state after stopping all old clients | one `migrated` object with root and entry count | 0 migrated/already current, 2 on error |
@@ -239,6 +239,7 @@ The source is `lib/`, one module per section in numeric order (`000-prelude.sh` 
 - The lock is advisory and time-bounded. Nothing stops a writer that never claimed, and nothing renews a reservation under a long command. The consumer that lands writes (a commit script, a CI step) is where refusal belongs; `check` exits 1 for exactly that use, and a `check` is an observation, not an admission.
 - One machine. The store is local; a shared remote would need a fetch before every claim and is out of scope.
 - `git rev-parse --path-format=absolute` and `update-ref --stdin` transactions need git 2.31 or newer.
+- `with` uses the system `ps` utility for terminal process-group handling (`pgid` and `tpgid`, available on Linux and macOS).
 - bash 4 or newer: the store snapshot uses associative arrays. macOS's `/bin/bash` is 3.2; the script's shebang finds a newer bash on `PATH` (Homebrew's, for instance).
 - Commands load one immutable root, its tree entries, and record blobs. Git process counts stay bounded, but scanning and index construction grow with the store. All writers contend on the root. Previous per-ref benchmark results are historical, not measurements of this layout.
 - Released history is part of the store too: directory tokens outlive their claims, so a store with no live locks can still be slow to read. Historical directory-token measurements have a calibrated generator and an informational runner in [`scripts/benchmark-directory-tokens.sh`](scripts/benchmark-directory-tokens.sh). See the [benchmark protocol](docs/benchmarks/directory-tokens.md) for fixture semantics, resource bounds, and reproducible commands. Timings are not CI gates, and the first retained run is resource-confounded rather than a baseline.

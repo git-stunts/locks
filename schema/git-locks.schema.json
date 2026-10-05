@@ -57,6 +57,12 @@
     },
     {
       "$ref": "#/$defs/migration_line"
+    },
+    {
+      "$ref": "#/$defs/lost_line"
+    },
+    {
+      "$ref": "#/$defs/with_failed_line"
     }
   ],
   "$defs": {
@@ -499,6 +505,29 @@
           },
           "additionalProperties": false,
           "description": "Renewal refused: the acquisition expired, or --acquisition no longer names the current reservation."
+        },
+        {
+          "required": [
+            "event",
+            "reason",
+            "job"
+          ],
+          "properties": {
+            "event": {
+              "const": "refused"
+            },
+            "reason": {
+              "const": "active"
+            },
+            "job": {
+              "$ref": "#/$defs/job"
+            },
+            "semaphore": {
+              "$ref": "#/$defs/job"
+            }
+          },
+          "additionalProperties": false,
+          "description": "A wrapper cannot replace a currently live job or reuse an occupied slot with that job name."
         }
       ]
     },
@@ -1182,6 +1211,81 @@
           "minimum": 0
         }
       }
+    },
+    "lost_line": {
+      "type": "object",
+      "description": "A wrapper observed loss of one of its acquisitions. Null command_status means verification failed before the wrapped command launched.",
+      "required": [
+        "event",
+        "reason",
+        "job",
+        "acquisition",
+        "command_status"
+      ],
+      "properties": {
+        "event": {
+          "const": "lost"
+        },
+        "reason": {
+          "enum": [
+            "expired",
+            "superseded",
+            "missing"
+          ]
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "acquisition": {
+          "$ref": "#/$defs/acquisition"
+        },
+        "command_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        },
+        "semaphore": {
+          "$ref": "#/$defs/job"
+        }
+      },
+      "additionalProperties": false
+    },
+    "with_failed_line": {
+      "type": "object",
+      "description": "An operational failure prevented wrapper verification, command launch, or cleanup. The lifecycle exit is 125, unless cancellation preserves exit 130 or 143.",
+      "required": [
+        "event",
+        "reason",
+        "job",
+        "command_status"
+      ],
+      "properties": {
+        "event": {
+          "const": "with-failed"
+        },
+        "reason": {
+          "enum": [
+            "cleanup",
+            "verification",
+            "launch"
+          ]
+        },
+        "job": {
+          "$ref": "#/$defs/job"
+        },
+        "command_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 255
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

@@ -68,11 +68,11 @@ changes, not the passage of time. It does not fence a command's filesystem write
 ## Waiting
 
 `--wait 08` means eight seconds; `--wait 010` means ten. Zero allows one attempt.
-Each acquisition's wait window uses the system wall clock. Invalid samples,
+Each wait window uses the system wall clock. A wrapper waits for all requested
+resources together within that one window. Invalid samples,
 failed clock reads, and a detected backward step while retrying return a
-`clock` error. A forward step reaching the deadline ends the wait. A wrapper
-that already obtained a semaphore slot attempts to release it if its later
-path wait fails.
+`clock` error. A forward step reaching the deadline ends the wait. A wrapper publishes paths and its semaphore slot together, so a failed
+wait does not leave a partially acquired slot.
 
 This does not make lease time monotonic across processes, recheck the clock
 atomically with a Git ref update, renew a running command, or fence filesystem

@@ -19,7 +19,7 @@ plan_batch() { # plans every parsed record against the current snapshot; B_LINES
       if [[ "${p}" == "${paths}" ]]; then paths=''; else paths="${paths#*$'\n'}"; fi
       [[ -n "${p}" ]] && list+=("${p}")
     done
-    plan_claim "${B_JOB[${i}]}" "${B_HOLDER[${i}]}" "${B_TTL[${i}]}" "${B_PARENT[${i}]}" "${B_NOTE[${i}]}" "${list[@]}"
+    plan_claim "${B_JOB[${i}]}" "${B_HOLDER[${i}]}" "${B_TTL[${i}]}" "${B_PARENT[${i}]}" "${B_NOTE[${i}]}" '' "${list[@]}"
     B_LINES+=("${CLAIM_LINE}")
   done
 }

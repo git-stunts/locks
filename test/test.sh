@@ -1067,7 +1067,7 @@ check "with --wait runs its command after a release it could not see at first" "
 ran="$(cat "${OUT_WAITER2}")"
 check "and the command ran once" "${ran}" "ran"
 reads="$(grep -c '^snapshot' "${TRACE4}.at-run")"
-check "with took exactly two reads before running its command (the release afterwards is a third)" "${reads}" "2"
+check "with reads stale state, retries, then verifies ownership before launch" "${reads}" "3"
 git-locks check p3.md >/dev/null 2>&1
 check "with released its lock afterwards" "$?" "0"
 
@@ -1350,7 +1350,7 @@ check "and left no slot for it" "${rc}" "0"
 out="$(git-locks with --job z --holder h --sem 'bad name' -- true 2>&1)"
 check "with --sem validates the semaphore name" "$?" "2"
 
-# A signal while with waits for the path lock must release the slot it already took.
+# A signal during an atomic path/slot wait must leave no partial slot.
 git-locks sem create w1 --capacity 1 >/dev/null 2>&1
 git-locks claim --job blocker --holder o held.md >/dev/null 2>&1
 git-locks with --job waiter --holder h --sem w1 --wait 30 held.md -- true >/dev/null 2>&1 &
@@ -1359,7 +1359,7 @@ sleep 2
 kill -TERM "${wpid}" 2>/dev/null
 wait "${wpid}" 2>/dev/null
 out="$(git-locks sem show w1 2>&1)"
-jfields "a TERM during the lock wait released the semaphore slot with had taken" "${out}" 'live=0'
+jfields "a TERM during the atomic wait left no semaphore slot" "${out}" 'live=0'
 
 # sweep: an expired acquisition replaced between its read and transaction is not deleted.
 R="$(mkrepo)"

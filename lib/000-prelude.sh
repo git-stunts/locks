@@ -103,10 +103,12 @@ show     one lock in full; exit 1 if there is none
 ttl      the seconds a lock has left; exit 1 if there is none
 extend   move a live lock's expiry to now + ttl, keeping its paths and family; expired locks are refused.
          --acquisition guards against a replaced owner; without it, renewal addresses the current job
-with     claim, run the command, release the acquisition it made (also on failure or a signal), exit with
-         the command's status; --wait retries once a second until the paths are free or the wait runs out.
-         The command's stdout is its own; git-locks reports its claim and release on stderr. The lock is a
-         time-bounded reservation: with does not renew it, so give --ttl the command's worst case.
+with     acquire paths and a requested semaphore slot in one publication, verify, run, then release the
+         still-owned acquisitions. A live job or slot with that name is refused. --wait retries the whole
+         admission once a second. The command owns stdin/stdout/stderr; lifecycle JSON goes to stderr.
+         Return the command's status after healthy cleanup, 125 on lost ownership or lifecycle failure,
+         or 130/143 on INT/TERM. Signals reach the command's group; after two seconds it is killed.
+         with does not renew or fence writes at expiry; give --ttl the command's worst case.
 sem      capacity, not exclusivity: up to <n> jobs hold a named semaphore at once; a slot expires like a
          lock; acquire is one transaction with a compare-and-swap on the semaphore's generation, so racers
          beyond capacity fail and exactly <n> win

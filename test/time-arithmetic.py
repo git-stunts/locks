@@ -257,13 +257,13 @@ def clock_failure_cleanup(base):
                     '--sem', 'gpu', 'held.md', '--', 'touch', str(base / 'ran'))
     assert result.returncode == 2 and not result.stdout
     events = [json.loads(line) for line in result.stderr.splitlines()]
-    assert [row.get('event') for row in events] == ['acquired', 'error', 'released'], events
-    assert events[1]['reason'] == 'clock'
+    assert [row.get('event') for row in events] == ['error'], events
+    assert events[0]['reason'] == 'clock'
     assert not (base / 'ran').exists()
     assert json.loads(invoke(env, 'sem', 'show', 'gpu').stdout)['live'] == 0
 
 
-case('clock failure releases a slot acquired before the path wait', clock_failure_cleanup)
+case('clock failure in an atomic path/slot wait publishes neither resource', clock_failure_cleanup)
 
 print(f'time arithmetic: {checks} cases passed; {len(failures)} failed')
 assert not failures, failures
