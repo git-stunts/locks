@@ -9,6 +9,7 @@ subprocess.run(['node', str(ROOT / 'scripts/require-docker.mjs')], check=True)
 import argparse
 import os
 import shutil
+import shlex
 import signal
 import tempfile
 
@@ -27,15 +28,19 @@ with tempfile.TemporaryDirectory(prefix='locks-bash-selector-') as scratch:
     selector = directory / 'bash'
     # The benchmark harness needs Bash 5's EPOCHREALTIME. Select the old
     # interpreter only for the real CLI entry; leave test/build tools intact.
-    selector.write_text('#!/usr/bin/python3\n'
-                        'from pathlib import Path\nimport os,sys\n'
-                        f'target={str(ROOT / "bin/git-locks")!r}\n'
-                        f'old={str(interpreter)!r}\nnative={native!r}\n'
-                        'selected=native\n'
-                        'if len(sys.argv)>1 and str(Path(sys.argv[1]).resolve())==target:\n'
-                        f'    with open({str(trace)!r}, "ab") as stream: stream.write(b"1")\n'
-                        '    selected=old\n'
-                        'os.execv(selected,[selected,*sys.argv[1:]])\n')
+    # A Python launcher initializes sys.stdin and crashes on a directory fd
+    # before the CLI can report its own read error. This shell wrapper leaves
+    # stdin untouched, including deliberately invalid descriptors in tests.
+    selector.write_text('#!/bin/sh\n'
+                        f'target={shlex.quote(str(ROOT / "bin/git-locks"))}\n'
+                        f'old={shlex.quote(str(interpreter))}\n'
+                        f'native={shlex.quote(native)}\n'
+                        'selected=$native\n'
+                        'if [ "$#" -gt 0 ] && [ "$(realpath -- "$1" 2>/dev/null)" = "$target" ]; then\n'
+                        f'    printf 1 >> {shlex.quote(str(trace))} || exit 2\n'
+                        '    selected=$old\n'
+                        'fi\n'
+                        'exec "$selected" "$@"\n')
     selector.chmod(0o700)
     env = dict(os.environ, PATH=str(directory) + os.pathsep + os.environ['PATH'])
     process = subprocess.Popen(['make', 'test-container'], cwd=ROOT, env=env, start_new_session=True)
