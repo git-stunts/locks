@@ -702,6 +702,14 @@ out="$(git-locks sem list 2>&1)"
 jfields "sem list streams one line per semaphore" "${out}" 'semaphore="gpu"' 'capacity=2' 'live=2'
 valid "sem list line" "${out}"
 
+# Both semaphore guards must match; a later --record cannot erase a stale acquisition.
+out="$(git-locks sem show gpu)"
+record="$(printf '%s' "${out}" | python3 -c 'import json,sys; print(next(h["record"] for h in json.load(sys.stdin)["slots"] if h["job"] == "a"))')"
+out="$(git-locks sem release gpu --job a --acquisition stale-owner --record "${record}" 2>&1)"
+check "semaphore dual-guard mismatch exits 0" "$?" "0"
+jfields "a matching record cannot override a stale semaphore acquisition" "${out}" 'event="nothing"' 'reason="superseded"'
+out="$(git-locks sem show gpu)"
+jfields "dual-guard mismatch preserves both semaphore holders" "${out}" 'live=2'
 out="$(git-locks sem release gpu --job a 2>&1)"
 check "sem release exits 0" "$?" "0"
 check "sem release is one JSON line" "${out}" '{"event":"released","semaphore":"gpu","job":"a","live":1,"capacity":2}'

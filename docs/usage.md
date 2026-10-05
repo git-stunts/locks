@@ -65,6 +65,9 @@ An acquisition expires when the current time reaches `expires`.
 Without `--acquisition`, renewal addresses whichever live reservation currently has that job name.
 `release --record` requires one exact version and can become stale after renewal.
 An explicit `--acquisition` must be a nonempty UTF-8 line. Empty or multiline guards return exit 2 without releasing any jobs or semaphore slots.
+For path and semaphore releases, every supplied guard must match its own field, in either option order.
+`--record` compares the current record OID. `--acquisition` compares the acquisition identifier; a record OID cannot substitute for it.
+A mismatch returns `nothing` with reason `superseded` and changes no reservation.
 An unguarded release addresses the current job. Holder names do not authenticate callers.
 See [time and integer boundaries](time.md).
 
