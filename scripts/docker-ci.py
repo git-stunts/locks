@@ -239,6 +239,23 @@ def quota_admission(info, worker_pid):
             'daemon': daemon, 'worker': worker, 'backing_free_bytes': free}
 
 
+def verify_unmounted(directory):
+    """Refuse deletion if any mount remains at or below the owned path."""
+    target = os.fsencode(directory)
+    for byte, escape in ((b'\\', b'\\134'), (b' ', b'\\040'),
+                         (b'\t', b'\\011'), (b'\n', b'\\012')):
+        target = target.replace(byte, escape)
+    rows = Path('/proc/self/mountinfo').read_bytes().splitlines()
+    if not rows:
+        raise RuntimeError('empty mount table; preserving recovery data')
+    for row in rows:
+        fields = row.split()
+        if len(fields) < 10 or b'-' not in fields[6:]:
+            raise RuntimeError('invalid mount table; preserving recovery data')
+        if fields[4] == target or fields[4].startswith(target + b'/'):
+            raise RuntimeError('owned mounts remain; preserving recovery data')
+
+
 class Provider:
     def __init__(self, uid, gid):
         self.uid, self.gid = uid, gid
@@ -461,7 +478,8 @@ class Provider:
             # Export collisions and I/O failures must not retain live resources.
             # Keep unexported evidence for recovery; never remove mounted data.
             if self.mounted:
-                run(['umount', str(DATA)])
+                run(['umount', '--recursive', '--', str(DATA)], timeout=30)
+                verify_unmounted(DATA)
                 self.mounted = False
             if self.unit_owned:
                 self.unit_file.unlink()

@@ -12,7 +12,7 @@ The quota check reads the kernel loop device's `backing_file` attribute and comp
 
 The build's RUN processes also need explicit membership in the owned cgroup. Docker documents `--cgroup-parent` for [build commands](https://docs.docker.com/reference/cli/docker/buildx/build/). Membership must be observed during a real build; a command-line option or configured memory limit alone is not evidence that descendants obey it.
 
-If receipt export fails, cleanup still attempts to unmount the owned filesystem and remove its unit. It preserves the control directory and unexported logs for recovery. If unmounting fails, it preserves the mounted data and unit. Five synthetic cleanup cases cover receipt and log collisions, a copy failure, successful cleanup, and a refused unmount; real privileged teardown remains unverified.
+If receipt export fails, cleanup still attempts to unmount the owned filesystem and remove its unit. It preserves the control directory and unexported logs for recovery. If unmounting fails, it preserves the mounted data and unit. Cleanup uses recursive unmounting, then checks the kernel mount table for remaining mounts at or below the owned path. Ten synthetic cleanup cases cover receipt and log collisions, copy failures, nested mounts, failed unmounting, and remaining or unreadable mount state. A separate read-only check distinguishes the test worker's real tmpfs mount from an unmounted directory. Real privileged teardown remains unverified. See the [util-linux unmount manual](https://github.com/util-linux/util-linux/blob/master/sys-utils/umount.8.adoc) for recursive unmount behavior.
 
 Work required before enabling the prototype:
 
