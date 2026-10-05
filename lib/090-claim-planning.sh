@@ -389,8 +389,8 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
   [[ -n "${CA_JOB}" && -n "${CA_HOLDER}" ]] || usage
   valid_job "${CA_JOB}" || fail "job id '${CA_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   valid_ttl CA_TTL "${CA_TTL}" || fail '--ttl is a positive number of seconds' 2
-  valid_holder "${CA_HOLDER}" || fail 'holder must be one line' 2
-  valid_note "${CA_NOTE}" || fail '--note must be one line' 2
+  valid_holder "${CA_HOLDER}" || fail 'holder must be one valid UTF-8 line' 2
+  valid_note "${CA_NOTE}" || fail '--note must be one valid UTF-8 line' 2
   ((${#CA_PATHS[@]} > 0)) || usage
 }
 

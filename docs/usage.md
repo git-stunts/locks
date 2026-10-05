@@ -16,8 +16,10 @@ Run commands from the subject repository's root. Path keys are lexical, repo-rel
 | Absolute paths or `..` segments | Refused. |
 | Literal `*`, `?`, or brackets | Ordinary characters, not patterns. Quote them to prevent shell expansion. |
 
-Paths can contain spaces but cannot contain newlines. Case, symlinks, and hard links do not normalize to one key.
+Paths must be valid UTF-8. They can contain spaces but cannot contain newlines. Case, Unicode composition, symlinks, and hard links do not normalize to one key.
 All workers must agree on names, even when two names address the same file.
+
+Holder names, notes, acquisition guards, batch input, and the selected store pathname must also be valid UTF-8. Malformed text is refused with exit 2 before any reservation is published. Existing authority records with malformed UTF-8 block ordinary operations; `doctor` reports the invalid records without changing them. Error output replaces each invalid diagnostic byte with U+FFFD, so external errors still form valid JSON. Reservation keys are never repaired or replaced. A wrapped program keeps control of its own arguments and output.
 
 The default store is a separate bare repository under `~/.git-stunts/locks`.
 The subject repository's common directory determines its store; linked worktrees share it.

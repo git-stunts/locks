@@ -17,6 +17,11 @@ DIAGNOSTIC_READ=0
 parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
   [[ -n "${R_PARSED[$1]+x}" ]] && return 0
   local text="${BLOB[$1]:-}" line key paths='' in_paths=0
+  if ! valid_utf8 "${text}"; then
+    R_INVALID["$1"]='record is not valid UTF-8'
+    R_PARSED["$1"]=1
+    return 0
+  fi
   while [[ -n "${text}" ]]; do
     line="${text%%$'\n'*}"
     if [[ "${line}" == "${text}" ]]; then text=''; else text="${text#*$'\n'}"; fi
