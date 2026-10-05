@@ -81,5 +81,43 @@ for kind in ('path', 'semaphore', 'multi-job'):
             except Exception as error:
                 failures.append((kind, repr(value), repr(error)))
                 print('FAIL', *failures[-1], flush=True)
+def semaphore_guard_pair(base, mode, reverse):
+    env = dict(BASE, GIT_LOCKS_STORE=str(base / 'store.git'))
+    assert run(env, 'sem', 'create', 'gpu', '--capacity', '1').returncode == 0
+    claim = run(env, 'sem', 'acquire', 'gpu', '--job', 'owner', '--holder', 'alice', '--ttl', '300')
+    assert claim.returncode == 0, claim
+    receipt = json.loads(claim.stdout)
+    before = state(env)
+    record = receipt['record'] if mode != 'stale-record' else '0' * len(receipt['record'])
+    acquisition = receipt['acquisition'] if mode != 'stale-acquisition' else 'stale-owner'
+    options = [('--record', record), ('--acquisition', acquisition)]
+    if mode == 'record-as-acquisition':
+        options = [('--acquisition', receipt['record'])]
+    if reverse:
+        options.reverse()
+    result = run(env, 'sem', 'release', 'gpu', '--job', 'owner',
+                 *(value for pair in options for value in pair))
+    assert result.returncode == 0 and not result.stderr, result
+    row = json.loads(result.stdout)
+    if mode == 'matching':
+        assert row['event'] == 'released' and state(env) != before, result
+    else:
+        assert row['event'] == 'nothing' and row['reason'] == 'superseded', result
+        assert state(env) == before, 'mismatched guard changed authority'
+        denied = run(env, 'sem', 'acquire', 'gpu', '--job', 'other', '--holder', 'bob')
+        assert denied.returncode == 1 and json.loads(denied.stderr)['reason'] == 'capacity', denied
+
+
+for mode in ('matching', 'stale-record', 'stale-acquisition', 'record-as-acquisition'):
+    for reverse in (False, True):
+        with tempfile.TemporaryDirectory(prefix='locks-semaphore-guard-') as tmp:
+            try:
+                semaphore_guard_pair(Path(tmp), mode, reverse)
+                checks += 1
+                print('PASS semaphore guards', mode, reverse, flush=True)
+            except Exception as error:
+                failures.append(('semaphore guards', mode, reverse, repr(error)))
+                print('FAIL', *failures[-1], flush=True)
+
 print(f'{checks} passed; {len(failures)} failed')
 raise SystemExit(bool(failures))
