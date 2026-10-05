@@ -62,4 +62,51 @@ for scope in ('receipt', 'control', 'daemon log', 'container log'):
                     assert type(error) is fault, (scope, error)
             checks += 1
             print(f'PASS accounting {scope}: {fault.__name__}', flush=True)
+# Use tiny files with synthetic size metadata in this process only.
+# The outer resource monitor sees actual bytes and retains its normal limits.
+for kind in ('file symlinks', 'directory symlink', 'dangling symlink', 'owned files'):
+    with tempfile.TemporaryDirectory(prefix='locks-accounting-links-') as scratch:
+        root = Path(scratch)
+        control = root / 'control'
+        control.mkdir()
+        outside = root / 'unrelated'
+        outside.mkdir()
+        sized_paths = set()
+        for index in range(9):
+            target = (control if kind == 'owned files' else outside) / str(index)
+            target.write_bytes(b'x')
+            sized_paths.add(target)
+            if kind == 'file symlinks':
+                (control / str(index)).symlink_to(target)
+                sized_paths.add(control / str(index))
+        if kind == 'directory symlink':
+            (control / 'alias').symlink_to(outside, target_is_directory=True)
+            sized_paths.update(control / 'alias' / str(i) for i in range(9))
+        if kind == 'dangling symlink':
+            (control / 'alias').symlink_to(root / 'absent')
+        actual_stat = Path.stat
+        def sized_stat(path, **kwargs):
+            result = actual_stat(path, **kwargs)
+            if path in sized_paths and kwargs.get('follow_symlinks', True):
+                return SimpleNamespace(st_mode=result.st_mode, st_blocks=result.st_blocks,
+                                       st_size=8 * 1024**2)
+            return result
+        with patch.object(Path, 'stat', sized_stat), \
+             patch.object(provider, 'ROOT', root), patch.object(provider, 'CONTROL', control), \
+             patch.object(provider, 'DATA', control / 'data'), \
+             patch.object(provider.shutil, 'disk_usage', return_value=SimpleNamespace(free=70 << 30)):
+            instance = provider.Provider(os.getuid(), os.getgid())
+            error = None
+            try:
+                instance.guard()
+            except RuntimeError as caught:
+                error = caught
+            if kind == 'owned files':
+                assert error is not None and 'control/output reserve' in str(error)
+            else:
+                assert error is None, (kind, error)
+        if kind != 'owned files':
+            assert all((outside / str(i)).stat().st_size == 1 for i in range(9))
+        checks += 1
+        print('PASS control accounting: ' + kind, flush=True)
 print(f'Bootstrap accounting: {checks} synthetic cases passed', flush=True)

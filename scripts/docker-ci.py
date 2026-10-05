@@ -270,7 +270,7 @@ class Provider:
         control_bytes = 0
         if CONTROL.exists():
             for path in CONTROL.iterdir():
-                if path.name in ('data', 'storage.ext4'):
+                if path.name in ('data', 'storage.ext4') or path.is_symlink():
                     continue
                 try:
                     if path.is_dir():
