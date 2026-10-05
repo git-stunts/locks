@@ -103,9 +103,9 @@ cmd_with() {
   decimal_uint wait "${wait}" || fail '--wait is a decimal integer from 0 through 9223372036854775807 seconds' 2
   # Validate everything before acquiring anything: the semaphore path does not pass through claim_args or cmd_sem.
   valid_job "${W_JOB}" || fail "job id '${W_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-  valid_holder "${W_HOLDER}" || fail 'holder must be one line' 2
+  valid_holder "${W_HOLDER}" || fail 'holder must be one valid UTF-8 line' 2
   valid_ttl W_TTL "${W_TTL}" || fail '--ttl is a positive number of seconds' 2
-  valid_note "${W_NOTE}" || fail '--note must be one line' 2
+  valid_note "${W_NOTE}" || fail '--note must be one valid UTF-8 line' 2
   [[ -z "${W_SEM}" ]] || valid_job "${W_SEM}" || fail "semaphore name '${W_SEM}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   [[ -z "${W_PARENT}" ]] || valid_job "${W_PARENT}" || fail "parent id '${W_PARENT}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
 

@@ -19,7 +19,7 @@ cmd_extend() {
         ;;
       --acquisition)
         [[ $# -ge 2 ]] || usage
-        valid_holder "$2" || fail '--acquisition must be a nonempty single line' 2
+        valid_holder "$2" || fail '--acquisition must be a nonempty UTF-8 line' 2
         expected_acq="$2"
         shift 2
         ;;

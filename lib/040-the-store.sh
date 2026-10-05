@@ -91,6 +91,7 @@ resolve_store() { # sets STORE; creates the default or a custom store on first u
     *) STORE="${key}/${sel}" ;;
   esac
   [[ "${STORE}" != *$'\n'* ]] || store_error 'the store path must not contain a newline'
+  valid_utf8 "${STORE}" || fail 'the store path must be valid UTF-8' 2
   # A trailing slash must not turn a missing destination into mv's directory form.
   while [[ "${STORE}" != / && "${STORE}" == */ ]]; do STORE="${STORE%/}"; done
   if [[ ! -e "${STORE}" && ! -L "${STORE}" ]]; then

@@ -1,7 +1,8 @@
 # ---------------------------------------------------------------- JSON
 
-json_str() { # VAR VALUE: set VAR to VALUE as a JSON string, every control character escaped
+json_str() { # VAR VALUE: valid UTF-8 JSON; control characters escaped, invalid diagnostic bytes replaced
   local s="$2" out='' i c code
+  utf8_display s "${s}"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
   if [[ "${s}" == *[[:cntrl:]]* ]]; then

@@ -288,6 +288,7 @@ cmd_sem() {
         ;;
       --acquisition)
         [[ $# -ge 2 ]] || usage
+        valid_utf8 "$2" || fail '--acquisition must be valid UTF-8' 2
         record="$2"
         shift 2
         ;;
@@ -330,7 +331,7 @@ cmd_sem() {
       [[ -n "${job}" && -n "${holder}" ]] || usage
       valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
       valid_ttl ttl "${ttl}" || fail '--ttl is a positive number of seconds' 2
-      valid_holder "${holder}" || fail 'holder must be one line' 2
+      valid_holder "${holder}" || fail 'holder must be one valid UTF-8 line' 2
       decimal_uint wait "${wait}" || fail '--wait is a decimal integer from 0 through 9223372036854775807 seconds' 2
       W_SEM="${name}"
       W_JOB="${job}"

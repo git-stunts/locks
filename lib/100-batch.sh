@@ -33,8 +33,8 @@ cmd_batch() {
     valid_job "${job}" || fail "batch: job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
     [[ -z "${ttl}" ]] && ttl="${DEFAULT_TTL}"
     valid_ttl ttl "${ttl}" || fail 'batch: ttl is a positive number of seconds' 2
-    valid_holder "${holder}" || fail 'batch: holder must be one line' 2
-    valid_note "${note}" || fail 'batch: note must be one line' 2
+    valid_holder "${holder}" || fail 'batch: holder must be one valid UTF-8 line' 2
+    valid_note "${note}" || fail 'batch: note must be one valid UTF-8 line' 2
     B_JOB+=("${job}")
     B_HOLDER+=("${holder}")
     B_TTL+=("${ttl}")
@@ -53,6 +53,7 @@ cmd_batch() {
     in_paths=0
   }
   while IFS= read -r line || [[ -n "${line}" ]]; do
+    valid_utf8 "${line}" || fail 'batch: input must be valid UTF-8' 2
     if [[ -z "${line}" ]]; then
       finish_record
       continue

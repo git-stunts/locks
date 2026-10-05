@@ -177,10 +177,44 @@ sub_usage_text() {
     *) usage_text ;;
   esac
 }
+# ---------------------------------------------------------------- UTF-8 text
+# LC_ALL=C makes these ranges and string offsets bytes. Exclude overlong forms,
+# surrogate code points, and scalars above U+10FFFF. Bash strings cannot hold NUL.
+UTF8_PATTERN=$'^([\001-\177]|[\302-\337][\200-\277]|\340[\240-\277][\200-\277]|[\341-\354\356-\357][\200-\277]{2}|\355[\200-\237][\200-\277]|\360[\220-\277][\200-\277]{2}|[\361-\363][\200-\277]{3}|\364[\200-\217][\200-\277]{2})*$'
+
+valid_utf8() { [[ "$1" =~ ${UTF8_PATTERN} ]]; }
+
+utf8_display() { # VAR VALUE: preserve valid scalars; replace each invalid byte for diagnostics only
+  local _ud_text="$2" _ud_out='' _ud_i=0 _ud_n _ud_c _ud_part
+  if valid_utf8 "${_ud_text}"; then
+    printf -v "$1" '%s' "${_ud_text}"
+    return 0
+  fi
+  while ((_ud_i < ${#_ud_text})); do
+    _ud_c="${_ud_text:_ud_i:1}"
+    case "${_ud_c}" in
+      [$'\001'-$'\177']) _ud_n=1 ;;
+      [$'\302'-$'\337']) _ud_n=2 ;;
+      [$'\340'-$'\357']) _ud_n=3 ;;
+      [$'\360'-$'\364']) _ud_n=4 ;;
+      *) _ud_n=0 ;;
+    esac
+    _ud_part="${_ud_text:_ud_i:_ud_n}"
+    if ((_ud_n > 0)) && valid_utf8 "${_ud_part}"; then
+      _ud_out+="${_ud_part}"
+      _ud_i=$((_ud_i + _ud_n))
+    else
+      _ud_out+=$'\357\277\275' # U+FFFD, never a surrogate or an invalid output byte
+      _ud_i=$((_ud_i + 1))
+    fi
+  done
+  printf -v "$1" '%s' "${_ud_out}"
+}
 # ---------------------------------------------------------------- JSON
 
-json_str() { # VAR VALUE: set VAR to VALUE as a JSON string, every control character escaped
+json_str() { # VAR VALUE: valid UTF-8 JSON; control characters escaped, invalid diagnostic bytes replaced
   local s="$2" out='' i c code
+  utf8_display s "${s}"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
   if [[ "${s}" == *[[:cntrl:]]* ]]; then
@@ -359,9 +393,9 @@ job_ref() { printf '%s/jobs/%s' "${NS}" "$1"; }
 
 valid_job() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; }
 
-valid_holder() { [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one line: the record is line-oriented; any other byte is stored whole and escaped on output
+valid_holder() { [[ -n "$1" && "$1" != *$'\n'* && "$1" != *$'\r'* ]] && valid_utf8 "$1"; } # one UTF-8 line, stored without normalization
 
-valid_note() { [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]]; } # one line; empty means no note
+valid_note() { [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]] && valid_utf8 "$1"; } # one UTF-8 line; empty means no note
 
 valid_ttl() { # VAR value: VAR = the value as a decimal number of seconds; 1 unless it is digits only and positive (010 is ten, never octal eight)
   decimal_uint "$1" "$2" && [[ "${!1}" != 0 ]]
@@ -381,6 +415,10 @@ normalize_path() { # -> prints the lexical form, or returns 2 with the reason on
   # links are NOT resolved. A trailing / is kept: dir/ is a prefix that covers
   # every path under it; dir is the directory entry itself, a different key.
   local p="$1" part parts=() raw_parts=() IFS='/' prefix=''
+  valid_utf8 "${p}" || {
+    path_error 'a path must be valid UTF-8'
+    return 2
+  }
   [[ "${p}" == */ ]] && prefix='/'
   [[ "${p}" == /* ]] && {
     path_error "${p}: paths are repo-relative"
@@ -568,6 +606,7 @@ resolve_store() { # sets STORE; creates the default or a custom store on first u
     *) STORE="${key}/${sel}" ;;
   esac
   [[ "${STORE}" != *$'\n'* ]] || store_error 'the store path must not contain a newline'
+  valid_utf8 "${STORE}" || fail 'the store path must be valid UTF-8' 2
   # A trailing slash must not turn a missing destination into mv's directory form.
   while [[ "${STORE}" != / && "${STORE}" == */ ]]; do STORE="${STORE%/}"; done
   if [[ ! -e "${STORE}" && ! -L "${STORE}" ]]; then
@@ -666,6 +705,11 @@ DIAGNOSTIC_READ=0
 parse_record() { # oid -> R_FIELD["oid key"] and R_PATHS[oid] from BLOB[oid], once per shell; parameter expansion only, no fork
   [[ -n "${R_PARSED[$1]+x}" ]] && return 0
   local text="${BLOB[$1]:-}" line key paths='' in_paths=0
+  if ! valid_utf8 "${text}"; then
+    R_INVALID["$1"]='record is not valid UTF-8'
+    R_PARSED["$1"]=1
+    return 0
+  fi
   while [[ -n "${text}" ]]; do
     line="${text%%$'\n'*}"
     if [[ "${line}" == "${text}" ]]; then text=''; else text="${text#*$'\n'}"; fi
@@ -1755,8 +1799,8 @@ claim_args() { # parses claim arguments into CA_JOB CA_HOLDER CA_TTL CA_PARENT C
   [[ -n "${CA_JOB}" && -n "${CA_HOLDER}" ]] || usage
   valid_job "${CA_JOB}" || fail "job id '${CA_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   valid_ttl CA_TTL "${CA_TTL}" || fail '--ttl is a positive number of seconds' 2
-  valid_holder "${CA_HOLDER}" || fail 'holder must be one line' 2
-  valid_note "${CA_NOTE}" || fail '--note must be one line' 2
+  valid_holder "${CA_HOLDER}" || fail 'holder must be one valid UTF-8 line' 2
+  valid_note "${CA_NOTE}" || fail '--note must be one valid UTF-8 line' 2
   ((${#CA_PATHS[@]} > 0)) || usage
 }
 
@@ -1802,8 +1846,8 @@ cmd_batch() {
     valid_job "${job}" || fail "batch: job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
     [[ -z "${ttl}" ]] && ttl="${DEFAULT_TTL}"
     valid_ttl ttl "${ttl}" || fail 'batch: ttl is a positive number of seconds' 2
-    valid_holder "${holder}" || fail 'batch: holder must be one line' 2
-    valid_note "${note}" || fail 'batch: note must be one line' 2
+    valid_holder "${holder}" || fail 'batch: holder must be one valid UTF-8 line' 2
+    valid_note "${note}" || fail 'batch: note must be one valid UTF-8 line' 2
     B_JOB+=("${job}")
     B_HOLDER+=("${holder}")
     B_TTL+=("${ttl}")
@@ -1822,6 +1866,7 @@ cmd_batch() {
     in_paths=0
   }
   while IFS= read -r line || [[ -n "${line}" ]]; do
+    valid_utf8 "${line}" || fail 'batch: input must be valid UTF-8' 2
     if [[ -z "${line}" ]]; then
       finish_record
       continue
@@ -1871,6 +1916,7 @@ cmd_release() {
       --acquisition)
         [[ $# -ge 2 ]] || usage
         ((${#jobs[@]} > 0)) || usage
+        valid_utf8 "$2" || fail '--acquisition must be valid UTF-8' 2
         acqs[${#jobs[@]} - 1]="$2"
         shift 2
         ;;
@@ -2121,7 +2167,7 @@ cmd_extend() {
         ;;
       --acquisition)
         [[ $# -ge 2 ]] || usage
-        valid_holder "$2" || fail '--acquisition must be a nonempty single line' 2
+        valid_holder "$2" || fail '--acquisition must be a nonempty UTF-8 line' 2
         expected_acq="$2"
         shift 2
         ;;
@@ -2314,9 +2360,9 @@ cmd_with() {
   decimal_uint wait "${wait}" || fail '--wait is a decimal integer from 0 through 9223372036854775807 seconds' 2
   # Validate everything before acquiring anything: the semaphore path does not pass through claim_args or cmd_sem.
   valid_job "${W_JOB}" || fail "job id '${W_JOB}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-  valid_holder "${W_HOLDER}" || fail 'holder must be one line' 2
+  valid_holder "${W_HOLDER}" || fail 'holder must be one valid UTF-8 line' 2
   valid_ttl W_TTL "${W_TTL}" || fail '--ttl is a positive number of seconds' 2
-  valid_note "${W_NOTE}" || fail '--note must be one line' 2
+  valid_note "${W_NOTE}" || fail '--note must be one valid UTF-8 line' 2
   [[ -z "${W_SEM}" ]] || valid_job "${W_SEM}" || fail "semaphore name '${W_SEM}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
   [[ -z "${W_PARENT}" ]] || valid_job "${W_PARENT}" || fail "parent id '${W_PARENT}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
 
@@ -3017,6 +3063,7 @@ cmd_sem() {
         ;;
       --acquisition)
         [[ $# -ge 2 ]] || usage
+        valid_utf8 "$2" || fail '--acquisition must be valid UTF-8' 2
         record="$2"
         shift 2
         ;;
@@ -3059,7 +3106,7 @@ cmd_sem() {
       [[ -n "${job}" && -n "${holder}" ]] || usage
       valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
       valid_ttl ttl "${ttl}" || fail '--ttl is a positive number of seconds' 2
-      valid_holder "${holder}" || fail 'holder must be one line' 2
+      valid_holder "${holder}" || fail 'holder must be one valid UTF-8 line' 2
       decimal_uint wait "${wait}" || fail '--wait is a decimal integer from 0 through 9223372036854775807 seconds' 2
       W_SEM="${name}"
       W_JOB="${job}"
