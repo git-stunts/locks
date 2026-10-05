@@ -1,0 +1,2093 @@
+{
+  "schema": "git-locks-task-graph/2",
+  "graph_version": "2026-10-05.2",
+  "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+  "edge_direction": "prerequisite-to-dependent",
+  "edge_status": "see each task dependency_status",
+  "tasks": [
+    {
+      "id": "GL-001",
+      "title": "Publish a truthful Bash support floor",
+      "type": "Feature",
+      "workstream": "contract",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-003",
+          "reason": "The new interpreter CI job needs a guarded fresh-image path."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "workflow_permission"
+      ],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/66"
+      ],
+      "sources": [
+        "lib/000-prelude.sh",
+        "README.md",
+        ".github/workflows/ci.yml"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-001.md",
+      "sha256": "457b7d702420a64fde2a17aa5c0421664cf0f3a0c7415f4c25776684b92b662f"
+    },
+    {
+      "id": "GL-002",
+      "title": "Verify the minimum Git version",
+      "type": "Research",
+      "workstream": "contract",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-003",
+          "reason": "A reproducible fresh CI matrix needs the guarded toolchain setup."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "workflow_permission"
+      ],
+      "issues": [],
+      "sources": [
+        "README.md",
+        "lib/045-state-tree.sh",
+        "lib/060-the-transition-plan.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-002.md",
+      "sha256": "8723324c4d18dd399aa45def676182c86f8b5485b9e9a394b433dc85417e1f97"
+    },
+    {
+      "id": "GL-003",
+      "title": "Guard toolchain bootstrap from start to cleanup",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "workflow_permission",
+        "privileged_linux"
+      ],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/93"
+      ],
+      "sources": [
+        "scripts/docker-run.py",
+        "scripts/docker/Dockerfile",
+        "docs/testing.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-003.md",
+      "sha256": "efe4ded24a6f730612b761550c36f8cad3c7786b22ebf0324dc4df509ff98e66"
+    },
+    {
+      "id": "GL-004",
+      "title": "Resolve job and semaphore name findings",
+      "type": "Research",
+      "workstream": "contract",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/57"
+      ],
+      "sources": [
+        "lib/030-time-refs-records.sh",
+        "lib/045-state-tree.sh",
+        "lib/170-semaphores.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-004.md",
+      "sha256": "e36ffaefd89f45fd1d76cfc4af4b11edffd79883634ab8ca01bbc21b2fa7d142"
+    },
+    {
+      "id": "GL-005",
+      "title": "Return precise argument diagnostics",
+      "type": "Feature",
+      "workstream": "contract",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/68"
+      ],
+      "sources": [
+        "lib/000-prelude.sh",
+        "lib/990-main.sh",
+        "docs/store-errors.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-005.md",
+      "sha256": "5d3c5a3ee0de9e17f3ddc5ce81f606cb0f4725c9f09e25fa60aa324702331c89"
+    },
+    {
+      "id": "GL-006",
+      "title": "Choose the acquisition identifier contract",
+      "type": "Decision",
+      "workstream": "contract",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/74"
+      ],
+      "sources": [
+        "lib/030-time-refs-records.sh",
+        "lib/110-release.sh",
+        "lib/185-migrate.sh",
+        "schema/git-locks.schema.json"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-006.md",
+      "sha256": "c0e2f281e955b57cd67fb8b336a2e051615eaa074f4046d93bc29e379679c564"
+    },
+    {
+      "id": "GL-007",
+      "title": "Align output events, schema, and reference tables",
+      "type": "Feature",
+      "workstream": "contract",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-006",
+          "reason": "Schema validation must implement the selected identifier contract."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/74",
+        "https://github.com/git-stunts/locks/issues/82"
+      ],
+      "sources": [
+        "schema/git-locks.schema.json",
+        "docs/usage.md",
+        "scripts/generate-help.py"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-007.md",
+      "sha256": "bebce6ca0e7ae70f47ed201a4e707c40cf0dba88b78a1a3ac30c64991cf3dc95"
+    },
+    {
+      "id": "GL-008",
+      "title": "Report operational store problems accurately",
+      "type": "Feature",
+      "workstream": "operations",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/75"
+      ],
+      "sources": [
+        "lib/175-doctor.sh",
+        "lib/060-the-transition-plan.sh",
+        "docs/store-trust.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-008.md",
+      "sha256": "c864830628db5c9525610082a0692f41d2e487aba717faacd022aff32abe3e60"
+    },
+    {
+      "id": "GL-009",
+      "title": "Choose a safe recovery contract",
+      "type": "Decision",
+      "workstream": "operations",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/61"
+      ],
+      "sources": [
+        "lib/185-migrate.sh",
+        "docs/state-integrity.md",
+        "docs/state-protocol.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-009.md",
+      "sha256": "fde57bab1e9407b4e512ce5fee559dd932d2ce6c6b6c5a015fb7d2b940ecab06"
+    },
+    {
+      "id": "GL-010",
+      "title": "Implement and rehearse offline recovery",
+      "type": "Feature",
+      "workstream": "operations",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-009",
+          "reason": "The implementation needs an explicit recovery and data-loss policy."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/61"
+      ],
+      "sources": [
+        "lib/185-migrate.sh",
+        "docs/state-integrity.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-010.md",
+      "sha256": "45c15cac428950e93c9f444e3b32e36fa7b6c066d3cb6e5f5c41d5483a2a05d3"
+    },
+    {
+      "id": "GL-011",
+      "title": "Choose store retention and history boundaries",
+      "type": "Decision",
+      "workstream": "operations",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/69"
+      ],
+      "sources": [
+        "lib/045-state-tree.sh",
+        "lib/060-the-transition-plan.sh",
+        "docs/state-protocol.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-011.md",
+      "sha256": "ecbaf083c1a1df66b68422b1c22a2714c5823f1ee1f70c5f12f564068f61ebb0"
+    },
+    {
+      "id": "GL-012",
+      "title": "Provide safe bounded store maintenance",
+      "type": "Feature",
+      "workstream": "operations",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-011",
+          "reason": "Maintenance must follow the accepted retention and reader-safety policy."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/80"
+      ],
+      "sources": [
+        "lib/045-state-tree.sh",
+        "docs/state-integrity.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-012.md",
+      "sha256": "ba455c4f6de33cea46fbada7ff782716fffac09fffcd624e8fe91413c3779a07"
+    },
+    {
+      "id": "GL-013",
+      "title": "Separate stored fields from decoded numbers",
+      "type": "Feature",
+      "workstream": "state",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/73"
+      ],
+      "sources": [
+        "lib/050-the-snapshot.sh",
+        "lib/055-record-validation.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-013.md",
+      "sha256": "e1c645f117a4ed3791f569783feddfb0fb749b995eff011879106fc8f03b0faf"
+    },
+    {
+      "id": "GL-014",
+      "title": "Guard deliberate plan redirects",
+      "type": "Feature",
+      "workstream": "state",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/73"
+      ],
+      "sources": [
+        "lib/060-the-transition-plan.sh",
+        "lib/090-claim-planning.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-014.md",
+      "sha256": "b10b48c50dc5fee7fc4131a9797a256f1384d84219368f1fb72310c51e2af63a"
+    },
+    {
+      "id": "GL-015",
+      "title": "Expose a safe planner test interface",
+      "type": "Feature",
+      "workstream": "state",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/81"
+      ],
+      "sources": [
+        "lib/090-claim-planning.sh",
+        "lib/990-main.sh",
+        "test/state-coherence.py"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-015.md",
+      "sha256": "d7ace44d2101d433109bf06a314552428f36958094a2c1ab9feb3a7eb124ec80"
+    },
+    {
+      "id": "GL-016",
+      "title": "Separate planner decisions from command output",
+      "type": "Feature",
+      "workstream": "state",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-015",
+          "reason": "Direct plan assertions must protect the behavior before planner boundaries change."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/71",
+        "https://github.com/git-stunts/locks/issues/72"
+      ],
+      "sources": [
+        "lib/090-claim-planning.sh",
+        "lib/160-with.sh",
+        "lib/170-semaphores.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-016.md",
+      "sha256": "d1071cba8024479a2fb6c0b6d421b330c5788fd62dcfc7d38a150872b2322a23"
+    },
+    {
+      "id": "GL-017",
+      "title": "Share validated liveness and invariant rules",
+      "type": "Feature",
+      "workstream": "state",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-015",
+          "reason": "Planner fixtures must expose the rules before production paths share them."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/72"
+      ],
+      "sources": [
+        "lib/055-record-validation.sh",
+        "lib/080-families.sh",
+        "lib/175-doctor.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-017.md",
+      "sha256": "ba3f47464498415df345185badb21ebce32a88d3763e0ff5949f188cb62ab501"
+    },
+    {
+      "id": "GL-018",
+      "title": "Resolve remaining admission-loop duplication",
+      "type": "Research",
+      "workstream": "state",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/14"
+      ],
+      "sources": [
+        "lib/160-with.sh",
+        "lib/170-semaphores.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-018.md",
+      "sha256": "c8ebd3ddad253ed208680e54ec22315a7240a69afbd5fa218c7aafb8e6c16365"
+    },
+    {
+      "id": "GL-019",
+      "title": "Bind retained evidence to source and bytes",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/70"
+      ],
+      "sources": [
+        "test/observation/verify-evidence.py",
+        "examples/cooperating-workers/recorded-run.json",
+        "docs/benchmarks/"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-019.md",
+      "sha256": "2444cbab5b4e379da7876f3d44a474daf5f806083e5e32c81fda0966c57b83cd"
+    },
+    {
+      "id": "GL-020",
+      "title": "Make Python tooling checks explicit",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-003",
+          "reason": "A changed test image must use the verified bootstrap path."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/76"
+      ],
+      "sources": [
+        "Makefile",
+        "CONTRIBUTING.md",
+        ".gitignore",
+        "scripts/docker/Dockerfile"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-020.md",
+      "sha256": "441898a64ff13ae97f255d7808250ea55ed8c1855fb3bbe204a59782d75b6983"
+    },
+    {
+      "id": "GL-021",
+      "title": "Define a fast local gate and complete merge gate",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-020",
+          "reason": "The fast tier must include the selected Python checks."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/76"
+      ],
+      "sources": [
+        "scripts/hooks/pre-push",
+        "Makefile",
+        "docs/development.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-021.md",
+      "sha256": "5ebcea8a27810d1f9e0b92d589986da1ba49022250c1693c0db999679be37c3c"
+    },
+    {
+      "id": "GL-022",
+      "title": "Report development prerequisites in one command",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-001",
+          "reason": "The report needs the verified Bash floor."
+        },
+        {
+          "id": "GL-002",
+          "reason": "The report needs the verified Git floor."
+        },
+        {
+          "id": "GL-020",
+          "reason": "The report needs the chosen Python tooling requirements."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/83"
+      ],
+      "sources": [
+        "Makefile",
+        "docs/development.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-022.md",
+      "sha256": "aa4b3996d6afd8534f1ffeb6af98034c93c96817f42992bd08cbe6fd1954e3c6"
+    },
+    {
+      "id": "GL-023",
+      "title": "Record the exact merge review policy",
+      "type": "Decision",
+      "workstream": "assurance",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/92"
+      ],
+      "sources": [
+        "CONTRIBUTING.md",
+        ".github/workflows/ci.yml"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-023.md",
+      "sha256": "b586eb7e3c84067c7c493940c49a6d241a7ce9f0b87d4c762e271089e1fde01e"
+    },
+    {
+      "id": "GL-024",
+      "title": "Align merge automation with the review policy",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-023",
+          "reason": "Automation must implement the owner-approved policy."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "repository_policy_approval"
+      ],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/92"
+      ],
+      "sources": [
+        "CONTRIBUTING.md",
+        ".github/"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-024.md",
+      "sha256": "25a12386078d5c298c797913bd3118ce145d7aa0a1dbf39882ce0dd427f7dda1"
+    },
+    {
+      "id": "GL-025",
+      "title": "Pin workflow actions to reviewed commits",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "workflow_permission"
+      ],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/86"
+      ],
+      "sources": [
+        ".github/workflows/"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-025.md",
+      "sha256": "7cbc574ab196b0e31625926b226e97f0ee16f43fbb566c45f27cd7f218395ffd"
+    },
+    {
+      "id": "GL-026",
+      "title": "Produce verifiable release artifacts",
+      "type": "Feature",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-025",
+          "reason": "Release trust requires reviewed immutable action inputs."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "release_signing_setup"
+      ],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/86"
+      ],
+      "sources": [
+        ".github/workflows/",
+        "docs/development.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-026.md",
+      "sha256": "bfc35c8cb0b3ecd853b95a8c3a87dac98687dcf390196d17abeb0ae3a0967faa"
+    },
+    {
+      "id": "GL-027",
+      "title": "Measure current contention and object growth",
+      "type": "Research",
+      "workstream": "performance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-019",
+          "reason": "Published measurements need verified source and artifact manifests."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/91"
+      ],
+      "sources": [
+        "scripts/benchmark-directory-tokens.sh",
+        "docs/benchmarks/"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-027.md",
+      "sha256": "c185d3055d17981958bd10f99f81672fc174e0ee764896db34b9558355b312a9"
+    },
+    {
+      "id": "GL-028",
+      "title": "Choose whether state layout needs optimization",
+      "type": "Decision",
+      "workstream": "performance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-027",
+          "reason": "The decision needs a valid baseline for the current protocol."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/20",
+        "https://github.com/git-stunts/locks/issues/62"
+      ],
+      "sources": [
+        "lib/045-state-tree.sh",
+        "lib/060-the-transition-plan.sh",
+        "docs/state-protocol.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-028.md",
+      "sha256": "9047fa0dc587860826573ebda22ed0b1ce284fa1232e20bd0da8d4b13f721434"
+    },
+    {
+      "id": "GL-029",
+      "title": "Run an actual cooperating-worker adoption trial",
+      "type": "Research",
+      "workstream": "performance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-001",
+          "reason": "The participant needs a truthful Bash installation requirement."
+        },
+        {
+          "id": "GL-002",
+          "reason": "The participant needs a truthful Git requirement."
+        },
+        {
+          "id": "GL-003",
+          "reason": "The trial harness must use bounded preparation."
+        },
+        {
+          "id": "GL-005",
+          "reason": "Operators need actionable argument errors."
+        },
+        {
+          "id": "GL-007",
+          "reason": "Captured output needs a stable checked contract."
+        },
+        {
+          "id": "GL-008",
+          "reason": "Operators need accurate failure diagnosis."
+        },
+        {
+          "id": "GL-010",
+          "reason": "The trial needs a rehearsed recovery procedure."
+        },
+        {
+          "id": "GL-012",
+          "reason": "Repeated use needs a safe maintenance policy."
+        },
+        {
+          "id": "GL-019",
+          "reason": "Trial evidence must preserve source and artifact identity."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "consenting_trial_maintainer",
+        "elapsed_trial_observations"
+      ],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/90"
+      ],
+      "sources": [
+        "examples/cooperating-workers/README.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-029.md",
+      "sha256": "c5eb0bd110cc0da8b6ea31133990a5b8aa4a0eab3d5602195bcc81d6de2a4971"
+    },
+    {
+      "id": "GL-030",
+      "title": "Audit hardening completion and select the release",
+      "type": "Decision",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-001",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-002",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-003",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-004",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-005",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-007",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-008",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-010",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-012",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-013",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-014",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-016",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-017",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-018",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-021",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-022",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-024",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-026",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-027",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-028",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-029",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-031",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        },
+        {
+          "id": "GL-032",
+          "reason": "This required outcome supplies evidence for the final completion matrix."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "release_publication_approval"
+      ],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/41"
+      ],
+      "sources": [
+        "CHANGELOG.md",
+        "docs/state-protocol.md",
+        "docs/testing.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-030.md",
+      "sha256": "2dc6a1e6860d9236d491060bb094f86ed6b34aeff7531c41d0de24107d3b1bef"
+    },
+    {
+      "id": "GL-031",
+      "title": "Investigate the native supervisor warning",
+      "type": "Bug",
+      "workstream": "contract",
+      "horizon": "short",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [],
+      "dependency_status": "proposed",
+      "external_gates": [
+        "native_probe_approval"
+      ],
+      "issues": [],
+      "sources": [
+        "lib/160-with.sh",
+        "docs/wrapper-lifetime.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-031.md",
+      "sha256": "2dd0dd736b0790f706938160ad3e36921a670526d63d31b49eb74b2c140cd122"
+    },
+    {
+      "id": "GL-032",
+      "title": "Close the supported-contract evidence matrix",
+      "type": "Research",
+      "workstream": "assurance",
+      "horizon": "medium",
+      "release_required": true,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-001",
+          "reason": "The contract matrix needs the selected Bash boundary."
+        },
+        {
+          "id": "GL-002",
+          "reason": "The contract matrix needs the selected Git boundary."
+        },
+        {
+          "id": "GL-003",
+          "reason": "New fault campaigns need verified setup enforcement."
+        },
+        {
+          "id": "GL-007",
+          "reason": "The matrix needs the final output contract."
+        },
+        {
+          "id": "GL-010",
+          "reason": "Recovery evidence must cover accepted failure classes."
+        },
+        {
+          "id": "GL-012",
+          "reason": "Maintenance evidence must cover the retention contract."
+        },
+        {
+          "id": "GL-013",
+          "reason": "Decode-path evidence must match the final field model."
+        },
+        {
+          "id": "GL-014",
+          "reason": "Plan-transition evidence must match checked redirects."
+        },
+        {
+          "id": "GL-016",
+          "reason": "Planner paths must match the final reporting boundary."
+        },
+        {
+          "id": "GL-017",
+          "reason": "Shared production rules need independent oracle coverage."
+        },
+        {
+          "id": "GL-031",
+          "reason": "The native supervisor warning needs an evidenced disposition."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [],
+      "sources": [
+        "docs/state-protocol.md",
+        "docs/wrapper-lifetime.md",
+        "docs/store-trust.md",
+        "docs/testing.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-032.md",
+      "sha256": "dbd1640a22991959cc40fdd9fff78229281cd6e47830b2b6ac6f70a1302af062"
+    },
+    {
+      "id": "GL-033",
+      "title": "Decide automatic wrapper renewal semantics",
+      "type": "Decision",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The trial determines whether this extension solves an observed need."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/78"
+      ],
+      "sources": [
+        "lib/160-with.sh",
+        "docs/time.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-033.md",
+      "sha256": "d6ea2596450020a9839f60648fd5e240920090dc22f667e270f2f47b32a5d346"
+    },
+    {
+      "id": "GL-034",
+      "title": "Decide durable history semantics",
+      "type": "Decision",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-011",
+          "reason": "History must respect the chosen retention policy."
+        },
+        {
+          "id": "GL-029",
+          "reason": "The trial determines the operational need for history."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/9",
+        "https://github.com/git-stunts/locks/issues/79"
+      ],
+      "sources": [
+        "docs/state-protocol.md",
+        "lib/060-the-transition-plan.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-034.md",
+      "sha256": "89c20d7dc3fc2d26dd5bd81315a8a8483e2e610bea53162f97455e00716b9312"
+    },
+    {
+      "id": "GL-035",
+      "title": "Explain store selection provenance",
+      "type": "Feature",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The product queue follows demonstrated adoption needs."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/84"
+      ],
+      "sources": [
+        "lib/040-the-store.sh",
+        "docs/store-initialization.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-035.md",
+      "sha256": "46cbf7be6ed74b42bec284f0ef094eabcfe47f14745b186c0a10d3ea0fe9788c"
+    },
+    {
+      "id": "GL-036",
+      "title": "Explain decisions from a pinned root and time",
+      "type": "Feature",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The product queue follows demonstrated adoption needs."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/94"
+      ],
+      "sources": [
+        "docs/state-protocol.md",
+        "lib/050-the-snapshot.sh"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-036.md",
+      "sha256": "401d427ea5be0b07d32ee1817159c7047fe72de514713206d45509495b7ad192"
+    },
+    {
+      "id": "GL-037",
+      "title": "Decide wait and watch observation guarantees",
+      "type": "Decision",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The trial determines which observation workflow is useful."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/7"
+      ],
+      "sources": [
+        "lib/120-check.sh",
+        "docs/usage.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-037.md",
+      "sha256": "5d2a32cb3ffff21ee1799cbab5665c51f32e7b6c6f707f151fd49c957c32dccb"
+    },
+    {
+      "id": "GL-038",
+      "title": "Evaluate remote coordination safety",
+      "type": "Research",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The adoption result determines whether remote work is justified."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/10"
+      ],
+      "sources": [
+        "docs/state-protocol.md",
+        "docs/store-trust.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-038.md",
+      "sha256": "a4760af1a45b74747b0cf97ac23ef77782b415302013cf5fe857d87e711d68e9"
+    },
+    {
+      "id": "GL-039",
+      "title": "Evaluate enforceable resource fencing",
+      "type": "Research",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The trial determines whether an enforced resource boundary is needed."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/85"
+      ],
+      "sources": [
+        "docs/wrapper-lifetime.md",
+        "docs/store-trust.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-039.md",
+      "sha256": "b53cb70f964bb261986ee2b701075a97ae947b299e0521a9cad14d9e4699823f"
+    },
+    {
+      "id": "GL-040",
+      "title": "Test the proposed rate-limit semantics",
+      "type": "Research",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The trial determines whether this separate rate contract is useful."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/77"
+      ],
+      "sources": [
+        "lib/170-semaphores.sh",
+        "docs/time.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-040.md",
+      "sha256": "8ca2da4abc957647383642bc45afa972059d80e80bf9c90afcc57ea50dc95e03"
+    },
+    {
+      "id": "GL-041",
+      "title": "Decide whether lock families need a general graph",
+      "type": "Decision",
+      "workstream": "product",
+      "horizon": "long",
+      "release_required": false,
+      "schema": "git-locks-task/1",
+      "graph_version": "2026-10-05.2",
+      "status": "planned",
+      "owner": "unassigned",
+      "created": "2026-10-05",
+      "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+      "dependencies": [
+        {
+          "id": "GL-029",
+          "reason": "The trial must show a need beyond current single-parent families."
+        }
+      ],
+      "dependency_status": "proposed",
+      "external_gates": [],
+      "issues": [
+        "https://github.com/git-stunts/locks/issues/2"
+      ],
+      "sources": [
+        "lib/080-families.sh",
+        "docs/state-protocol.md"
+      ],
+      "prompt_prefix_sha256": "45a0dd2e4567077fee1f53dadb2ed020b66217a76f0b14c8f100cb055abfc15e",
+      "completion_evidence": [],
+      "path": "docs/tasks/GL-041.md",
+      "sha256": "fcb77f96bd4004b5ec52a05a4f66043d8e47ea73bd9cfe3793223cd4c5769254"
+    }
+  ],
+  "edges": [
+    {
+      "from": "GL-003",
+      "to": "GL-001",
+      "reason": "The new interpreter CI job needs a guarded fresh-image path.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-003",
+      "to": "GL-002",
+      "reason": "A reproducible fresh CI matrix needs the guarded toolchain setup.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-006",
+      "to": "GL-007",
+      "reason": "Schema validation must implement the selected identifier contract.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-009",
+      "to": "GL-010",
+      "reason": "The implementation needs an explicit recovery and data-loss policy.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-011",
+      "to": "GL-012",
+      "reason": "Maintenance must follow the accepted retention and reader-safety policy.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-015",
+      "to": "GL-016",
+      "reason": "Direct plan assertions must protect the behavior before planner boundaries change.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-015",
+      "to": "GL-017",
+      "reason": "Planner fixtures must expose the rules before production paths share them.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-003",
+      "to": "GL-020",
+      "reason": "A changed test image must use the verified bootstrap path.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-020",
+      "to": "GL-021",
+      "reason": "The fast tier must include the selected Python checks.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-001",
+      "to": "GL-022",
+      "reason": "The report needs the verified Bash floor.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-002",
+      "to": "GL-022",
+      "reason": "The report needs the verified Git floor.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-020",
+      "to": "GL-022",
+      "reason": "The report needs the chosen Python tooling requirements.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-023",
+      "to": "GL-024",
+      "reason": "Automation must implement the owner-approved policy.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-025",
+      "to": "GL-026",
+      "reason": "Release trust requires reviewed immutable action inputs.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-019",
+      "to": "GL-027",
+      "reason": "Published measurements need verified source and artifact manifests.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-027",
+      "to": "GL-028",
+      "reason": "The decision needs a valid baseline for the current protocol.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-001",
+      "to": "GL-029",
+      "reason": "The participant needs a truthful Bash installation requirement.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-002",
+      "to": "GL-029",
+      "reason": "The participant needs a truthful Git requirement.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-003",
+      "to": "GL-029",
+      "reason": "The trial harness must use bounded preparation.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-005",
+      "to": "GL-029",
+      "reason": "Operators need actionable argument errors.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-007",
+      "to": "GL-029",
+      "reason": "Captured output needs a stable checked contract.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-008",
+      "to": "GL-029",
+      "reason": "Operators need accurate failure diagnosis.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-010",
+      "to": "GL-029",
+      "reason": "The trial needs a rehearsed recovery procedure.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-012",
+      "to": "GL-029",
+      "reason": "Repeated use needs a safe maintenance policy.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-019",
+      "to": "GL-029",
+      "reason": "Trial evidence must preserve source and artifact identity.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-001",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-002",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-003",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-004",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-005",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-007",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-008",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-010",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-012",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-013",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-014",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-016",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-017",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-018",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-021",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-022",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-024",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-026",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-027",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-028",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-031",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-032",
+      "to": "GL-030",
+      "reason": "This required outcome supplies evidence for the final completion matrix.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-001",
+      "to": "GL-032",
+      "reason": "The contract matrix needs the selected Bash boundary.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-002",
+      "to": "GL-032",
+      "reason": "The contract matrix needs the selected Git boundary.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-003",
+      "to": "GL-032",
+      "reason": "New fault campaigns need verified setup enforcement.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-007",
+      "to": "GL-032",
+      "reason": "The matrix needs the final output contract.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-010",
+      "to": "GL-032",
+      "reason": "Recovery evidence must cover accepted failure classes.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-012",
+      "to": "GL-032",
+      "reason": "Maintenance evidence must cover the retention contract.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-013",
+      "to": "GL-032",
+      "reason": "Decode-path evidence must match the final field model.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-014",
+      "to": "GL-032",
+      "reason": "Plan-transition evidence must match checked redirects.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-016",
+      "to": "GL-032",
+      "reason": "Planner paths must match the final reporting boundary.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-017",
+      "to": "GL-032",
+      "reason": "Shared production rules need independent oracle coverage.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-031",
+      "to": "GL-032",
+      "reason": "The native supervisor warning needs an evidenced disposition.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-033",
+      "reason": "The trial determines whether this extension solves an observed need.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-011",
+      "to": "GL-034",
+      "reason": "History must respect the chosen retention policy.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-034",
+      "reason": "The trial determines the operational need for history.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-035",
+      "reason": "The product queue follows demonstrated adoption needs.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-036",
+      "reason": "The product queue follows demonstrated adoption needs.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-037",
+      "reason": "The trial determines which observation workflow is useful.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-038",
+      "reason": "The adoption result determines whether remote work is justified.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-039",
+      "reason": "The trial determines whether an enforced resource boundary is needed.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-040",
+      "reason": "The trial determines whether this separate rate contract is useful.",
+      "status": "proposed"
+    },
+    {
+      "from": "GL-029",
+      "to": "GL-041",
+      "reason": "The trial must show a need beyond current single-parent families.",
+      "status": "proposed"
+    }
+  ],
+  "workstreams": {
+    "contract": [
+      "GL-001",
+      "GL-002",
+      "GL-004",
+      "GL-005",
+      "GL-006",
+      "GL-007",
+      "GL-031"
+    ],
+    "operations": [
+      "GL-008",
+      "GL-009",
+      "GL-010",
+      "GL-011",
+      "GL-012"
+    ],
+    "state": [
+      "GL-013",
+      "GL-014",
+      "GL-015",
+      "GL-016",
+      "GL-017",
+      "GL-018"
+    ],
+    "assurance": [
+      "GL-003",
+      "GL-019",
+      "GL-020",
+      "GL-021",
+      "GL-022",
+      "GL-023",
+      "GL-024",
+      "GL-025",
+      "GL-026",
+      "GL-030",
+      "GL-032"
+    ],
+    "performance": [
+      "GL-027",
+      "GL-028",
+      "GL-029"
+    ],
+    "product": [
+      "GL-033",
+      "GL-034",
+      "GL-035",
+      "GL-036",
+      "GL-037",
+      "GL-038",
+      "GL-039",
+      "GL-040",
+      "GL-041"
+    ]
+  },
+  "topological_antichains": [
+    [
+      "GL-003",
+      "GL-004",
+      "GL-005",
+      "GL-006",
+      "GL-008",
+      "GL-009",
+      "GL-011",
+      "GL-013",
+      "GL-014",
+      "GL-015",
+      "GL-018",
+      "GL-019",
+      "GL-023",
+      "GL-025",
+      "GL-031"
+    ],
+    [
+      "GL-001",
+      "GL-002",
+      "GL-007",
+      "GL-010",
+      "GL-012",
+      "GL-016",
+      "GL-017",
+      "GL-020",
+      "GL-024",
+      "GL-026",
+      "GL-027"
+    ],
+    [
+      "GL-021",
+      "GL-022",
+      "GL-028",
+      "GL-029",
+      "GL-032"
+    ],
+    [
+      "GL-030",
+      "GL-033",
+      "GL-034",
+      "GL-035",
+      "GL-036",
+      "GL-037",
+      "GL-038",
+      "GL-039",
+      "GL-040",
+      "GL-041"
+    ]
+  ],
+  "dependency_ready": [
+    "GL-003",
+    "GL-004",
+    "GL-005",
+    "GL-006",
+    "GL-008",
+    "GL-009",
+    "GL-011",
+    "GL-013",
+    "GL-014",
+    "GL-015",
+    "GL-018",
+    "GL-019",
+    "GL-023",
+    "GL-025",
+    "GL-031"
+  ],
+  "candidates_without_action_gates": [
+    "GL-004",
+    "GL-005",
+    "GL-006",
+    "GL-008",
+    "GL-009",
+    "GL-011",
+    "GL-013",
+    "GL-014",
+    "GL-015",
+    "GL-018",
+    "GL-019",
+    "GL-023"
+  ],
+  "external_gates": {
+    "workflow_permission": {
+      "phase": "before-action",
+      "condition": "The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.",
+      "blocks": "Publish changes to GitHub workflow files."
+    },
+    "privileged_linux": {
+      "phase": "before-action",
+      "condition": "Provide an explicitly authorized disposable Linux environment with the required kernel features, resource limits, and at least 50 GiB free. Mocked calls do not satisfy this gate.",
+      "blocks": "Run the privileged Linux bootstrap experiment."
+    },
+    "repository_policy_approval": {
+      "phase": "before-action",
+      "condition": "James approves the concrete protection changes from GL-023 before an executor applies them. A task card alone does not authorize remote settings changes.",
+      "blocks": "Apply repository protection settings."
+    },
+    "release_signing_setup": {
+      "phase": "before-action",
+      "condition": "The repository owner enables the selected release identity and required permissions. Do not export private keys or improvise signing identities.",
+      "blocks": "Use the release signing identity."
+    },
+    "consenting_trial_maintainer": {
+      "phase": "before-action",
+      "condition": "A real runner maintainer agrees to the named trial and its observations. Do not send recruitment messages without authorization.",
+      "blocks": "Start the real maintainer trial."
+    },
+    "elapsed_trial_observations": {
+      "phase": "completion",
+      "condition": "This is a completion gate, not a gate on trial setup. The agreed repeated workday observations must exist. Simulated runs cannot satisfy elapsed real use.",
+      "blocks": "Declare the real trial complete."
+    },
+    "release_publication_approval": {
+      "phase": "completion",
+      "condition": "James approves the exact version, verified artifacts, and public release after reviewing the completion matrix.",
+      "blocks": "Record final release approval or publish the release."
+    },
+    "native_probe_approval": {
+      "phase": "before-action",
+      "condition": "James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign.",
+      "blocks": "Run the bounded native terminal probe."
+    }
+  },
+  "limits": "Layers are antichains, not maximum antichains or resource schedules. Ready is not authorization."
+}

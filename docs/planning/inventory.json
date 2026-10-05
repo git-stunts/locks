@@ -1,0 +1,166 @@
+{
+  "schema": "git-locks-inventory/2",
+  "graph_version": "2026-10-05.2",
+  "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+  "captured_date": "2026-10-05",
+  "issue_coverage": {
+    "94": [
+      "GL-036"
+    ],
+    "93": [
+      "GL-003"
+    ],
+    "92": [
+      "GL-023",
+      "GL-024"
+    ],
+    "91": [
+      "GL-027"
+    ],
+    "90": [
+      "GL-029"
+    ],
+    "86": [
+      "GL-025",
+      "GL-026"
+    ],
+    "85": [
+      "GL-039"
+    ],
+    "84": [
+      "GL-035"
+    ],
+    "83": [
+      "GL-022"
+    ],
+    "82": [
+      "GL-007"
+    ],
+    "81": [
+      "GL-015"
+    ],
+    "80": [
+      "GL-012"
+    ],
+    "79": [
+      "GL-034"
+    ],
+    "78": [
+      "GL-033"
+    ],
+    "77": [
+      "GL-040"
+    ],
+    "76": [
+      "GL-020",
+      "GL-021"
+    ],
+    "75": [
+      "GL-008"
+    ],
+    "74": [
+      "GL-006",
+      "GL-007"
+    ],
+    "73": [
+      "GL-013",
+      "GL-014"
+    ],
+    "72": [
+      "GL-016",
+      "GL-017"
+    ],
+    "71": [
+      "GL-016"
+    ],
+    "70": [
+      "GL-019"
+    ],
+    "69": [
+      "GL-011"
+    ],
+    "68": [
+      "GL-005"
+    ],
+    "67": [
+      "completed:PR119"
+    ],
+    "66": [
+      "GL-001"
+    ],
+    "62": [
+      "GL-028"
+    ],
+    "61": [
+      "GL-009",
+      "GL-010"
+    ],
+    "57": [
+      "GL-004"
+    ],
+    "41": [
+      "GL-030"
+    ],
+    "20": [
+      "GL-028"
+    ],
+    "14": [
+      "GL-018"
+    ],
+    "10": [
+      "GL-038"
+    ],
+    "9": [
+      "GL-034"
+    ],
+    "7": [
+      "GL-037"
+    ],
+    "2": [
+      "GL-041"
+    ]
+  },
+  "external_gates": {
+    "workflow_permission": {
+      "phase": "before-action",
+      "condition": "The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.",
+      "blocks": "Publish changes to GitHub workflow files."
+    },
+    "privileged_linux": {
+      "phase": "before-action",
+      "condition": "Provide an explicitly authorized disposable Linux environment with the required kernel features, resource limits, and at least 50 GiB free. Mocked calls do not satisfy this gate.",
+      "blocks": "Run the privileged Linux bootstrap experiment."
+    },
+    "repository_policy_approval": {
+      "phase": "before-action",
+      "condition": "James approves the concrete protection changes from GL-023 before an executor applies them. A task card alone does not authorize remote settings changes.",
+      "blocks": "Apply repository protection settings."
+    },
+    "release_signing_setup": {
+      "phase": "before-action",
+      "condition": "The repository owner enables the selected release identity and required permissions. Do not export private keys or improvise signing identities.",
+      "blocks": "Use the release signing identity."
+    },
+    "consenting_trial_maintainer": {
+      "phase": "before-action",
+      "condition": "A real runner maintainer agrees to the named trial and its observations. Do not send recruitment messages without authorization.",
+      "blocks": "Start the real maintainer trial."
+    },
+    "elapsed_trial_observations": {
+      "phase": "completion",
+      "condition": "This is a completion gate, not a gate on trial setup. The agreed repeated workday observations must exist. Simulated runs cannot satisfy elapsed real use.",
+      "blocks": "Declare the real trial complete."
+    },
+    "release_publication_approval": {
+      "phase": "completion",
+      "condition": "James approves the exact version, verified artifacts, and public release after reviewing the completion matrix.",
+      "blocks": "Record final release approval or publish the release."
+    },
+    "native_probe_approval": {
+      "phase": "before-action",
+      "condition": "James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign.",
+      "blocks": "Run the bounded native terminal probe."
+    }
+  },
+  "scope": "Open issue snapshot plus explicit hardening evidence gaps. Issue 67 closed during plan preparation. Issue 41 is a container, not a duplicate implementation task."
+}

@@ -37,6 +37,8 @@ test-container:
 	python3 test/store-home.py
 	python3 test/help-synopses.py
 	python3 test/build-help.py
+	python3 scripts/roadmap.py --check
+	python3 test/planning-graph.py
 	python3 test/store-integrity.py
 	python3 test/doctor-findings.py
 	python3 test/renewal.py
