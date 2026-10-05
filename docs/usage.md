@@ -64,6 +64,7 @@ An acquisition expires when the current time reaches `expires`.
 `extend` refuses an expired or replaced acquisition. It sets expiry to the current time plus TTL, which can shorten an existing deadline.
 Without `--acquisition`, renewal addresses whichever live reservation currently has that job name.
 `release --record` requires one exact version and can become stale after renewal.
+An explicit `--acquisition` must be a nonempty UTF-8 line. Empty or multiline guards return exit 2 without releasing any jobs or semaphore slots.
 An unguarded release addresses the current job. Holder names do not authenticate callers.
 See [time and integer boundaries](time.md).
 

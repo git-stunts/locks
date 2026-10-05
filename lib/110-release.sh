@@ -21,7 +21,7 @@ cmd_release() {
       --acquisition)
         [[ $# -ge 2 ]] || usage
         ((${#jobs[@]} > 0)) || usage
-        valid_utf8 "$2" || fail '--acquisition must be valid UTF-8' 2
+        valid_holder "$2" || fail '--acquisition must be a nonempty UTF-8 line' 2
         acqs[${#jobs[@]} - 1]="$2"
         shift 2
         ;;
