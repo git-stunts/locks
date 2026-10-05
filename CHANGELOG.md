@@ -20,6 +20,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Reject empty or multiline `--acquisition` values in path and semaphore releases. An empty guard previously released the current reservation unconditionally; invalid guards now return exit 2 before changing any reservation (related to #74).
+
 - Reject NUL bytes in batch input before parsing or publication. Stored blobs and failed Git batch diagnostics with NUL bytes fail with structured JSON errors instead of losing bytes or leaking Bash warnings. Batch input uses a direct shell read, so signaling the CLI leaves no input-reader child or named capture file. Private snapshot capture files are removed after success or failure; wrapped-command binary streams remain unchanged.
 - Test clocks, pause gates, and trace writes require the literal opt-in `GIT_LOCKS_TEST_HOOKS=1` (#58). Supplied controls without opt-in fail with a structured usage error before store access or command launch. Tests and benchmarks enable controls only in their fixture environments; the flag is protection against accidental configuration, not caller authentication.
 - Reservation text and stored authority must be valid UTF-8 (#63). Invalid holder names, notes, paths, acquisition guards, batch input, and store pathnames are refused before publication; doctor can diagnose damaged records. JSON diagnostics preserve valid Unicode and replace invalid bytes with U+FFFD. Valid text is not normalized, and wrapped-command bytes remain the command's responsibility. No production dependency is added.
