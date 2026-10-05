@@ -12,6 +12,7 @@ import shlex
 import shutil
 import signal
 import tempfile
+import time
 
 import jsonschema
 
@@ -23,8 +24,8 @@ checks = 0
 failures = []
 
 
-def run(env, *args, data=None):
-    process = subprocess.Popen([CLI, *args], env=env, stdin=subprocess.PIPE,
+def run(env, *args, data=None, input_file=None):
+    process = subprocess.Popen([CLI, *args], env=env, stdin=input_file if input_file is not None else subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
         out, err = process.communicate(data, timeout=10)
@@ -227,17 +228,65 @@ for command in ('list', 'batch'):
 def batch_io_failure(base):
     env = setup(base)
     before, before_objects = root(env), objects(env)
-    shim = base / 'shim'
-    shim.mkdir()
-    executable = shim / 'cat'
-    executable.write_text('#!/bin/bash\nprintf ' + shlex.quote(RECORD.decode()) + '\nexit 65\n')
-    executable.chmod(0o755)
-    error(run(dict(env, PATH=str(shim) + os.pathsep + env['PATH']), 'batch'), 'usage')
+    descriptor = os.open(base, os.O_RDONLY)  # A real read error (EISDIR), not EOF.
+    try:
+        error(run(env, 'batch', input_file=descriptor), 'usage')
+    finally:
+        os.close(descriptor)
     assert root(env) == before and objects(env) == before_objects, 'partial failed input was published'
     clean_capture(env)
 
 
-case('batch capture rejects partial output from a failed input reader', batch_io_failure)
+case('batch input read errors remain structured and do not publish', batch_io_failure)
+
+
+def parent_cancel(base, sig):
+    env = setup(base)
+    before, before_objects = root(env), objects(env)
+    ready, cat_pid = base / 'read-ready', base / 'cat-pid'
+    # A test-only handshake proves that cmd_batch entered its input reader.
+    # The cat shim also observes the old command-substitution implementation.
+    startup = base / 'startup.sh'
+    startup.write_text('read() {\n'
+                       '  if [[ "${FUNCNAME[1]:-}" == cmd_batch ]]; then printf ready >"$READ_READY"; fi\n'
+                       '  builtin read "$@"\n}\n')
+    shim = base / 'shim'
+    shim.mkdir()
+    cat = shim / 'cat'
+    cat.write_text('#!/bin/bash\nprintf "%s\\n" "${BASHPID}" >"$CAT_PID"\nexec /usr/bin/cat\n')
+    cat.chmod(0o755)
+    env.update(PATH=str(shim) + os.pathsep + env['PATH'], BASH_ENV=str(startup),
+               READ_READY=str(ready), CAT_PID=str(cat_pid))
+    process = subprocess.Popen([CLI, 'batch'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, start_new_session=True)
+    try:
+        process.stdin.write(b'job: partial\nholder: alice\npaths:\n')
+        process.stdin.flush()
+        deadline = time.monotonic() + 3
+        while not ready.exists() and not cat_pid.exists():
+            assert process.poll() is None and time.monotonic() < deadline, 'input reader never became ready'
+            time.sleep(.01)
+        process.send_signal(sig)  # Signal only the CLI PID. Keep the input pipe open.
+        assert process.wait(timeout=2) in (-sig, 128 + sig)
+        time.sleep(.1)
+        if cat_pid.exists():
+            status = Path('/proc') / cat_pid.read_text().strip() / 'status'
+            assert not status.exists() or '\nState:\tZ' in status.read_text(), 'input reader survived CLI cancellation'
+        clean_capture(env)
+        assert root(env) == before and objects(env) == before_objects
+    finally:
+        process.stdin.close()
+        process.stdin = None
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.communicate(timeout=3)
+
+
+for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+    case('parent-only cancellation leaves no input reader or capture: ' + sig.name,
+         lambda base, s=sig: parent_cancel(base, s))
 
 print(f'NUL streams: {checks} passed; {len(failures)} failed', flush=True)
 raise SystemExit(bool(failures))
