@@ -78,4 +78,20 @@ for uid, state, allowed in [('0', 'S', True), ('1000', 'S', False), ('0', 'Z', F
         else:
             assert allowed and identity == {'pid': 20, 'parent': 1, 'started': 12345}
     checks += 1
+# Worker identity must preserve the configured unprivileged UID in all four fields.
+for uids, allowed in [(['1000'] * 4, True), (['0'] * 4, False),
+                      (['1001'] * 4, False), (['1000', '0', '1000', '1000'], False),
+                      ([], False)]:
+    fields[0] = 'S'
+    def content(path):
+        return ('20 (worker) ' + ' '.join(fields) if path.name == 'stat'
+                else 'Uid:\t' + '\t'.join(uids) + '\n')
+    with patch.object(provider.Path, 'read_text', content):
+        try:
+            identity = provider.process_identity(20, require_root=False)
+        except RuntimeError:
+            assert not allowed, uids
+        else:
+            assert allowed and identity == {'pid': 20, 'parent': 1, 'started': 12345}, uids
+    checks += 1
 print(f'Bootstrap health: {checks} synthetic cases passed', flush=True)

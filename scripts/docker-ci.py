@@ -154,8 +154,9 @@ def process_identity(pid, require_root=True):
     fields = (directory / 'stat').read_text().rsplit(')', 1)[1].split()
     identities = [line.split()[1:] for line in (directory / 'status').read_text().splitlines()
                   if line.startswith('Uid:')]
-    if (require_root and identities != [['0', '0', '0', '0']]) or fields[0] in ('Z', 'X', 'x'):
-        raise RuntimeError('bootstrap monitoring process is dead or not root-owned')
+    expected_uid = '0' if require_root else '1000'
+    if identities != [[expected_uid] * 4] or fields[0] in ('Z', 'X', 'x'):
+        raise RuntimeError('bootstrap process is dead or has an unexpected UID')
     return {'pid': pid, 'parent': int(fields[1]), 'started': int(fields[19])}
 
 
