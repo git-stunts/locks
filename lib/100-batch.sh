@@ -26,6 +26,16 @@ plan_batch() { # plans every parsed record against the current snapshot; B_LINES
 
 cmd_batch() {
   (($# == 0)) || usage
+  local input rc
+  input="$(
+    capture_text cat 2>&1
+    rc=$?
+    printf x # preserve trailing newlines on success and failure
+    exit "${rc}"
+  )"
+  rc=$?
+  input="${input%x}"
+  ((rc == 0)) || fail "batch: ${input}" 2
   local line key val job='' holder='' ttl='' parent='' note='' paths=() in_paths=0 count=0
   finish_record() {
     if [[ -z "${job}" && -z "${holder}" && -z "${ttl}" && -z "${parent}" && -z "${note}" && ${#paths[@]} -eq 0 ]]; then return 0; fi # only a wholly empty record is skipped; one with just parent: or ttl: is malformed
@@ -74,7 +84,7 @@ cmd_batch() {
       paths) in_paths=1 ;;
       *) fail "batch: unknown line '${line}'" 2 ;;
     esac
-  done
+  done <<<"${input}"
   finish_record
   ((count > 0)) || fail 'batch: no records on stdin' 2
   commit_claims plan_batch
