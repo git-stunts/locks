@@ -7,7 +7,7 @@
 # writes, and repair, if it ever exists, is a separate explicit command.
 
 DOC_FINDINGS=0
-DOC_CHECKS='"record-decodes","job-ref-name","path-ref-missing","path-ref-elsewhere","path-ref-orphan","path-ref-stray","parent-missing","parent-expired","parent-holder","family-cycle","sem-meta","sem-gen","sem-record","sem-capacity","unknown-ref"'
+DOC_CHECKS='"record-decodes","job-ref-name","path-ref-missing","path-ref-elsewhere","path-ref-orphan","path-ref-stray","path-overlap","parent-missing","parent-expired","parent-holder","family-cycle","sem-meta","sem-gen","sem-record","sem-capacity","unknown-ref"'
 
 finding() { # check subject detail -> one finding line on stdout
   local _j1 _j2 _j3
@@ -18,32 +18,8 @@ finding() { # check subject detail -> one finding line on stdout
   DOC_FINDINGS=$((DOC_FINDINGS + 1))
 }
 
-doctor_hash_paths() { # path... -> PATH_HASH for every path, in one git process: each path becomes a file, hash-object hashes them all
-  local dir p i=0 files=() todo=() out h rc
-  for p in "$@"; do
-    [[ -n "${PATH_HASH[${p}]+x}" ]] && continue
-    in_list "${p}" "${todo[@]}" && continue
-    todo+=("${p}")
-  done
-  ((${#todo[@]} > 0)) || return 0
-  dir="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-doctor.XXXXXX")" || fail 'cannot create a temporary directory for hashing' 2
-  for p in "${todo[@]}"; do
-    printf '%s' "${p}" >"${dir}/${i}"
-    files+=("${dir}/${i}")
-    i=$((i + 1))
-  done
-  out="$(g hash-object --no-filters "${files[@]}" 2>&1)" # --no-filters: the same bytes path_ref hashes from stdin
-  rc=$?
-  rm -rf "${dir}"
-  ((rc == 0)) || store_error "hash-object exited ${rc}: ${out}"
-  i=0
-  while IFS= read -r h; do
-    [[ -z "${h}" ]] && continue
-    valid_oid "${h}" || store_error "hash-object line does not parse: ${h}"
-    PATH_HASH["${todo[${i}]}"]="${h}"
-    i=$((i + 1))
-  done <<<"${out}"
-  ((i == ${#todo[@]})) || store_error "hash-object returned ${i} hashes for ${#todo[@]} paths"
+doctor_path_overlap() { # path ancestor job ancestor-job
+  finding path-overlap "$3" "live path '$1' overlaps '$2' owned by job $4"
 }
 
 doctor_lock_record() { # subject oid -> decoded lock or a diagnostic finding
@@ -158,7 +134,7 @@ cmd_doctor() {
       [[ -n "${p}" ]] && all_paths+=("${p}")
     done
   done
-  doctor_hash_paths "${all_paths[@]}"
+  hash_paths "${all_paths[@]}"
 
   # Every listed path has a path ref pointing at this record; every path ref is listed by the record it points at.
   local have key
@@ -188,6 +164,8 @@ cmd_doctor() {
       finding path-ref-stray "${ref}" "points at record ${oid} (job ${OID_JOBS[${oid}]% }) which lists no path hashing to this ref"
     fi
   done
+
+  check_path_overlaps doctor_path_overlap "${at}" "${jobs[@]}"
 
   # Families: the parent exists, is live, has the same holder, and the chain has no cycle.
   local parent pexp pholder holder cur steps

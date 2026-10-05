@@ -791,17 +791,17 @@ R="$(mkrepo)"
 cd "${R}" || exit 2
 for i in $(seq 1 50); do git-locks claim --job "j${i}" --holder h "p${i}.md" >/dev/null 2>&1; done
 git_count git-locks list
-check "list of 50 locks spawns at most 7 git processes (lookup, store validation, root, tree type, tree entries, blobs)" "$((n <= 7))" "1"
+check "list of 50 locks spawns at most 8 git processes (snapshot plus one batched path-index validation)" "$((n <= 8))" "1"
 git_count git-locks check p1.md p2.md p3.md
-check "check of 3 paths spawns at most 10 git processes (snapshot plus one hash-object per path)" "$((n <= 10))" "1"
+check "check of 3 known paths spawns at most 8 git processes (validated path hashes are reused)" "$((n <= 8))" "1"
 git_count git-locks show --job j7
-check "show spawns at most 7 git processes" "$((n <= 7))" "1"
+check "show spawns at most 8 git processes" "$((n <= 8))" "1"
 git_count git-locks claim --job jx --holder h a.md b.md c.md
-check "a 3-path claim spawns at most 15 git processes (lookup, store validation, immutable snapshot, hashes, record, index, root CAS)" "$((n <= 15))" "1"
+check "a 3-path claim spawns at most 16 git processes (validated snapshot, new path hashes, record, index, root CAS)" "$((n <= 16))" "1"
 git-locks sem create s --capacity 5 >/dev/null 2>&1
 for i in 1 2 3; do git-locks sem acquire s --job "t${i}" --holder h >/dev/null 2>&1; done
 git_count git-locks sem show s
-check "sem show spawns at most 7 git processes" "$((n <= 7))" "1"
+check "sem show spawns at most 8 git processes" "$((n <= 8))" "1"
 out="$(git-locks list 2>&1)"
 lines n "${out}"
 check "the snapshot path lists every lock" "${n}" "51"
@@ -1192,6 +1192,11 @@ out="$(git-locks doctor 2>&1)"
 findings n "${out}" parent-missing
 check "a child whose parent has no job ref is one parent-missing finding" "${n}" "1"
 git-locks release --job c >/dev/null 2>&1
+check "release does not silently repair a missing parent" "$?" 2
+# Fixture teardown is explicit; normal commands cannot repair damaged authority.
+gs update-ref -d refs/locks/jobs/c
+pref r c.md
+gs update-ref -d "${r}"
 git-locks claim --job p --holder alice p.md >/dev/null 2>&1
 git-locks claim --job q --holder alice --parent p q.md >/dev/null 2>&1
 poid="$(gs rev-parse refs/locks/jobs/p)"
@@ -1202,7 +1207,10 @@ gs update-ref "${r}" "${rewritten}"
 out="$(git-locks doctor 2>&1)"
 findings n "${out}" parent-holder
 check "a parent held by someone else is one parent-holder finding" "${n}" "1"
+gs update-ref refs/locks/jobs/p "${poid}"
+gs update-ref "${r}" "${poid}"
 git-locks release --job p >/dev/null 2>&1
+check "release works after the fixture restores coherent parent ownership" "$?" 0
 
 # A cycle, written by hand: x's parent is y and y's parent is x.
 xrec="$(printf 'schema: git-locks/1\njob: x\nholder: alice\nclaimed: 1000000\nexpires: 2000000\nparent: y\nfamily: 0\nacquisition: t-1\npaths:\nx.md' | blob)"
@@ -1247,11 +1255,13 @@ findings n "${out}" sem-capacity
 check "two live slots on a capacity of one is one sem-capacity finding" "${n}" "1"
 contains "naming the semaphore and the numbers" "${out}" '"subject":"one","detail":"2 live slots over a capacity of 1"'
 gs update-ref -d refs/locks/sem/one/slots/o2
+one_gen="$(gs rev-parse refs/locks/sem/one/gen)"
 gs update-ref -d refs/locks/sem/one/gen
 out="$(git-locks doctor 2>&1)"
 findings n "${out}" sem-gen
 check "a semaphore without its gen ref is one sem-gen finding" "${n}" "1"
 valid "semaphore finding lines" "${out}"
+gs update-ref refs/locks/sem/one/gen "${one_gen}"
 
 # Doctor reads a stored capacity with the same decimal rule as sem_read: leading zeros are decimal, out of range is a sem-record finding.
 git-locks sem create legacy --capacity 1 >/dev/null 2>&1
@@ -1777,6 +1787,7 @@ out="$(git-locks show --job held 2>&1)"
 check 'legacy leading-zero timestamps remain readable' "$?" 0
 jfields 'legacy timestamps emit decimal JSON numbers' "${out}" 'claimed=1000000' 'expires=1014400' 'remaining=14400'
 valid 'legacy timestamp output' "${out}"
+fixture_git --git-dir="${store}" update-ref refs/locks/sem/gpu/gen "${bad_oid}"
 for capacity in 02 9223372036854775807; do
   legacy="${meta_record/capacity: 2/capacity: ${capacity}}"
   good_oid="$(printf '%s\n' "${legacy}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
@@ -1786,6 +1797,7 @@ for capacity in 02 9223372036854775807; do
   valid "stored capacity ${capacity} output" "${out}"
 done
 fixture_git --git-dir="${store}" update-ref -d refs/locks/sem/gpu/meta
+fixture_git --git-dir="${store}" update-ref -d refs/locks/sem/gpu/gen
 
 # A valid maximum generation can be read, but advancing it must fail before
 # the child or a wrapped negative generation reaches any authoritative ref.
@@ -1808,6 +1820,8 @@ fixture_git --git-dir="${store}" update-ref -d refs/locks/jobs/held
 fixture_git --git-dir="${store}" update-ref -d "refs/locks/paths/${path_oid}"
 fixture_git --git-dir="${store}" update-ref refs/locks/dirs/opaque "${bad_oid}"
 fixture_git --git-dir="${store}" update-ref refs/locks/sem/gpu/gen "${bad_oid}"
+good_oid="$(printf '%s\n' "${meta_record}" | fixture_git --git-dir="${store}" hash-object -w --stdin)"
+fixture_git --git-dir="${store}" update-ref refs/locks/sem/gpu/meta "${good_oid}"
 out="$(git-locks check x.md 2>&1)"
 check 'opaque generation records do not block a free path' "$?" 0
 jfields 'free path stays free beside opaque tokens' "${out}" 'state="free"'
@@ -1858,6 +1872,18 @@ check 'the intended store independently owns the claim' "$?" 0
 jfields 'the intended store preserves the original owner' "${out}" 'holder="alice"'
 got="$(git --git-dir="${R}/foreign.git" for-each-ref --format='%(refname)')"
 check 'the inherited common directory acquires no reservation refs' "${got}" ''
+unset GIT_LOCKS_STORE
+
+# An intact job record is not sufficient when its path index has disappeared.
+R="$(mkrepo)"
+cd "${R}" || exit 2
+export GIT_LOCKS_STORE="${R}/integrity-store.git"
+git-locks claim --job held --holder alice held.md >/dev/null
+path_oid="$(printf held.md | git hash-object --stdin)"
+fixture_git --git-dir="${GIT_LOCKS_STORE}" update-ref -d "refs/locks/paths/${path_oid}"
+out="$(git-locks check held.md 2>&1)"
+check 'a missing path index fails closed instead of reporting free' "$?" 2
+jfields 'a missing path index is a store-read error' "${out}" 'event="error"' 'reason="store-read"'
 unset GIT_LOCKS_STORE
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
