@@ -93,3 +93,7 @@ These incidents explain several current constraints:
   The current protocol reads one immutable tree and conditionally publishes its successor through one ref.
 
 See [CHANGELOG](../CHANGELOG.md), the [observation study](studies/membership-observation/README.md), and the [audit reports](audit/) for historical context.
+
+## Command help
+
+Edit command synopses only in `sub_usage_text` in `lib/000-prelude.sh`. The build derives the executable header and full usage from these literal strings. Keep the command reference in `docs/usage.md` in sync; `test/help-synopses.py` compares it with public help. Run the build and tests through the Docker runner, and commit the generated executable.

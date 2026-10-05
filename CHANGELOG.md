@@ -4,6 +4,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+- Derive executable header and full help from canonical command synopses. Document wrapper parents and simultaneous release guards; check the command reference for drift.
+
 ### Added
 
 - Three audit reports under `docs/audit/` from the 2026-10-02 Internal Repository Survey: Day 0 DX and purity (20 findings, TTV 6.3/10), architecture and provenance (16), and ship readiness (15, one Critical: `transact()` retries permanent failures 200 times). Every finding carries an action prompt; the consolidated backlog is filed as #52–#86.

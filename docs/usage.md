@@ -156,7 +156,7 @@ Workers must agree on one admission method for a shared resource.
 
 ## Command reference
 
-Each command supports `--help`. Help also uses JSON Lines.
+Reservation commands support `--help`. Use `git locks help` for the full command list. Help also uses JSON Lines.
 The tables summarize syntax; the sections above explain lifetime and identity conditions.
 
 | Command | Result |
@@ -169,7 +169,7 @@ The tables summarize syntax; the sections above explain lifetime and identity co
 | `extend --job <id> --ttl <s> [--acquisition <id>]` | Renew a live reservation. |
 | `release --job <id> [--record <oid>] [--acquisition <id>] [--job <id>...]` | Release jobs and descendants. Conditions apply to the preceding job; both must match if both are supplied. |
 | `batch < records` | Acquire the input records together, or none. |
-| `with … -- <command>...` | Acquire, run, and attempt release. See the wrapper syntax above. |
+| `with --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <command>...` | Acquire, run, and attempt release. See the wrapper syntax above. |
 | `sweep` | Remove expired reservations. |
 | `store` | Report the resolved store location. |
 | `doctor` | Check one snapshot without repair. Report findings and the inspected basis. |
