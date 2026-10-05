@@ -1,6 +1,18 @@
 # ---------------------------------------------------------------- the store
 
 STORE=''
+STORE_INDEX='' # only state_tree may select the private index used by store Git
+
+store_git() ( # isolate store plumbing; subject discovery and wrapped commands keep the caller's environment
+  local name
+  for name in "${!GIT_@}"; do
+    case "${name}" in GIT_LOCKS_*) ;; *) unset "${name}" ;; esac
+  done
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_ALLOW_PROTOCOL='' GIT_TERMINAL_PROMPT=0
+  [[ -z "${STORE_INDEX}" ]] || export GIT_INDEX_FILE="${STORE_INDEX}"
+  exec git "$@"
+)
 
 resolve_store() { # sets STORE; creates the default or a custom store on first use
   local common='' sel key
@@ -43,7 +55,7 @@ create_store() ( # private initialization; publish a complete directory on this 
   trap 'exit 143' TERM
   # No templates: a user template may contain hooks or refs, neither of which
   # belongs in a newly allocated reservation store.
-  result="$(git init -q --bare --template= "${prepared}" 2>&1)" || store_write_error "cannot initialize the lock store: ${result}"
+  result="$(store_git -c core.hooksPath=/dev/null -c core.fsmonitor=false init -q --bare --object-format=sha1 --template= "${prepared}" 2>&1)" || store_write_error "cannot initialize the lock store: ${result}"
   # Another initializer may already have published while Git was preparing ours.
   [[ -e "${STORE}" || -L "${STORE}" ]] && return 0
   # GNU and BSD mv support -n. If another initializer wins between the check and
@@ -56,4 +68,4 @@ create_store() ( # private initialization; publish a complete directory on this 
   fi
 )
 
-g() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false --git-dir="${STORE}" "$@"; }
+g() { store_git -c core.hooksPath=/dev/null -c core.fsmonitor=false --git-dir="${STORE}" "$@"; }

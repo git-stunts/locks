@@ -11,10 +11,10 @@ STATE_OID=''
 SNAP_LEGACY_ALLOWED=0 # only the explicitly offline migration may read old refs
 
 state_tree() ( # writes the planned successor tree; cleanup stays in its subshell
-  local dir ref before after path
+  local dir ref before after path STORE_INDEX
   dir="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-index.XXXXXX")" || return 1
   trap 'rm -rf "${dir}"' EXIT
-  export GIT_INDEX_FILE="${dir}/index"
+  STORE_INDEX="${dir}/index"
   if [[ -n "${STATE_OID}" ]]; then
     g read-tree "${STATE_OID}" || return 1
   else
