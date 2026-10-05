@@ -178,12 +178,12 @@ def main():
         text = (ROOT / task['path']).read_bytes().decode('utf-8')
         prompt, remainder = text.split('```text\n', 1)[1].split('```', 1)
         front = text.split('---\n', 2)[1]
-        sys.stdout.write(prompt + '\nTask metadata:\n' + front + '\nTask card:\n' + remainder)
+        sys.stdout.buffer.write((prompt + '\nTask metadata:\n' + front + '\nTask card:\n' + remainder).encode('utf-8'))
         return
     for name, expected in projections.items():
         path = ROOT / name
         if args.write:
-            path.write_text(expected)
+            path.write_bytes(expected.encode('utf-8'))
         else:
             require(path.exists() and path.read_bytes().decode('utf-8') == expected, 'stale graph projection: ' + name)
     print(f'{len(tasks)} tasks; {sum(len(t["dependencies"]) for t in tasks)} edges; '

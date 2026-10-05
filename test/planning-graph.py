@@ -99,6 +99,17 @@ with tempfile.TemporaryDirectory(prefix='roadmap-fixture-') as temporary:
              lambda text: json.dumps(dict(json.loads(text), issue_coverage={})))
     mutation('missing source', card, lambda text: re.sub(r'^sources: .*$', 'sources: ["absent-source"]', text, flags=re.M))
     mutation('missing prerequisite prose', card, lambda text: text.replace(reason_line, 'omitted'))
+    locale = dict(os.environ, LC_ALL='C', PYTHONUTF8='0', PYTHONCOERCECLOCALE='0', PYTHONIOENCODING='ascii')
+    for arguments in (['--write'], ['--prompt', 'GL-001']):
+        result = subprocess.run([sys.executable, str(fixture / 'scripts/roadmap.py'), *arguments],
+                                env=locale, capture_output=True, timeout=10)
+        assert result.returncode == 0, (arguments, result.stderr)
+        if arguments[0] == '--write':
+            for path, expected in projection.items():
+                assert (fixture / path).read_bytes() == expected.encode('utf-8'), path
+        else:
+            assert ' — '.encode('utf-8') in result.stdout
+        checks += 1
     with (fixture / 'docs/tasks/DAG.md').open('ab') as stream:
         stream.write(b'stale projection\n')
     result = subprocess.run([sys.executable, str(fixture / 'scripts/roadmap.py'), '--check'],
