@@ -8,9 +8,14 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out="${1:-${here}/bin/git-locks}"
 schema="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":"), ensure_ascii=False))' "${here}/schema/git-locks.schema.json")"
 tmp="$(mktemp "${TMPDIR:-/tmp}/git-locks-build.XXXXXX")"
+trap 'rm -f "${tmp}"' EXIT
 {
   for f in "${here}"/lib/[0-8][0-9][0-9]-*.sh "${here}"/lib/9[0-8][0-9]-*.sh; do
-    [[ -e "${f}" ]] && cat "${f}"
+    if [[ "${f}" == "${here}/lib/000-prelude.sh" ]]; then
+      python3 "${here}/scripts/generate-help.py" "${f}"
+    elif [[ -e "${f}" ]]; then
+      cat "${f}"
+    fi
   done
   printf 'cmd_schema() { # the public output schema, one JSON line; the pretty form is schema/git-locks.schema.json in the repository\n'
   printf '  (($# == 0)) || usage\n'

@@ -1,19 +1,7 @@
 #!/usr/bin/env bash
 # git-locks — declare the paths you are about to write, as refs in a store.
 #
-#   git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] <path>...
-#   git locks batch   < records        several claims in ONE transaction, all or nothing
-#   git locks release --job <id> [--record <oid> | --acquisition <id>] [--job <id>...]
-#   git locks check   <path>...        exit 1 if any path is held
-#   git locks list
-#   git locks sweep                    delete expired locks
-#   git locks store                    print the store this directory resolves to
-#   git locks show    --job <id>       one lock in full, with the seconds it has left
-#   git locks ttl     --job <id>       just the seconds left
-#   git locks extend  --job <id> --ttl <seconds> [--acquisition <id>]
-#   git locks with    --job <id> --holder <name> [--ttl <s>] [--wait <s>] [--sem <name>] [<path>...] -- <command>...
-#   git locks sem     create|acquire|release|show|list|delete   capacity semaphores
-#   git locks help | schema | version
+# @GIT_LOCKS_SYNOPSES@
 #
 # Works inside or outside a git repository: the default store is keyed on the
 # repository's main git dir when there is one, else on the directory itself.
@@ -66,23 +54,7 @@ NOW_CACHED='' # the clock, read once per snapshot by now()
 
 usage_text() {
   cat <<'EOF'
-usage: git locks claim   --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] [--note <text>] <path>...
-       git locks batch   < records        several claims in ONE transaction, all or nothing
-       git locks release --job <id> [--record <oid> | --acquisition <id>] [--job <id>...]
-       git locks check   <path>...
-       git locks list
-       git locks sweep
-       git locks store
-       git locks show    --job <id>
-       git locks ttl     --job <id>
-       git locks extend  --job <id> --ttl <seconds> [--acquisition <id>]
-       git locks with    --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--note <text>] [<path>...] -- <command>...
-       git locks sem     create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>]
-                                  | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>
-       git locks doctor
-       git locks migrate --offline
-       git locks version
-       git locks help | schema
+@GIT_LOCKS_USAGE@
 
 claim    lock the paths for the job, atomically; re-claiming with the same job replaces its path set and
          its record, but is refused while the job has stored descendants (renew a parent with extend);
@@ -158,11 +130,13 @@ sub_usage() { # subcommand -> its usage as a usage object on stdout
   printf '{"event":"usage","usage":%s}\n' "${_j1}"
 }
 
+# Canonical synopses. scripts/generate-help.py derives the header and full usage
+# at build time. Keep each case as one literal printf with a final newline.
 sub_usage_text() {
   case "$1" in
     claim) printf 'usage: git locks claim --job <id> --holder <name> [--ttl <seconds>] [--parent <id>] [--note <text>] <path>...\n' ;;
     batch) printf 'usage: git locks batch < records\n' ;;
-    release) printf 'usage: git locks release --job <id> [--record <oid> | --acquisition <id>] [--job <id>...]\n' ;;
+    release) printf 'usage: git locks release --job <id> [--record <oid>] [--acquisition <id>] [--job <id>...]\n' ;;
     check) printf 'usage: git locks check <path>...\n' ;;
     list) printf 'usage: git locks list\n' ;;
     sweep) printf 'usage: git locks sweep\n' ;;
@@ -170,10 +144,13 @@ sub_usage_text() {
     show) printf 'usage: git locks show --job <id>\n' ;;
     ttl) printf 'usage: git locks ttl --job <id>\n' ;;
     extend) printf 'usage: git locks extend --job <id> --ttl <seconds> [--acquisition <id>]\n' ;;
-    with) printf 'usage: git locks with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--note <text>] [<path>...] -- <command>...\n' ;;
+    with) printf 'usage: git locks with --job <id> --holder <name> [--ttl <seconds>] [--wait <seconds>] [--sem <name>] [--parent <id>] [--note <text>] [<path>...] -- <command>...\n' ;;
     doctor) printf 'usage: git locks doctor\n' ;;
-    migrate) printf 'usage: git locks migrate --offline (all old readers and writers must be stopped)\n' ;;
-    sem) printf 'usage: git locks sem create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>] | release <name> --job <id> [--record <oid> | --acquisition <id>] | show <name> | list | delete <name>\n' ;;
+    migrate) printf 'usage: git locks migrate --offline\n' ;;
+    sem) printf 'usage: git locks sem create <name> --capacity <n> | acquire <name> --job <id> --holder <name> [--ttl <s>] [--wait <s>] | release <name> --job <id> [--record <oid>] [--acquisition <id>] | show <name> | list | delete <name>\n' ;;
+    version) printf 'usage: git locks version\n' ;;
+    schema) printf 'usage: git locks schema\n' ;;
+    help) printf 'usage: git locks help\n' ;;
     *) usage_text ;;
   esac
 }
