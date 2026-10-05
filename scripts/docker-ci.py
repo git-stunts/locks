@@ -144,14 +144,14 @@ def quota_filesystem(data, image):
     return {'device': device, 'capacity_bytes': fs.f_blocks * fs.f_frsize, 'free_bytes': available}
 
 
-def process_identity(pid):
+def process_identity(pid, require_root=True):
     if type(pid) is not int or pid < 2:
         raise RuntimeError('invalid bootstrap monitor PID')
     directory = Path('/proc') / str(pid)
     fields = (directory / 'stat').read_text().rsplit(')', 1)[1].split()
     identities = [line.split()[1:] for line in (directory / 'status').read_text().splitlines()
                   if line.startswith('Uid:')]
-    if identities != [['0', '0', '0', '0']] or fields[0] in ('Z', 'X', 'x'):
+    if (require_root and identities != [['0', '0', '0', '0']]) or fields[0] in ('Z', 'X', 'x'):
         raise RuntimeError('bootstrap monitoring process is dead or not root-owned')
     return {'pid': pid, 'parent': int(fields[1]), 'started': int(fields[19])}
 
@@ -183,6 +183,56 @@ def monitor_health():
     if proof['watchdog']['parent'] != proof['monitor']['pid']:
         raise RuntimeError('bootstrap watchdog does not belong to this monitor')
     return proof
+
+
+def cgroup_limits():
+    quota, period = (CGROUP / 'cpu.max').read_text().split()
+    if quota == 'max' or not 0 < int(quota) <= 2 * int(period) or int(period) <= 0:
+        raise RuntimeError('CPU enforcement missing')
+    if (CGROUP / 'memory.max').read_text().strip() != str(MEMORY_BYTES):
+        raise RuntimeError('memory enforcement changed')
+    if (CGROUP / 'memory.swap.max').read_text().strip() != '0':
+        raise RuntimeError('swap enforcement changed')
+    processes = (CGROUP / 'pids.max').read_text().strip()
+    if processes == 'max' or not 0 < int(processes) <= 2048:
+        raise RuntimeError('process-count enforcement missing')
+    if not (CGROUP / 'cgroup.kill').is_file():
+        raise RuntimeError('owned process-tree cancellation unavailable')
+
+
+def quota_admission(info, worker_pid):
+    """Collect a verified boundary; callers must recheck it while work runs.
+
+    Not yet used to relax either runner's ordinary free-space floor.
+    """
+    if platform.system() != 'Linux':
+        raise RuntimeError('bootstrap quota admission requires native Linux')
+    if (info.get('DockerRootDir') != str(DATA / 'docker') or info.get('Driver') != 'overlay2'
+            or info.get('CgroupDriver') != 'cgroupfs' or info.get('CgroupVersion') != '2'):
+        raise RuntimeError('daemon is outside the private bootstrap boundary')
+    quota = quota_filesystem(DATA, CONTROL / 'storage.ext4')
+    health = monitor_health()
+    cgroup_limits()
+    free = min(shutil.disk_usage(ROOT).free, shutil.disk_usage(CONTROL).free)
+    if free < FREE_BYTES:
+        raise RuntimeError('physical backing free space below 50 GiB')
+    pidfile = DATA / 'dockerd.pid'
+    metadata = os.lstat(pidfile)
+    if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0
+            or metadata.st_mode & 0o022 or metadata.st_nlink != 1 or not 0 < metadata.st_size <= 32):
+        raise RuntimeError('private daemon PID file is not protected')
+    daemon = process_identity(int(pidfile.read_text().strip()))
+    worker = process_identity(worker_pid, require_root=False)
+    for identity in (daemon, worker):
+        groups = (Path('/proc') / str(identity['pid']) / 'cgroup').read_text().splitlines()
+        if len(groups) != 1 or not groups[0].startswith('0::'):
+            raise RuntimeError('expected unified process cgroup membership')
+        membership = groups[0][3:]
+        if membership != '/' + SLICE and not membership.startswith('/' + SLICE + '/'):
+            raise RuntimeError('daemon or worker escaped the owned cgroup')
+    return {'capacity_bytes': quota['capacity_bytes'], 'device': quota['device'],
+            'monitor': health['monitor'], 'watchdog': health['watchdog'],
+            'daemon': daemon, 'worker': worker, 'backing_free_bytes': free}
 
 
 class Provider:
@@ -225,15 +275,7 @@ class Provider:
         if control_bytes > 64 * 1024**2:
             raise RuntimeError('bootstrap control/output reserve exhausted')
         if self.slice_owned:
-            quota, period = (CGROUP / 'cpu.max').read_text().split()
-            if quota == 'max' or int(quota) > 2 * int(period):
-                raise RuntimeError('CPU enforcement missing')
-            if (CGROUP / 'memory.max').read_text().strip() != str(MEMORY_BYTES):
-                raise RuntimeError('memory enforcement changed')
-            if (CGROUP / 'memory.swap.max').read_text().strip() != '0':
-                raise RuntimeError('swap enforcement changed')
-            if not (CGROUP / 'cgroup.kill').is_file():
-                raise RuntimeError('owned process-tree cancellation unavailable')
+            cgroup_limits()
         if self.mounted:
             quota_filesystem(DATA, CONTROL / 'storage.ext4')
         logs = allocated(ROOT / '.test-results')
