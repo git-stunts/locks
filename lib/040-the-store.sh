@@ -79,7 +79,12 @@ resolve_store() { # sets STORE; creates the default or a custom store on first u
   fi
   case "${sel}" in
     '')
-      home_root="${GIT_LOCKS_HOME:-${HOME}/.git-stunts}"
+      if [[ -n "${GIT_LOCKS_HOME:-}" ]]; then
+        home_root="${GIT_LOCKS_HOME}"
+      else
+        [[ -n "${HOME:-}" ]] || store_error 'default store requires HOME or GIT_LOCKS_HOME; alternatively select a store with GIT_LOCKS_STORE or locks.store'
+        home_root="${HOME}/.git-stunts"
+      fi
       [[ "${home_root}" == /* ]] || home_root="${key}/${home_root}"
       STORE="${home_root}/locks${key}"
       ;;

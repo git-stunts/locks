@@ -10,6 +10,8 @@ their location; `self` selects the common Git directory. Outside a repository,
 the physical current directory is the anchor. Paths containing newlines are
 refused instead of being silently shortened by shell command substitution.
 
+Default selection uses a nonempty `GIT_LOCKS_HOME`, or `HOME/.git-stunts` when that override is absent or empty. If both variables are absent or empty, git-locks exits 2 with a structured `store-read` error before initialization. An explicit `GIT_LOCKS_STORE` or configured `locks.store` does not require `HOME`.
+
 For example, `locks.store=.reservations/store.git` in a normal repository at
 `/projects/app` selects `/projects/app/.reservations/store.git` from the root,
 any subdirectory, and its linked worktrees. This changes earlier behavior that
