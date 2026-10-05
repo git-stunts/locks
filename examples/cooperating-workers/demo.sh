@@ -89,7 +89,9 @@ expect_status 1 "${DEMO_BIN}" with --job competing --holder bob --note 'updating
   -- bash "${HERE}/worker.sh" independent independent unused independent \
   >"${DEMO_RECEIPTS}/independent.stdout.txt" 2>"${DEMO_RECEIPTS}/independent.jsonl"
 "${DEMO_BIN}" show --job build >"${DEMO_RECEIPTS}/before-renewal.jsonl"
-"${DEMO_BIN}" extend --job build --ttl 120 >"${DEMO_RECEIPTS}/renewal.jsonl"
+build_acquisition=''
+acquisition_from build_acquisition "${DEMO_RECEIPTS}/worker-a.jsonl"
+"${DEMO_BIN}" extend --job build --ttl 120 --acquisition "${build_acquisition}" >"${DEMO_RECEIPTS}/renewal.jsonl"
 "${DEMO_BIN}" show --job build >"${DEMO_RECEIPTS}/after-renewal.jsonl"
 : >"${gate}"
 wait "${worker}"

@@ -28,6 +28,7 @@ test-container:
 	python3 test/store-failures.py
 	python3 test/store-bootstrap.py
 	python3 test/store-hooks.py
+	python3 test/renewal.py
 	bash test/test.sh
 	python3 test/capacity.py
 	bash test/literal-paths.sh

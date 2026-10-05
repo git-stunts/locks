@@ -1361,7 +1361,7 @@ wait "${wpid}" 2>/dev/null
 out="$(git-locks sem show w1 2>&1)"
 jfields "a TERM during the lock wait released the semaphore slot with had taken" "${out}" 'live=0'
 
-# sweep: a lock renewed between sweep's read and its transaction is not deleted.
+# sweep: an expired acquisition replaced between its read and transaction is not deleted.
 R="$(mkrepo)"
 cd "${R}" || exit 2
 GIT_LOCKS_NOW=1000 git-locks claim --job renew --holder h --ttl 10 r.md >/dev/null 2>&1
@@ -1369,14 +1369,14 @@ GATE6="$(mktemp -d "${TMPDIR:-/tmp}/git-locks-gate6.XXXXXX")/go"
 GIT_LOCKS_NOW=2000 GIT_LOCKS_PAUSE_AFTER_READ="${GATE6}" git-locks sweep >"${OUT_SWEEP}" 2>&1 &
 spid=$!
 reached "${GATE6}"
-GIT_LOCKS_NOW=2000 git-locks extend --job renew --ttl 100 >/dev/null 2>&1
+GIT_LOCKS_NOW=2000 git-locks claim --job renew --holder h --ttl 100 r.md >/dev/null 2>&1
 : >"${GATE6}"
 wait "${spid}"
-check "sweep exits 0 when the expired lock it saw was renewed underneath" "$?" "0"
+check "sweep exits 0 when the expired acquisition it saw was replaced underneath" "$?" "0"
 out="$(cat "${OUT_SWEEP}")"
 check "and sweeps nothing" "${out}" ""
 out="$(GIT_LOCKS_NOW=2000 git-locks ttl --job renew 2>&1)"
-jfields "the renewed lock is still there with its new expiry" "${out}" 'expires=2100'
+jfields "the replacement lock is still there with its new expiry" "${out}" 'expires=2100'
 
 out="$(git-locks version extra 2>&1)"
 check "version takes no arguments" "$?" "2"
