@@ -20,6 +20,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ### Fixed
 
+- Default store selection refuses an unset or empty `HOME` with a structured `store-read` error before initialization. Explicit stores and nonempty `GIT_LOCKS_HOME` overrides still work without `HOME` (related to #68).
+
 - `doctor` reports an invalid job record without deriving stray-path findings from its unreadable contents. Valid stray and orphan path diagnostics remain available in the same snapshot (related to #75).
 
 - Reject empty or multiline `--acquisition` values in path and semaphore releases. An empty guard previously released the current reservation unconditionally; invalid guards now return exit 2 before changing any reservation (related to #74).
