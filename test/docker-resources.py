@@ -95,3 +95,34 @@ for uid in ('0', '1001'):
         else:
             raise AssertionError('cleanup falsely reported an active helper stopped')
 print('Docker resource cleanup: root helper timeout and unrelated signal refusal fail closed')
+
+# A cleanup failure must keep measured evidence and identify the unconfirmed
+# teardown. Stop the real child before injecting failure so the fixture itself
+# never leaks a process. Production still requires outer container teardown.
+for guard_failure in (False, True):
+    with tempfile.TemporaryDirectory(prefix='locks-cleanup-receipt-') as tmp:
+        evidence = Path(tmp)
+        measurements = 0
+        def measured():
+            global measurements
+            real_measure()
+            measurements += 1
+            if guard_failure and measurements > 1:
+                raise ValueError('injected monitor failure before cleanup')
+        def failed_cleanup(existing):
+            stop(existing)
+            raise RuntimeError('injected cleanup failure; container teardown required')
+        with patch.dict(globals_, measure=measured, stop_workload=failed_cleanup):
+            try:
+                main(['python3', '-c', 'pass'], evidence)
+            except RuntimeError as error:
+                assert str(error) == 'injected cleanup failure; container teardown required'
+            else:
+                raise AssertionError('cleanup failure was reported as success')
+        assert (evidence / 'resources.json').is_file(), 'cleanup failure discarded resource evidence'
+        receipt = json.loads((evidence / 'resources.json').read_text())
+        assert receipt['cleanup_error'] == 'injected cleanup failure; container teardown required', receipt
+        expected = 'injected monitor failure before cleanup' if guard_failure else None
+        assert receipt['guard_error'] == expected, receipt
+        assert receipt['minimum_vm_free_bytes'] > 0, receipt
+print('Docker resource cleanup: failed teardown retains measurements and both failure causes')

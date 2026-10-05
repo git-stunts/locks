@@ -181,15 +181,23 @@ def main(command=None, evidence=Path('/evidence'), admitted_capacity=None, admit
         print(f'Docker resource guard: {error}', file=sys.stderr, flush=True)
         return 2
     finally:
-        selector.close()
-        stop_workload(existing)
-        process.wait(timeout=5)
-        # Quota reserve above leaves room for this receipt even on a refused run.
-        (evidence / 'resources.json').write_text(json.dumps({
-            'peak_tmpfs_bytes': peaks, 'minimum_vm_free_bytes': minimum_vm_free,
-            'stdout_bytes': written, 'guard_error': error, 'bootstrap_quota_bytes': quota_capacity,
-            'peak_generated_nonobject_bytes': peak_generated_log_bytes, 'runtime_log_budget_bytes': log_budget,
-        }, indent=2) + '\n')
+        cleanup_error = None
+        try:
+            selector.close()
+            stop_workload(existing)
+            process.wait(timeout=5)
+        except Exception as exc:
+            cleanup_error = str(exc)
+            raise  # The host must still stop the whole container.
+        finally:
+            # Keep measurements even when cleanup fails, without certifying
+            # that all descendants stopped. Preserve both failure causes.
+            (evidence / 'resources.json').write_text(json.dumps({
+                'peak_tmpfs_bytes': peaks, 'minimum_vm_free_bytes': minimum_vm_free,
+                'stdout_bytes': written, 'guard_error': error, 'cleanup_error': cleanup_error,
+                'bootstrap_quota_bytes': quota_capacity,
+                'peak_generated_nonobject_bytes': peak_generated_log_bytes, 'runtime_log_budget_bytes': log_budget,
+            }, indent=2) + '\n')
 
 
 if __name__ == '__main__':
