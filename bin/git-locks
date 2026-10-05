@@ -3033,11 +3033,11 @@ plan_sem_acquire() { # name job holder ttl acquisition-or-empty -> append to the
   return 0
 }
 
-sem_release_once() { # name job [record] -> 0 released or nothing to release; 1 only when the race never settles
+sem_release_once() { # name job [record] [acquisition] -> 0 released or nothing to release; 1 only when the race never settles
   local attempt rc
   for ((attempt = 0; attempt < RETRIES; attempt++)); do
     snapshot
-    sem_release_attempt "$1" "$2" "${3:-}"
+    sem_release_attempt "$1" "$2" "${3:-}" "${4:-}"
     rc=$?
     ((rc == 2)) || return "${rc}"
     sleep 0.01
@@ -3048,7 +3048,7 @@ sem_release_once() { # name job [record] -> 0 released or nothing to release; 1 
 
 sem_release_attempt() { # one read-plan-transact; 0 done, 2 lost the race
   ensure_snapshot       # in this shell, so the $(…) reads below inherit one fresh snapshot instead of each taking their own
-  local name="$1" job="$2" want="$3" i own_oid='' own_live=0 _j1 _j2 live_after slot_ref
+  local name="$1" job="$2" want_record="$3" want_acquisition="$4" i own_oid='' own_live=0 _j1 _j2 live_after slot_ref
   sem_read "${name}" || sem_missing "${name}"
   for i in "${!SLOT_JOBS[@]}"; do
     if [[ "${SLOT_JOBS[${i}]}" == "${job}" ]]; then
@@ -3064,7 +3064,7 @@ sem_release_attempt() { # one read-plan-transact; 0 done, 2 lost the race
   fi
   local own_acq
   own_acq="$(field "${own_oid}" acquisition)"
-  if [[ -n "${want}" && "${want}" != "${own_oid}" && "${want}" != "${own_acq}" ]]; then
+  if [[ (-n "${want_record}" && "${want_record}" != "${own_oid}") || (-n "${want_acquisition}" && "${want_acquisition}" != "${own_acq}") ]]; then
     printf '{"event":"nothing","semaphore":%s,"job":%s,"reason":"superseded"}\n' "${_j1}" "${_j2}"
     return 0
   fi
@@ -3079,7 +3079,7 @@ sem_release_attempt() { # one read-plan-transact; 0 done, 2 lost the race
 
 cmd_sem() {
   (($# > 0)) || usage
-  local verb="$1" name='' job='' holder='' ttl="${DEFAULT_TTL}" wait=0 capacity='' record='' _j1
+  local verb="$1" name='' job='' holder='' ttl="${DEFAULT_TTL}" wait=0 capacity='' record='' acquisition='' _j1
   shift
   case "${verb}" in
     list)
@@ -3138,7 +3138,7 @@ cmd_sem() {
       --acquisition)
         [[ $# -ge 2 ]] || usage
         valid_holder "$2" || fail '--acquisition must be a nonempty UTF-8 line' 2
-        record="$2"
+        acquisition="$2"
         shift 2
         ;;
       *) usage ;;
@@ -3197,7 +3197,7 @@ cmd_sem() {
     release)
       [[ -n "${job}" ]] || usage
       valid_job "${job}" || fail "job id '${job}' must match [A-Za-z0-9][A-Za-z0-9._-]*" 2
-      sem_release_once "${name}" "${job}" "${record}" || exit 1
+      sem_release_once "${name}" "${job}" "${record}" "${acquisition}" || exit 1
       ;;
     show)
       sem_read "${name}" || sem_missing "${name}"
