@@ -2,7 +2,7 @@
 
 ## Source and observed state
 
-Graph version: `2026-10-05.1`. Source baseline: `7ba2c09b9a09e86a8d811f391d6632b995df1450`, observed on 2026-10-05.
+Graph version: `2026-10-05.2`. Source baseline: `7ba2c09b9a09e86a8d811f391d6632b995df1450`, observed on 2026-10-05.
 These are historical coordinates. Recheck live state before execution.
 
 - [PR #118](https://github.com/git-stunts/locks/pull/118) rejects missing default HOME before store initialization.
