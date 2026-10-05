@@ -12,6 +12,8 @@ The quota check reads the kernel loop device's `backing_file` attribute and comp
 
 The build's RUN processes also need explicit membership in the owned cgroup. Docker documents `--cgroup-parent` for [build commands](https://docs.docker.com/reference/cli/docker/buildx/build/). Membership must be observed during a real build; a command-line option or configured memory limit alone is not evidence that descendants obey it.
 
+If receipt export fails, cleanup still attempts to unmount the owned filesystem and remove its unit. It preserves the control directory and unexported logs for recovery. If unmounting fails, it preserves the mounted data and unit. Five synthetic cleanup cases cover receipt and log collisions, a copy failure, successful cleanup, and a refused unmount; real privileged teardown remains unverified.
+
 Work required before enabling the prototype:
 
 - Verify the new setup ordering and ownership tests. Formatting now uses the controlled command path after cgroup checks. Unit ownership is recorded before activation, mount state is checked after errors, and refusal cleanup leaves pre-existing resources untouched. These paths still need execution evidence in the privileged setup environment.

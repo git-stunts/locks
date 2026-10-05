@@ -24,6 +24,7 @@ test-container:
 	python3 test/docker-boundary.py
 	python3 test/docker-bootstrap.py
 	python3 test/docker-bootstrap-lifetime.py
+	python3 test/docker-bootstrap-cleanup.py
 	python3 test/docker-quota.py
 	python3 test/docker-bootstrap-health.py
 	python3 test/docker-bootstrap-admission.py

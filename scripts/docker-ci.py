@@ -424,31 +424,37 @@ class Provider:
         if self.watchdog is not None:
             self.watchdog.close()
             self.watchdog = None
-        self.receipt.parent.mkdir(exist_ok=True)
-        with self.receipt.open('x') as output:
-            output.write(json.dumps({
-            'build_filesystem_bytes': BUILD_BYTES, 'memory_bytes': MEMORY_BYTES,
-            'cpus': 2, 'timeout_seconds': DEADLINE_SECONDS,
-            'minimum_backing_free_bytes': self.minimum_free, 'peak_counted_log_bytes': self.peak_logs,
-            'command': sys.argv[1:], 'status': getattr(self, 'status', 'incomplete'),
-            }, indent=2) + '\n')
-        os.chown(self.receipt, self.uid, self.gid)
-        for name in ('daemon.log', 'command.log', 'launch.json'):
-            source = CONTROL / name
-            if source.exists():
-                target = self.receipt.parent / ('bootstrap-' + name)
-                if target.exists():
-                    raise RuntimeError('refusing to overwrite earlier bootstrap evidence')
-                shutil.copyfile(source, target)
-                os.chown(target, self.uid, self.gid)
-        if self.mounted:
-            run(['umount', str(DATA)])
-            self.mounted = False
-        if self.unit_owned:
-            self.unit_file.unlink()
-            run(['systemctl', 'daemon-reload'])
-        if self.control_owned:
-            shutil.rmtree(CONTROL)
+        exported = False
+        try:
+            self.receipt.parent.mkdir(exist_ok=True)
+            with self.receipt.open('x') as output:
+                output.write(json.dumps({
+                'build_filesystem_bytes': BUILD_BYTES, 'memory_bytes': MEMORY_BYTES,
+                'cpus': 2, 'timeout_seconds': DEADLINE_SECONDS,
+                'minimum_backing_free_bytes': self.minimum_free, 'peak_counted_log_bytes': self.peak_logs,
+                'command': sys.argv[1:], 'status': getattr(self, 'status', 'incomplete'),
+                }, indent=2) + '\n')
+            os.chown(self.receipt, self.uid, self.gid)
+            for name in ('daemon.log', 'command.log', 'launch.json'):
+                source = CONTROL / name
+                if source.exists():
+                    target = self.receipt.parent / ('bootstrap-' + name)
+                    if target.exists():
+                        raise RuntimeError('refusing to overwrite earlier bootstrap evidence')
+                    shutil.copyfile(source, target)
+                    os.chown(target, self.uid, self.gid)
+            exported = True
+        finally:
+            # Export collisions and I/O failures must not retain live resources.
+            # Keep unexported evidence for recovery; never remove mounted data.
+            if self.mounted:
+                run(['umount', str(DATA)])
+                self.mounted = False
+            if self.unit_owned:
+                self.unit_file.unlink()
+                run(['systemctl', 'daemon-reload'])
+            if exported:
+                shutil.rmtree(CONTROL)
 
 
 def main():
