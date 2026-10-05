@@ -110,7 +110,16 @@ def stop_workload(existing):
             try:
                 state = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0]
                 if state != 'Z':
-                    os.kill(pid, signal.SIGKILL)
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except PermissionError:
+                        # The host may still be completing its bounded root
+                        # receipt publisher. We cannot signal it; keep it in
+                        # the active set until it exits or the deadline fails.
+                        uids = [line.split()[1:] for line in Path(f'/proc/{pid}/status').read_text().splitlines()
+                                if line.startswith('Uid:')]
+                        if os.geteuid() != 1000 or uids != [['0'] * 4]:
+                            raise
                     active.append(pid)
             except ProcessLookupError:
                 pass

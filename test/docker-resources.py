@@ -73,3 +73,25 @@ Path(sys.argv[1]).write_text(f'{os.getpid()} {child.pid}')
     state = Path(f'/proc/{child}/stat')
     assert not state.exists() or state.read_text().rsplit(')', 1)[1].split()[0] == 'Z'
 print('Docker resource cleanup: unexpected monitor failure stopped an orphan in another session')
+
+# Synthetic root-helper waits remain bounded, and unrelated signal refusals
+# are not silently accepted. The separate live probe exercises real root UIDs.
+from unittest.mock import patch
+stop = runner['stop_workload']
+state = stop.__globals__
+for uid in ('0', '1001'):
+    def contents(path):
+        return '99 (helper) S 1 0' if path.name == 'stat' else 'Uid:\t' + '\t'.join([uid]*4)
+    with patch.dict(state, process_ids=lambda: {99}), \
+         patch.object(state['Path'], 'read_text', contents), \
+         patch.object(state['os'], 'kill', side_effect=PermissionError('cannot signal helper')), \
+         patch.object(state['time'], 'monotonic', side_effect=[0, 6]):
+        try:
+            stop(set())
+        except PermissionError:
+            assert uid == '1001'
+        except RuntimeError as error:
+            assert uid == '0' and 'container teardown required' in str(error)
+        else:
+            raise AssertionError('cleanup falsely reported an active helper stopped')
+print('Docker resource cleanup: root helper timeout and unrelated signal refusal fail closed')

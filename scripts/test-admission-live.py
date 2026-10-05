@@ -20,9 +20,13 @@ runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
 
 def main():
-    if sys.argv[1:] and (sys.argv[1] != '--' or len(sys.argv) < 3):
+    arguments = sys.argv[1:]
+    hold_refresh = arguments[:1] == ['--hold-refresh']
+    if hold_refresh:
+        arguments = arguments[1:]
+    if arguments and (arguments[0] != '--' or len(arguments) < 2):
         raise RuntimeError('expected -- followed by guarded launcher prefix')
-    launcher = sys.argv[2:] or [sys.executable, str(ROOT / 'scripts/docker-run.py')]
+    launcher = arguments[1:] or [sys.executable, str(ROOT / 'scripts/docker-run.py')]
     run_id, capacity = uuid.uuid4().hex, 19 << 30
     program = (ROOT / 'scripts/docker-admission.py').read_text()
     def interrupted(signum, frame):
@@ -48,7 +52,10 @@ def main():
                     class Boundary:
                         initial = {'capacity_bytes': capacity}
                         def check(self): return self.initial
-                    runner.publish_admission(Boundary(), run_id, program)
+                    publication = program
+                    if hold_refresh and marker == 'admission-refresh':
+                        publication += '\nimport time; time.sleep(2)\n'
+                    runner.publish_admission(Boundary(), run_id, publication)
                     published.add(marker)
             time.sleep(.05)
         if child.returncode or len(published) != 2:
