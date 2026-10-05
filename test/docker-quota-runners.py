@@ -25,8 +25,9 @@ initial = {'capacity_bytes': 19 << 30, 'device': 7,
            'worker': {'pid': 23, 'parent': 22, 'started': 60},
            'backing_free_bytes': 70 << 30}
 checks = 0
+export_faults = ('missing test log', 'missing resource receipt', 'artifact export failure', 'early child refusal')
 emergency_faults = ('missing runner PID', 'invalid runner PID', 'failed TERM', 'TERM timeout', 'failed worker stop', 'stuck Docker client')
-for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired', 'initial publication failure', 'refresh publication failure', 'successful refresh', *emergency_faults):
+for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired', 'initial publication failure', 'refresh publication failure', 'successful refresh', *emergency_faults, *export_faults):
     with tempfile.TemporaryDirectory(prefix='locks-quota-runner-') as scratch:
         root = Path(scratch)
         recipe = root / 'scripts/docker/Dockerfile'
@@ -47,7 +48,7 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
         def admission(info, pid):
             assert pid == 23 and info == {'private': True}
             snapshots.append(pid)
-            if len(snapshots) <= 2 or fault in ('initial publication failure', 'refresh publication failure', 'successful refresh'):
+            if fault in export_faults or len(snapshots) <= 2 or fault in ('initial publication failure', 'refresh publication failure', 'successful refresh'):
                 return copy.deepcopy(initial)
             if fault in ('expired health', 'final health expired'):
                 raise RuntimeError('health expired')
@@ -60,7 +61,7 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
         publications = []
         launches = []
         class Process:
-            returncode = 0 if fault == 'final health expired' else None
+            returncode = 1 if fault == 'early child refusal' else (0 if fault == 'final health expired' or fault in export_faults else None)
             def poll(self): return self.returncode
             def wait(self, timeout=None):
                 if fault == 'successful refresh' and self.returncode is None:
@@ -76,6 +77,10 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
         process = Process()
         def run(*command, **kwargs):
             calls.append(command)
+            if ((fault == 'early child refusal' and command[-1] in ('/evidence/test.log', '/evidence/resources.json')) or
+                    (fault == 'missing test log' and command[-1] == '/evidence/test.log') or
+                    (fault == 'missing resource receipt' and command[-1] == '/evidence/resources.json')):
+                raise subprocess.CalledProcessError(1, command)
             if command[:4] == ('docker', 'exec', '--user', '0:0'):
                 assert command[4:8] == (runner.WORKER, '/usr/bin/python3', '-I', '-c')
                 assert command[8] == (ROOT / 'scripts/docker-admission.py').read_text()
@@ -113,9 +118,14 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
             assert publications == [(command[at+2], str(19 << 30))]
             launches.append(command)
             return process
+        exports = []
+        def export(path):
+            exports.append(path)
+            if fault == 'artifact export failure':
+                raise RuntimeError('injected artifact export failure')
         with patch.object(runner, 'ROOT', root), patch.object(runner, 'source_archive', return_value=b''), \
              patch.object(runner, 'inspect', inspect), patch.object(runner, 'run', run), \
-             patch.object(runner, 'export_artifacts', lambda path: None), \
+             patch.object(runner, 'export_artifacts', export), \
              patch.object(runner, 'load_bootstrap', return_value=SimpleNamespace(quota_admission=admission)), \
              patch.object(runner.shutil, 'disk_usage', return_value=SimpleNamespace(free=70 << 30)), \
              patch.object(runner.subprocess, 'check_output', side_effect=output), \
@@ -130,6 +140,20 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
             else:
                 assert runner.main() == (0 if fault == 'successful refresh' else 2)
         result = json.loads((root / '.test-results/result.json').read_text())
+        if fault in export_faults:
+            assert result['exit_code'] == 2 and result['workload_exit_code'] == (1 if fault == 'early child refusal' else 0), result
+            assert result['evidence_errors'] and not result['host_guard'], result
+            if fault == 'early child refusal':
+                assert set(result['evidence_errors']) == {'latest.log', 'resources.json'}, result
+                assert not (root / '.test-results/latest.log').exists()
+                assert not (root / '.test-results/resources.json').exists()
+            assert len(exports) == 1, 'one failed file export skipped retained artifacts'
+            for name in ('test.log', 'resources.json'):
+                assert ('docker', 'exec', runner.WORKER, 'cat', '/evidence/' + name) in calls
+            assert ('docker', 'stop', '--time', '5', runner.WORKER) in calls
+            checks += 1
+            print('PASS host evidence: ' + fault, flush=True)
+            continue
         if fault in ('initial publication failure', 'successful refresh'):
             if fault == 'initial publication failure':
                 assert not launches and result['state'] == 'admission-publication-failed'

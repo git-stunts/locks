@@ -298,13 +298,33 @@ def main():
                     host_guard = True
                     host_guard_detail = str(error)
             result_code = 2 if host_guard else process.returncode
-            (receipts / "result.json").write_text(json.dumps({"exit_code": result_code, "host_guard": host_guard, "host_guard_detail": host_guard_detail}) + "\n")
-            with (receipts / "latest.log").open("wb") as log:
-                run("docker", "exec", WORKER, "cat", "/evidence/test.log", stdout=log)
-            with (receipts / "resources.json").open("wb") as receipt:
-                run("docker", "exec", WORKER, "cat", "/evidence/resources.json", stdout=receipt)
-            export_artifacts(receipts)
-            return result_code
+            result = {"exit_code": result_code, "workload_exit_code": process.returncode,
+                      "host_guard": host_guard, "host_guard_detail": host_guard_detail,
+                      "evidence_errors": {}}
+            result_path = receipts / "result.json"
+            result_path.write_text(json.dumps(result) + "\n")
+            for local, remote in (("latest.log", "test.log"), ("resources.json", "resources.json")):
+                target = receipts / local
+                try:
+                    with target.open("wb") as output:
+                        run("docker", "exec", WORKER, "cat", "/evidence/" + remote,
+                            stdout=output, timeout=15)
+                except Exception as error:
+                    result["evidence_errors"][local] = str(error)
+                    # A failed transfer must not leave an apparently complete
+                    # receipt or reuse a previous run's evidence.
+                    try:
+                        target.unlink(missing_ok=True)
+                    except OSError as cleanup_error:
+                        result["evidence_errors"][local] += "; partial file removal failed: " + str(cleanup_error)
+            try:
+                export_artifacts(receipts)
+            except Exception as error:
+                result["evidence_errors"]["artifacts"] = str(error)
+            if result["evidence_errors"]:
+                result["exit_code"] = 2
+            result_path.write_text(json.dumps(result) + "\n")
+            return result["exit_code"]
         finally:
             if not worker_stopped:
                 run("docker", "stop", "--time", "5", WORKER, stdout=subprocess.DEVNULL, timeout=15)
