@@ -49,8 +49,10 @@
 # every store read wait after loading; GIT_LOCKS_TRACE=<file> appends one line
 # per store read. Tests force interleavings and count reads with them.
 set -uo pipefail
-if ((BASH_VERSINFO[0] < 4)); then
-  printf 'git-locks: needs bash 4 or newer (associative arrays); this is %s\n' "${BASH_VERSION}" >&2
+if ((BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4))); then
+  # Older Bash treats empty arrays as unset under nounset. Reject before any
+  # store access; the fixed JSON line does not need the later Bash 4.4 helpers.
+  printf '%s\n' '{"event":"error","reason":"usage","detail":"Bash 4.4 or newer is required"}' >&2
   exit 2
 fi
 export LC_ALL=C # string offsets below are byte offsets: cat-file --batch sizes are bytes

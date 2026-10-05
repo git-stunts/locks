@@ -29,7 +29,7 @@ Bash and Git provide the store. No daemon is required. **Locks are advisory:** e
 
 ## Install
 
-Requirements: **Bash 4+**, **Git 2.31+**, and `ps` with `pgid` and `tpgid` support (Linux and macOS).
+Requirements: **Bash 4.4+**, **Git 2.31+**, and `ps` with `pgid` and `tpgid` support (Linux and macOS).
 On macOS, put a newer Bash on `PATH`; `/bin/bash` 3.2 is insufficient.
 
 From a release or reviewed checkout:
