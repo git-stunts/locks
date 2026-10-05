@@ -16,7 +16,7 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location('cleanup_provider', ROOT / 'scripts/docker-ci.py')
 provider = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(provider)
-cases = ('nested mounts', 'remaining child mount', 'remaining root mount', 'unreadable mount table', 'malformed mount table', 'receipt collision', 'log collision', 'copy failure', 'success', 'unmount failure')
+cases = ('nested mounts', 'remaining child mount', 'remaining root mount', 'unreadable mount table', 'malformed mount table', 'receipt collision', 'log collision', 'copy failure', 'success', 'unmount failure', 'reload failure', 'publication failure')
 for fault in cases:
     with tempfile.TemporaryDirectory(prefix='locks-bootstrap-cleanup-') as scratch:
         root = Path(scratch)
@@ -41,6 +41,10 @@ for fault in cases:
             calls.append(command)
             if command[0] in ('umount', 'systemctl') and command[1] != 'stop':
                 assert kwargs['timeout'] == 30 and kwargs['check'] is True, kwargs
+            if command == ['systemctl', 'daemon-reload'] and fault == 'reload failure':
+                raise subprocess.CalledProcessError(1, command)
+            if command[0] == 'umount' and fault != 'receipt collision':
+                assert json.loads((receipts / 'bootstrap.json').read_text())['status'] == 'cleanup-pending'
             if command[0] == 'umount' and (fault == 'unmount failure' or
                     (fault == 'nested mounts' and '--recursive' not in command)):
                 raise subprocess.CalledProcessError(32, command)
@@ -57,6 +61,11 @@ for fault in cases:
             if fault in ('remaining child mount', 'remaining root mount'):
                 return ('20 1 0:2 / ' + target + ' rw - tmpfs tmpfs rw\n').encode()
             return b'1 0 0:1 / / rw - rootfs rootfs rw\n'
+        real_replace = provider.os.replace
+        def replace(source, target):
+            if fault == 'publication failure':
+                raise OSError('injected final receipt publication failure')
+            return real_replace(source, target)
         real_copy = provider.shutil.copyfile
         def copy(source, target):
             if fault == 'copy failure':
@@ -66,10 +75,12 @@ for fault in cases:
              patch.object(provider, 'DATA', data), patch.object(provider, 'CGROUP', cgroup), \
              patch.object(provider.subprocess, 'run', side_effect=run), \
              patch.object(provider.shutil, 'copyfile', side_effect=copy), \
+             patch.object(provider.os, 'replace', side_effect=replace), \
              patch.object(Path, 'read_bytes', mount_table):
             instance = provider.Provider(os.getuid(), os.getgid())
             instance.control_owned = instance.unit_owned = instance.slice_owned = instance.mounted = True
             instance.unit_file = unit
+            instance.status = 'passed'
             error = None
             try:
                 instance.cleanup()
@@ -77,6 +88,13 @@ for fault in cases:
                 error = caught
             assert (error is None) == (fault in ('success', 'nested mounts')), (fault, error)
         assert (cgroup / 'cgroup.kill').read_text() == '1\n'
+        if fault != 'receipt collision':
+            report = json.loads((receipts / 'bootstrap.json').read_text())
+            expected_status = 'cleanup-pending' if fault == 'publication failure' else ('passed' if error is None else 'cleanup-failed')
+            assert report['status'] == expected_status, (fault, report)
+            if fault != 'publication failure':
+                assert bool(report['cleanup_errors']) == (error is not None), (fault, report)
+            assert not list(receipts.glob('.bootstrap-final-*')), 'temporary final receipt leaked'
         assert ['umount', '--recursive', '--', str(data)] in calls, (fault, calls)
         if fault in ('unmount failure', 'remaining child mount', 'remaining root mount', 'unreadable mount table', 'malformed mount table'):
             assert instance.mounted and unit.exists() and control.exists()
@@ -84,7 +102,7 @@ for fault in cases:
         else:
             assert not instance.mounted and not unit.exists()
             assert ['systemctl', 'daemon-reload'] in calls
-        if fault not in ('success', 'nested mounts'):
+        if fault not in ('success', 'nested mounts', 'publication failure'):
             assert (control / 'daemon.log').read_text() == 'unique daemon evidence'
         else:
             assert not control.exists()

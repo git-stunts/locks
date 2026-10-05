@@ -17,6 +17,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -492,17 +493,23 @@ class Provider:
                 errors.append('process verification: ' + str(error))
                 safe_to_unmount = False
         exported = False
+        receipt_owned = False
+        cleanup_complete = False
+        report = {
+            'build_filesystem_bytes': BUILD_BYTES, 'memory_bytes': MEMORY_BYTES,
+            'cpus': 2, 'timeout_seconds': DEADLINE_SECONDS,
+            'minimum_backing_free_bytes': self.minimum_free, 'peak_counted_log_bytes': self.peak_logs,
+            'command': sys.argv[1:], 'status': 'cleanup-pending',
+            'cleanup_errors': errors, 'processes_stopped': safe_to_unmount,
+            'collected_units': collected, 'cleanup_complete': False,
+        }
         try:
             self.receipt.parent.mkdir(exist_ok=True)
             with self.receipt.open('x') as output:
-                output.write(json.dumps({
-                'build_filesystem_bytes': BUILD_BYTES, 'memory_bytes': MEMORY_BYTES,
-                'cpus': 2, 'timeout_seconds': DEADLINE_SECONDS,
-                'minimum_backing_free_bytes': self.minimum_free, 'peak_counted_log_bytes': self.peak_logs,
-                'command': sys.argv[1:], 'status': 'cleanup-failed' if errors else getattr(self, 'status', 'incomplete'),
-                'cleanup_errors': errors, 'processes_stopped': safe_to_unmount,
-                'collected_units': collected,
-                }, indent=2) + '\n')
+                receipt_owned = True
+                output.write(json.dumps(report, indent=2) + '\n')
+                output.flush()
+                os.fsync(output.fileno())
             os.chown(self.receipt, self.uid, self.gid)
             for name in ('daemon.log', 'command.log', 'launch.json'):
                 source = CONTROL / name
@@ -513,21 +520,48 @@ class Provider:
                     shutil.copyfile(source, target)
                     os.chown(target, self.uid, self.gid)
             exported = True
+        except Exception as error:
+            errors.append('evidence export: ' + str(error))
+            raise
         finally:
-            # Export collisions and I/O failures must not retain live resources.
-            # Keep unexported evidence for recovery; never remove mounted data.
-            if safe_to_unmount:
-                if self.mounted:
-                    run(['umount', '--recursive', '--', str(DATA)], timeout=30)
-                    verify_unmounted(DATA)
-                    self.mounted = False
-                if self.unit_owned:
-                    self.unit_file.unlink()
-                    run(['systemctl', 'daemon-reload'])
-                if exported:
-                    shutil.rmtree(CONTROL)
+            try:
+                # Preserve mounted data unless process shutdown is confirmed.
+                if safe_to_unmount:
+                    if self.mounted:
+                        run(['umount', '--recursive', '--', str(DATA)], timeout=30)
+                        verify_unmounted(DATA)
+                        self.mounted = False
+                    if self.unit_owned:
+                        self.unit_file.unlink()
+                        run(['systemctl', 'daemon-reload'])
+                    if exported:
+                        shutil.rmtree(CONTROL)
+                        cleanup_complete = True
+            except Exception as error:
+                errors.append('resource teardown: ' + str(error))
+                raise
+            finally:
+                if receipt_owned:
+                    report.update(status='cleanup-failed' if errors else getattr(self, 'status', 'incomplete'),
+                                  cleanup_complete=cleanup_complete, mounted_data_retained=self.mounted)
+                    # Keep the pending receipt intact if final serialization or
+                    # publication fails. Never overwrite a prior run's receipt.
+                    temporary = None
+                    try:
+                        with tempfile.NamedTemporaryFile(mode='w', dir=self.receipt.parent,
+                                                         prefix='.bootstrap-final-', delete=False) as output:
+                            temporary = Path(output.name)
+                            output.write(json.dumps(report, indent=2) + '\n')
+                            output.flush()
+                            os.fsync(output.fileno())
+                            os.fchown(output.fileno(), self.uid, self.gid)
+                        os.replace(temporary, self.receipt)
+                    finally:
+                        if temporary is not None:
+                            temporary.unlink(missing_ok=True)
         if errors:
             raise RuntimeError('bootstrap cleanup failed: ' + '; '.join(errors))
+
 
 
 def main():
