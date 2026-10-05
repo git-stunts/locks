@@ -3,15 +3,25 @@
 The runtime is Bash and Git. There is no daemon, service, database, or external
 mutex. Every writer uses Git's conditional ref update on the same authority:
 
-```text
-refs/locks/state -> immutable Git tree
-  jobs/<job>                  -> reservation blob
-  paths/<path-hash>            -> the same reservation blob
-  dirs/<prefix-hash>           -> directory generation blob
-  sem/<name>/meta              -> capacity blob
-  sem/<name>/gen               -> semaphore generation blob
-  sem/<name>/slots/<job>        -> slot blob
+```mermaid
+flowchart TB
+    R["refs/locks/state<br/>direct mutable ref"] --> T["State tree<br/>immutable object"]
+    T --> J["jobs/ tree"]
+    T --> P["paths/ tree"]
+    T --> D["dirs/ tree"]
+    T --> S["sem/ tree"]
+    J -->|"alice-report"| B["Reservation blob<br/>job, holder, acquisition, expiry, paths"]
+    P -->|"path hash"| B
+    D -->|"prefix hash"| DG["Directory generation blob"]
+    S -->|"gpu"| G["gpu/ tree"]
+    G -->|"meta"| M["Capacity blob"]
+    G -->|"gen"| SG["Semaphore generation blob"]
+    G -->|"slots"| SL["slots/ tree"]
+    SL -->|"job id"| SB["Slot blob"]
 ```
+
+The `jobs/alice-report` and `paths/<path-hash>` entries reference the same reservation blob.
+Git tree and blob objects are immutable. The state ref points to a tree, not a commit.
 
 These are tree entries, not independently mutable refs. The logical entry names
 still appear as `refs/locks/...` in internal plans and doctor findings. Only
@@ -48,6 +58,41 @@ Publication also uses `--no-deref`: if a symbolic ref appears after the read,
 Git must update the named root itself or refuse, without changing its target.
 The same rule covers every ref command in offline migration. Direct packed
 roots remain supported.
+
+## Two workers request the same path
+
+Both workers request `report.md` under different jobs. A's reservation stays live after its claim succeeds.
+`T0`, `TA`, and `TB` identify immutable Git tree objects.
+Compare-and-swap means Git changes the ref only if its current value matches the expected value.
+
+```mermaid
+sequenceDiagram
+    participant A as Worker A
+    participant G as Git store
+    participant B as Worker B
+    A->>G: Read refs/locks/state
+    G-->>A: T0, report.md is free
+    B->>G: Read refs/locks/state
+    G-->>B: T0, report.md is free
+    A->>G: Write candidate tree TA
+    B->>G: Write candidate tree TB
+    Note over A,B: Neither candidate grants a reservation.
+    A->>G: Set state to TA, only if state equals T0
+    G-->>A: Published TA, claim succeeds
+    B->>G: Set state to TB, only if state equals T0
+    G-->>B: Root mismatch, no publication
+    B->>G: Read refs/locks/state again
+    G-->>B: TA, report.md belongs to A
+    B->>B: Replan, then refuse the claim
+```
+
+A root mismatch causes a new snapshot and plan, within the retry bound.
+The live reservation then causes refusal.
+For a disjoint path, B can build a new candidate from `TA` and retry publication.
+Other writers can still change the root first.
+
+Operational errors stop the command; they do not enter this replan loop.
+The root comparison checks state, not elapsed time. It neither renews a lease nor stops work at expiry.
 
 ## Why this closes mixed membership
 

@@ -78,6 +78,18 @@ All writers contend on one Git ref. Store scans grow with stored state.
 Measure your workload before use at high volume.
 Tests cover specified cases; they do not prove correctness for every possible execution.
 
+## How it works
+
+```mermaid
+flowchart LR
+    W["Workers"] -->|"read and conditionally update"| R["refs/locks/state"]
+    R --> T["Immutable Git tree"]
+    T --> B["Lock records"]
+```
+
+One ref selects the complete lock state.
+See the [Git object layout and two-worker example](docs/state-protocol.md) for the publication rules.
+
 ## Documentation
 
 - [Commands, paths, output, and examples](docs/usage.md)
