@@ -13,6 +13,7 @@ import platform
 import select
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -116,6 +117,32 @@ def allocated(directory):
     return total
 
 
+def quota_filesystem(data, image):
+    """Verify the owned loop filesystem; never infer a quota from free bytes."""
+    for path, directory in ((image.parent, True), (data, True), (image, False)):
+        metadata = os.lstat(path)
+        correct_type = stat.S_ISDIR(metadata.st_mode) if directory else stat.S_ISREG(metadata.st_mode)
+        if not correct_type or metadata.st_uid != 0 or metadata.st_mode & 0o022:
+            raise RuntimeError('quota path is not a root-owned protected ' + ('directory: ' if directory else 'file: ') + str(path))
+        if not directory and (metadata.st_size != BUILD_BYTES or metadata.st_nlink != 1):
+            raise RuntimeError('quota backing image size or link count changed')
+    if not os.path.ismount(data):
+        raise RuntimeError('quota filesystem disappeared')
+    device = os.stat(data).st_dev
+    if device == os.stat(image).st_dev:
+        raise RuntimeError('quota filesystem shares its backing device')
+    backing = Path('/sys/dev/block') / f'{os.major(device)}:{os.minor(device)}' / 'loop/backing_file'
+    if backing.read_text().rstrip('\n') != str(image):
+        raise RuntimeError('quota loop device does not use the owned backing image')
+    fs = os.statvfs(data)
+    if fs.f_frsize <= 0 or fs.f_blocks <= 0 or fs.f_blocks * fs.f_frsize > BUILD_BYTES:
+        raise RuntimeError('build filesystem exceeds quota or has invalid geometry')
+    available = fs.f_bavail * fs.f_frsize
+    if available < 64 * 1024**2:
+        raise RuntimeError('build filesystem reserve exhausted')
+    return {'device': device, 'capacity_bytes': fs.f_blocks * fs.f_frsize, 'free_bytes': available}
+
+
 class Provider:
     def __init__(self, uid, gid):
         self.uid, self.gid = uid, gid
@@ -166,13 +193,7 @@ class Provider:
             if not (CGROUP / 'cgroup.kill').is_file():
                 raise RuntimeError('owned process-tree cancellation unavailable')
         if self.mounted:
-            if not os.path.ismount(DATA):
-                raise RuntimeError('quota filesystem disappeared')
-            fs = os.statvfs(DATA)
-            if fs.f_blocks * fs.f_frsize > BUILD_BYTES:
-                raise RuntimeError('build filesystem exceeds quota')
-            if fs.f_bavail * fs.f_frsize < 64 * 1024**2:
-                raise RuntimeError('build filesystem reserve exhausted')
+            quota_filesystem(DATA, CONTROL / 'storage.ext4')
         logs = allocated(ROOT / '.test-results')
         for path in (CONTROL / 'daemon.log', CONTROL / 'command.log'):
             if path.exists():
