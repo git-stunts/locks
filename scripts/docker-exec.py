@@ -6,6 +6,7 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 subprocess.run(['node', str(ROOT / 'scripts/require-docker.mjs')], check=True)
 
+import importlib.util
 import json
 import os
 import resource
@@ -20,6 +21,8 @@ MOUNTS = ('/work', '/tmp', '/home/node', '/evidence', '/dev/shm')
 peaks = {mount: 0 for mount in MOUNTS}
 minimum_vm_free = None
 quota_capacity = None
+quota_run = None
+admission = None
 interrupted = False
 input_sizes = {}
 peak_generated_log_bytes = 0
@@ -58,6 +61,12 @@ def measure():
         if free < MIN_FREE:
             raise RuntimeError('Docker VM backing filesystem has less than 50 GiB free')
     else:
+        if admission is None:
+            raise RuntimeError('quota exception requires protected host admission proof')
+        try:
+            admission.read(quota_run, quota_capacity)
+        except Exception as error:
+            raise RuntimeError('protected host admission failed: ' + str(error)) from None
         # Host admission verified the loop backing, physical disk, guardian,
         # daemon and worker identities. It rechecks these while this runs.
         # This inner check verifies the actual root capacity and free reserve.
@@ -114,9 +123,14 @@ def stop_workload(existing):
         time.sleep(.01)
 
 
-def main(command=None, evidence=Path('/evidence'), admitted_capacity=None):
-    global quota_capacity
-    quota_capacity = admitted_capacity
+def main(command=None, evidence=Path('/evidence'), admitted_capacity=None, admitted_run=None):
+    global quota_capacity, quota_run, admission
+    quota_capacity, quota_run = admitted_capacity, admitted_run
+    admission = None
+    if quota_capacity is not None:
+        spec = importlib.util.spec_from_file_location('protected_admission', ROOT / 'scripts/docker-admission.py')
+        admission = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(admission)
     for path in ROOT.rglob('*'):
         if path.is_file():
             stat = path.stat()
@@ -172,9 +186,11 @@ def main(command=None, evidence=Path('/evidence'), admitted_capacity=None):
 if __name__ == '__main__':
     arguments = sys.argv[1:]
     admitted = None
+    admitted_run = None
     if arguments[:1] == ['--verified-bootstrap-quota']:
-        if len(arguments) < 4 or arguments[2] != '--':
+        if len(arguments) < 5 or arguments[3] != '--':
             raise RuntimeError('invalid internal bootstrap admission arguments')
         admitted = int(arguments[1])
-        arguments = arguments[3:]
-    sys.exit(main(arguments, admitted_capacity=admitted))
+        admitted_run = arguments[2]
+        arguments = arguments[4:]
+    sys.exit(main(arguments, admitted_capacity=admitted, admitted_run=admitted_run))

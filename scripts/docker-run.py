@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = "git-locks-tests:local"
@@ -134,6 +135,14 @@ class BootstrapBoundary:
         return current
 
 
+def publish_admission(boundary, run_id, program):
+    boundary.check()
+    # Execute the supervisor's trusted copy, never a worker-writable script or
+    # module. Isolated Python ignores the worker's cwd and PYTHONPATH.
+    run('docker', 'exec', '--user', '0:0', WORKER, '/usr/bin/python3', '-I', '-c',
+        program, 'publish', run_id, str(boundary.initial['capacity_bytes']), timeout=5)
+
+
 def main():
     if shutil.disk_usage(ROOT).free < 50 * 1024**3:
         raise RuntimeError("less than 50 GiB host free space; refusing new test work")
@@ -204,18 +213,30 @@ def main():
             vm_free = int(vm_df.splitlines()[-1].split()[3]) * 1024
             boundary = None
             inner_options = []
+            run_id = None
+            admission_program = None
             if vm_free < 50 * 1024**3:
                 info = json.loads(subprocess.check_output(
                     ["docker", "info", "--format", "{{json .}}"], text=True, timeout=5))
                 running = inspect("container", WORKER)
                 boundary = BootstrapBoundary(info, running["State"]["Pid"])
-                inner_options = ["--verified-bootstrap-quota", str(boundary.initial["capacity_bytes"]), "--"]
+                run_id = uuid.uuid4().hex
+                admission_program = Path(__file__).with_name("docker-admission.py").read_text()
+                inner_options = ["--verified-bootstrap-quota", str(boundary.initial["capacity_bytes"]), run_id, "--"]
                 (receipts / "quota-admission.json").write_text(json.dumps(boundary.initial, indent=2) + "\n")
             run("docker", "exec", "-i", WORKER, "tar", "xf", "-", "-C", "/work", input=payload)
             run("docker", "exec", "-w", "/work/source", WORKER,
                 "bash", "scripts/docker-entry.sh")
             run("docker", "exec", WORKER, "mkdir", "/evidence/artifacts")
             run("docker", "exec", WORKER, "ln", "-s", "/evidence/artifacts", "/work/artifacts")
+            if boundary is not None:
+                try:
+                    publish_admission(boundary, run_id, admission_program)
+                except Exception as error:
+                    (receipts / "result.json").write_text(json.dumps({
+                        "exit_code": 2, "host_guard": True, "host_guard_detail": str(error),
+                        "state": "admission-publication-failed"}) + "\n")
+                    return 2
             command = sys.argv[1:] or ["make", "test-container"]
             # The inner runner monitors the VM and quota filesystems. The host
             # separately checks its own filesystem; no host path is mounted.
@@ -228,7 +249,7 @@ def main():
                     if shutil.disk_usage(ROOT).free < 50 * 1024**3:
                         raise RuntimeError("host free space below 50 GiB")
                     if boundary is not None:
-                        boundary.check()
+                        publish_admission(boundary, run_id, admission_program)
                 except Exception as error:
                     host_guard = True
                     host_guard_detail = str(error)

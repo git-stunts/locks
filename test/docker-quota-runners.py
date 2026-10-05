@@ -26,7 +26,7 @@ initial = {'capacity_bytes': 19 << 30, 'device': 7,
            'backing_free_bytes': 70 << 30}
 checks = 0
 emergency_faults = ('missing runner PID', 'invalid runner PID', 'failed TERM', 'TERM timeout', 'failed worker stop', 'stuck Docker client')
-for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired', *emergency_faults):
+for fault in ('changed identity', 'expired health', 'unreadable kernel state', 'final health expired', 'initial publication failure', 'refresh publication failure', 'successful refresh', *emergency_faults):
     with tempfile.TemporaryDirectory(prefix='locks-quota-runner-') as scratch:
         root = Path(scratch)
         recipe = root / 'scripts/docker/Dockerfile'
@@ -47,7 +47,7 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
         def admission(info, pid):
             assert pid == 23 and info == {'private': True}
             snapshots.append(pid)
-            if len(snapshots) == 1:
+            if len(snapshots) <= 2 or fault in ('initial publication failure', 'refresh publication failure', 'successful refresh'):
                 return copy.deepcopy(initial)
             if fault in ('expired health', 'final health expired'):
                 raise RuntimeError('health expired')
@@ -57,10 +57,14 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
             changed['watchdog']['started'] += 1
             return changed
         calls = []
+        publications = []
+        launches = []
         class Process:
             returncode = 0 if fault == 'final health expired' else None
             def poll(self): return self.returncode
             def wait(self, timeout=None):
+                if fault == 'successful refresh' and self.returncode is None:
+                    self.returncode = 0
                 if fault in ('TERM timeout', 'stuck Docker client') and self.returncode is None:
                     raise subprocess.TimeoutExpired('docker exec', timeout)
                 assert self.returncode is not None, 'wait before cancellation'
@@ -72,6 +76,14 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
         process = Process()
         def run(*command, **kwargs):
             calls.append(command)
+            if command[:4] == ('docker', 'exec', '--user', '0:0'):
+                assert command[4:8] == (runner.WORKER, '/usr/bin/python3', '-I', '-c')
+                assert command[8] == (ROOT / 'scripts/docker-admission.py').read_text()
+                assert command[9] == 'publish' and kwargs['timeout'] == 5
+                assert len(snapshots) == len(publications) + 2
+                publications.append(command[10:12])
+                if fault == 'initial publication failure' or (fault == 'refresh publication failure' and len(publications) > 1):
+                    raise subprocess.CalledProcessError(1, command[:8])
             if command[:5] == ('docker', 'exec', runner.WORKER, 'kill', '-TERM'):
                 if fault == 'failed TERM':
                     raise subprocess.CalledProcessError(1, command)
@@ -96,7 +108,10 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
             raise AssertionError(command)
         def launch(command):
             at = command.index('--verified-bootstrap-quota')
-            assert command[at+1:at+3] == [str(19 << 30), '--']
+            assert fault != 'initial publication failure'
+            assert command[at+1] == str(19 << 30) and command[at+3] == '--'
+            assert publications == [(command[at+2], str(19 << 30))]
+            launches.append(command)
             return process
         with patch.object(runner, 'ROOT', root), patch.object(runner, 'source_archive', return_value=b''), \
              patch.object(runner, 'inspect', inspect), patch.object(runner, 'run', run), \
@@ -113,10 +128,22 @@ for fault in ('changed identity', 'expired health', 'unreadable kernel state', '
                 else:
                     raise AssertionError('failed worker stop must not report success')
             else:
-                assert runner.main() == 2
+                assert runner.main() == (0 if fault == 'successful refresh' else 2)
         result = json.loads((root / '.test-results/result.json').read_text())
+        if fault in ('initial publication failure', 'successful refresh'):
+            if fault == 'initial publication failure':
+                assert not launches and result['state'] == 'admission-publication-failed'
+                assert result['host_guard'] and result['host_guard_detail'] and len(publications) == 1
+            else:
+                assert len(launches) == 1 and len(publications) == 2 and publications[0] == publications[1]
+                assert not result['host_guard'] and result['exit_code'] == 0
+            assert ('docker', 'stop', '--time', '5', runner.WORKER) in calls
+            checks += 1
+            print('PASS host proof: ' + fault, flush=True)
+            continue
         assert result['host_guard'] and result['host_guard_detail']
-        assert len(snapshots) == 2
+        assert len(publications) == (2 if fault == 'refresh publication failure' else 1)
+        assert len(snapshots) == 3
         if fault in ('final health expired', 'missing runner PID', 'invalid runner PID', 'failed worker stop'):
             assert not any('kill' in command for command in calls)
         else:
@@ -154,7 +181,7 @@ for label, capacity, root_bytes, free, allowed in [
         total, remaining = (root_bytes, free) if path == '/' else (512 << 20, 256 << 20)
         return SimpleNamespace(f_frsize=4096, f_blocks=total//4096,
                                f_bavail=remaining//4096, f_bfree=remaining//4096)
-    with patch.dict(globals_, quota_capacity=capacity, generated_logs=lambda: 0), \
+    with patch.dict(globals_, quota_capacity=capacity, admission=SimpleNamespace(read=lambda run, size: size), generated_logs=lambda: 0), \
          patch.object(globals_['os'], 'statvfs', side_effect=filesystem):
         try:
             measure()
