@@ -4,6 +4,8 @@ All notable changes to this project are recorded here. The format follows Keep a
 
 ## [Unreleased]
 
+- Add the hardening roadmap, typed task cards, common execution prompts, and a versioned dependency graph.
+
 - Keep semaphore release record and acquisition guards separate. Every supplied guard must match its own field, in either option order.
 
 - Derive executable header and full help from canonical command synopses. Document wrapper parents and simultaneous release guards; check the command reference for drift.
