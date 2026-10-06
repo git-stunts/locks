@@ -1,0 +1,40 @@
+{
+  "graph_version": "2026-10-05.3",
+  "source_baseline": "fdf35f559270bc34d401ff5555566822ce4cc9bc",
+  "active_cards": 32,
+  "required_delivery": 28,
+  "gated_extensions": 4,
+  "edges": 85,
+  "antichain_layers": 9,
+  "planning_checks": 101,
+  "result": "passed",
+  "scope": "Roadmap projections, card inventory/disposition, prompt, dependency, gate, source/link, and mutation regression checks; not the full production CLI suite.",
+  "source_archive_sha256": "2341c50a0dd49325952d5f213bfccd1fda149ba5af1fce5d817d033d0ff9e800",
+  "image": "sha256:9f145953f6e79a59749a683d11a476133cb7cef0588b79256dc195b1d0c87ad7",
+  "command": [
+    "bash",
+    "-c",
+    "set -euo pipefail\npython3 scripts/roadmap.py --write\npython3 scripts/roadmap.py --check\npython3 test/planning-graph.py\nmkdir -p /work/artifacts/roadmap-revision-20261005/projection/docs/tasks\ncp ROADMAP.md /work/artifacts/roadmap-revision-20261005/projection/ROADMAP.md\ncp docs/tasks/graph.json docs/tasks/DAG.md /work/artifacts/roadmap-revision-20261005/projection/docs/tasks/\n"
+  ],
+  "resources": {
+    "peak_tmpfs_bytes": {
+      "/work": 4104192,
+      "/tmp": 0,
+      "/home/node": 0,
+      "/evidence": 102400,
+      "/dev/shm": 0
+    },
+    "minimum_vm_free_bytes": 687259164672,
+    "stdout_bytes": 886,
+    "guard_error": null,
+    "peak_generated_nonobject_bytes": 106496,
+    "runtime_log_budget_bytes": 72985376
+  },
+  "preflight": {
+    "host_free_bytes": 723768717312,
+    "vm_free_bytes": 687259168768,
+    "retained_artifact_allocated_bytes": 42357984
+  },
+  "enforcement": "Existing profile-5 quota filesystems, process/resource/log/deadline guards; no image build, compiler output, new worker, or volume. Sampling can overshoot free-space/log thresholds briefly.",
+  "evidence": "Preserved unique export .test-results/artifacts/roadmap-revision-20261005/; worker stopped and wrapper-owned workstation acquisition released."
+}

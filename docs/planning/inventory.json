@@ -1,129 +1,129 @@
 {
   "schema": "git-locks-inventory/2",
-  "graph_version": "2026-10-05.2",
-  "baseline_commit": "7ba2c09b9a09e86a8d811f391d6632b995df1450",
+  "graph_version": "2026-10-05.3",
+  "baseline_commit": "fdf35f559270bc34d401ff5555566822ce4cc9bc",
   "captured_date": "2026-10-05",
   "issue_coverage": {
-    "94": [
-      "GL-036"
+    "2": [
+      "deferred:outside-current-roadmap"
     ],
-    "93": [
-      "GL-003"
+    "7": [
+      "deferred:outside-current-roadmap"
     ],
-    "92": [
-      "GL-023",
-      "GL-024"
+    "9": [
+      "deferred:outside-current-roadmap"
     ],
-    "91": [
-      "GL-027"
+    "10": [
+      "deferred:outside-current-roadmap"
     ],
-    "90": [
-      "GL-029"
+    "14": [
+      "GL-044"
     ],
-    "86": [
-      "GL-025",
-      "GL-026"
-    ],
-    "85": [
-      "GL-039"
-    ],
-    "84": [
-      "GL-035"
-    ],
-    "83": [
-      "GL-022"
-    ],
-    "82": [
-      "GL-007"
-    ],
-    "81": [
-      "GL-015"
-    ],
-    "80": [
-      "GL-012"
-    ],
-    "79": [
-      "GL-034"
-    ],
-    "78": [
-      "GL-033"
-    ],
-    "77": [
-      "GL-040"
-    ],
-    "76": [
-      "GL-020",
-      "GL-021"
-    ],
-    "75": [
-      "GL-008"
-    ],
-    "74": [
-      "GL-006",
-      "GL-007"
-    ],
-    "73": [
-      "GL-013",
-      "GL-014"
-    ],
-    "72": [
-      "GL-016",
-      "GL-017"
-    ],
-    "71": [
-      "GL-016"
-    ],
-    "70": [
-      "GL-019"
-    ],
-    "69": [
-      "GL-011"
-    ],
-    "68": [
-      "GL-005"
-    ],
-    "67": [
-      "completed:PR119"
-    ],
-    "66": [
-      "GL-001"
-    ],
-    "62": [
+    "20": [
       "GL-028"
+    ],
+    "41": [
+      "GL-030"
+    ],
+    "57": [
+      "GL-007",
+      "GL-044"
     ],
     "61": [
       "GL-009",
       "GL-010"
     ],
-    "57": [
-      "GL-004"
-    ],
-    "41": [
-      "GL-030"
-    ],
-    "20": [
+    "62": [
       "GL-028"
     ],
-    "14": [
-      "GL-018"
+    "66": [
+      "GL-001"
     ],
-    "10": [
-      "GL-038"
+    "67": [
+      "completed:PR119"
     ],
-    "9": [
-      "GL-034"
+    "68": [
+      "GL-007",
+      "GL-044"
     ],
-    "7": [
-      "GL-037"
+    "69": [
+      "GL-011"
     ],
-    "2": [
-      "GL-041"
+    "70": [
+      "GL-019"
+    ],
+    "71": [
+      "GL-044"
+    ],
+    "72": [
+      "GL-044"
+    ],
+    "73": [
+      "GL-043"
+    ],
+    "74": [
+      "GL-006",
+      "GL-007"
+    ],
+    "75": [
+      "GL-008"
+    ],
+    "76": [
+      "GL-021"
+    ],
+    "77": [
+      "deferred:outside-current-roadmap"
+    ],
+    "78": [
+      "GL-033",
+      "GL-045"
+    ],
+    "79": [
+      "deferred:outside-current-roadmap"
+    ],
+    "80": [
+      "GL-012"
+    ],
+    "81": [
+      "GL-043"
+    ],
+    "82": [
+      "GL-007"
+    ],
+    "83": [
+      "deferred:outside-current-roadmap"
+    ],
+    "84": [
+      "GL-044"
+    ],
+    "85": [
+      "GL-039"
+    ],
+    "86": [
+      "GL-025",
+      "GL-026"
+    ],
+    "90": [
+      "GL-029"
+    ],
+    "91": [
+      "GL-027"
+    ],
+    "92": [
+      "GL-023",
+      "GL-024"
+    ],
+    "93": [
+      "GL-003"
+    ],
+    "94": [
+      "deferred:outside-current-roadmap"
     ]
   },
   "external_gates": {
     "workflow_permission": {
       "phase": "before-action",
-      "condition": "The current publishing credential lacks workflow scope. James or the repository owner supplies an authorized credential path. Do not switch identities to bypass refusal.",
+      "condition": "Before publishing workflow changes, verify active publication authorization and credential workflow scope. The prior scope refusal is historical; do not assume it persists or switch identities to bypass a new refusal.",
       "blocks": "Publish changes to GitHub workflow files."
     },
     "privileged_linux": {
@@ -160,7 +160,424 @@
       "phase": "before-action",
       "condition": "James authorizes the specific bounded native terminal probe. The standing installation check exception does not authorize an arbitrary host campaign.",
       "blocks": "Run the bounded native terminal probe."
+    },
+    "installed_cutover_approval": {
+      "phase": "before-action",
+      "condition": "Apply an installed default-CLI change only within active deployment authorization for the concrete reviewed candidate. Prior authorization persists; the task does not authorize installation by itself.",
+      "blocks": "Replace the workstation installed default CLI."
+    },
+    "fencing_target": {
+      "phase": "before-action",
+      "condition": "Identify and agree on one real enforceable resource domain, access boundary, permitted mutations, and bounded target environment. No target is selected by the generic proposal.",
+      "blocks": "Run mutation-boundary experiments against the selected resource."
     }
   },
-  "scope": "Open issue snapshot plus explicit hardening evidence gaps. Issue 67 closed during plan preparation. Issue 41 is a container, not a duplicate implementation task."
+  "scope": "Current published plan plus the staged Rust direction and bounded prototype/native audit. The roadmap is the sole active task set; historical cards survive in Git and Reader, not duplicate active files.",
+  "active_tasks": [
+    "GL-001",
+    "GL-002",
+    "GL-003",
+    "GL-006",
+    "GL-007",
+    "GL-008",
+    "GL-009",
+    "GL-010",
+    "GL-011",
+    "GL-012",
+    "GL-019",
+    "GL-021",
+    "GL-023",
+    "GL-024",
+    "GL-025",
+    "GL-026",
+    "GL-027",
+    "GL-028",
+    "GL-029",
+    "GL-030",
+    "GL-031",
+    "GL-032",
+    "GL-033",
+    "GL-039",
+    "GL-042",
+    "GL-043",
+    "GL-044",
+    "GL-045",
+    "GL-046",
+    "GL-047",
+    "GL-048",
+    "GL-049"
+  ],
+  "previous_task_ids": [
+    "GL-001",
+    "GL-002",
+    "GL-003",
+    "GL-004",
+    "GL-005",
+    "GL-006",
+    "GL-007",
+    "GL-008",
+    "GL-009",
+    "GL-010",
+    "GL-011",
+    "GL-012",
+    "GL-013",
+    "GL-014",
+    "GL-015",
+    "GL-016",
+    "GL-017",
+    "GL-018",
+    "GL-019",
+    "GL-020",
+    "GL-021",
+    "GL-022",
+    "GL-023",
+    "GL-024",
+    "GL-025",
+    "GL-026",
+    "GL-027",
+    "GL-028",
+    "GL-029",
+    "GL-030",
+    "GL-031",
+    "GL-032",
+    "GL-033",
+    "GL-034",
+    "GL-035",
+    "GL-036",
+    "GL-037",
+    "GL-038",
+    "GL-039",
+    "GL-040",
+    "GL-041"
+  ],
+  "task_disposition": {
+    "GL-001": {
+      "status": "retained",
+      "title": "Publish a truthful Bash support floor",
+      "successors": [
+        "GL-001"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-002": {
+      "status": "retained",
+      "title": "Verify the minimum Git version",
+      "successors": [
+        "GL-002"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-003": {
+      "status": "retained",
+      "title": "Guard toolchain bootstrap from start to cleanup",
+      "successors": [
+        "GL-003"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-004": {
+      "status": "replaced",
+      "title": "Resolve job and semaphore name findings",
+      "successors": [
+        "GL-007",
+        "GL-044"
+      ],
+      "reason": "Current key behavior is defined once in the public contract and implemented in the Rust preview; obsolete per-ref failures are not presumed current."
+    },
+    "GL-005": {
+      "status": "replaced",
+      "title": "Return precise argument diagnostics",
+      "successors": [
+        "GL-007",
+        "GL-044"
+      ],
+      "reason": "Precise diagnostics are specified in the shared command contract and implemented once in Rust instead of expanding Bash argument handlers."
+    },
+    "GL-006": {
+      "status": "retained",
+      "title": "Choose the acquisition identifier contract",
+      "successors": [
+        "GL-006"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-007": {
+      "status": "retained",
+      "title": "Align output events, schema, and reference tables",
+      "successors": [
+        "GL-007"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-008": {
+      "status": "retained",
+      "title": "Report operational store problems accurately",
+      "successors": [
+        "GL-008"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-009": {
+      "status": "retained",
+      "title": "Choose a safe recovery contract",
+      "successors": [
+        "GL-009"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-010": {
+      "status": "retained",
+      "title": "Implement and rehearse offline recovery",
+      "successors": [
+        "GL-010"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-011": {
+      "status": "retained",
+      "title": "Choose store retention and history boundaries",
+      "successors": [
+        "GL-011"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-012": {
+      "status": "retained",
+      "title": "Provide safe bounded store maintenance",
+      "successors": [
+        "GL-012"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-013": {
+      "status": "replaced",
+      "title": "Separate stored fields from decoded numbers",
+      "successors": [
+        "GL-043"
+      ],
+      "reason": "Typed Rust records preserve raw stored fields separately from checked arithmetic values."
+    },
+    "GL-014": {
+      "status": "replaced",
+      "title": "Guard deliberate plan redirects",
+      "successors": [
+        "GL-043"
+      ],
+      "reason": "The Rust plan type enforces expected values and deliberate redirects instead of directly mutating T_AFTER."
+    },
+    "GL-015": {
+      "status": "replaced",
+      "title": "Expose a safe planner test interface",
+      "successors": [
+        "GL-043"
+      ],
+      "reason": "The Rust core exposes pure planners to independent fixtures; no sourced production Bash test interface is needed."
+    },
+    "GL-016": {
+      "status": "replaced",
+      "title": "Separate planner decisions from command output",
+      "successors": [
+        "GL-043",
+        "GL-044"
+      ],
+      "reason": "Rust planners return typed decisions; command adapters own JSONL, streams, and exits."
+    },
+    "GL-017": {
+      "status": "replaced",
+      "title": "Share validated liveness and invariant rules",
+      "successors": [
+        "GL-043"
+      ],
+      "reason": "The Rust core owns shared liveness/relationship rules with distinct diagnostic behavior."
+    },
+    "GL-018": {
+      "status": "replaced",
+      "title": "Resolve remaining admission-loop duplication",
+      "successors": [
+        "GL-044"
+      ],
+      "reason": "The obsolete duplicated-loop report is reconciled as part of complete Rust admission commands, not a speculative Bash cleanup."
+    },
+    "GL-019": {
+      "status": "retained",
+      "title": "Bind retained evidence to source and bytes",
+      "successors": [
+        "GL-019"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-020": {
+      "status": "replaced",
+      "title": "Make Python tooling checks explicit",
+      "successors": [
+        "GL-021"
+      ],
+      "reason": "Python lint, format, exclusions, and tooling policy join the same fast/full validation-tier result."
+    },
+    "GL-021": {
+      "status": "retained",
+      "title": "Define a fast local gate and complete merge gate",
+      "successors": [
+        "GL-021"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-022": {
+      "status": "deferred",
+      "title": "Report development prerequisites in one command",
+      "successors": [],
+      "reason": "A doctor-dev convenience command is not required for a reliable Rust cutover. Supported tool requirements remain owned by GL-001, GL-002, GL-003, and GL-043."
+    },
+    "GL-023": {
+      "status": "retained",
+      "title": "Record the exact merge review policy",
+      "successors": [
+        "GL-023"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-024": {
+      "status": "retained",
+      "title": "Align merge automation with the review policy",
+      "successors": [
+        "GL-024"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-025": {
+      "status": "retained",
+      "title": "Pin workflow actions to reviewed commits",
+      "successors": [
+        "GL-025"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-026": {
+      "status": "retained",
+      "title": "Produce verifiable release artifacts",
+      "successors": [
+        "GL-026"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-027": {
+      "status": "retained",
+      "title": "Measure current contention and object growth",
+      "successors": [
+        "GL-027"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-028": {
+      "status": "retained",
+      "title": "Choose whether state layout needs optimization",
+      "successors": [
+        "GL-028"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-029": {
+      "status": "retained",
+      "title": "Run an actual cooperating-worker adoption trial",
+      "successors": [
+        "GL-029"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-030": {
+      "status": "retained",
+      "title": "Audit hardening completion and select the release",
+      "successors": [
+        "GL-030"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-031": {
+      "status": "retained",
+      "title": "Investigate the native supervisor warning",
+      "successors": [
+        "GL-031"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-032": {
+      "status": "retained",
+      "title": "Close the supported-contract evidence matrix",
+      "successors": [
+        "GL-032"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-033": {
+      "status": "retained",
+      "title": "Decide automatic wrapper renewal semantics",
+      "successors": [
+        "GL-033"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-034": {
+      "status": "deferred",
+      "title": "Decide durable history semantics",
+      "successors": [],
+      "reason": "Queryable history is a separate product. Required retention and durability are owned by GL-011 and GL-012; no unbounded history chain is adopted."
+    },
+    "GL-035": {
+      "status": "replaced",
+      "title": "Explain store selection provenance",
+      "successors": [
+        "GL-007",
+        "GL-044"
+      ],
+      "reason": "Store selection and its provenance are part of command compatibility and operator-visible runtime behavior."
+    },
+    "GL-036": {
+      "status": "deferred",
+      "title": "Explain decisions from a pinned root and time",
+      "successors": [],
+      "reason": "A new explain command is useful but not required for the migration. Structural and operational diagnosis remains owned by GL-008."
+    },
+    "GL-037": {
+      "status": "deferred",
+      "title": "Decide wait and watch observation guarantees",
+      "successors": [],
+      "reason": "Wait/watch and a notification daemon require their own observation contract and demonstrated need after the basic lifecycle is complete."
+    },
+    "GL-038": {
+      "status": "deferred",
+      "title": "Evaluate remote coordination safety",
+      "successors": [],
+      "reason": "Remote coordination changes the authority and failure model. Local shared Git authority remains the supported scope."
+    },
+    "GL-039": {
+      "status": "retained",
+      "title": "Evaluate enforceable resource fencing",
+      "successors": [
+        "GL-039"
+      ],
+      "reason": "Outcome retained with refreshed scope, baseline, dependencies, and evidence requirements."
+    },
+    "GL-040": {
+      "status": "deferred",
+      "title": "Test the proposed rate-limit semantics",
+      "successors": [],
+      "reason": "Rate limiting has a separate temporal contract; semaphore capacity alone does not supply it."
+    },
+    "GL-041": {
+      "status": "deferred",
+      "title": "Decide whether lock families need a general graph",
+      "successors": [],
+      "reason": "Current single-parent family behavior must survive the port. No demonstrated need justifies general graph-family semantics now."
+    }
+  },
+  "deferred_issues": {
+    "94": "A new explain command is useful but not required for the migration. Structural and operational diagnosis remains owned by GL-008.",
+    "83": "A doctor-dev convenience command is not required for a reliable Rust cutover. Supported tool requirements remain owned by GL-001, GL-002, GL-003, and GL-043.",
+    "79": "Queryable history is a separate product. Required retention and durability are owned by GL-011 and GL-012; no unbounded history chain is adopted.",
+    "77": "Rate limiting has a separate temporal contract; semaphore capacity alone does not supply it.",
+    "10": "Remote coordination changes the authority and failure model. Local shared Git authority remains the supported scope.",
+    "9": "Queryable history is a separate product. Required retention and durability are owned by GL-011 and GL-012; no unbounded history chain is adopted.",
+    "7": "Wait/watch and a notification daemon require their own observation contract and demonstrated need after the basic lifecycle is complete.",
+    "2": "Current single-parent family behavior must survive the port. No demonstrated need justifies general graph-family semantics now."
+  }
 }

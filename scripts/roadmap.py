@@ -60,6 +60,9 @@ def load():
         require(gate['phase'] in ['before-action', 'completion'], 'unknown gate phase')
         require(bool(gate['condition'].strip()) and bool(gate['blocks'].strip()), 'empty gate condition or action')
     tasks = []
+    for path in (ROOT / 'docs/tasks').glob('*.md'):
+        require(path.name == 'DAG.md' or re.fullmatch(r'GL-[0-9]{3}\.md', path.name),
+                'unexpected task document: ' + path.name)
     for path in sorted((ROOT / 'docs/tasks').glob('GL-*.md')):
         raw = path.read_bytes().decode('utf-8')
         task, body = metadata(raw)
@@ -100,11 +103,32 @@ def load():
         tasks.append(task)
     require(bool(tasks), 'no task cards')
     ids = {t['id'] for t in tasks}
+    active = inventory['active_tasks']
+    require(len(active) == len(set(active)) and set(active) == ids,
+            'active task inventory differs from task cards')
+    previous = inventory['previous_task_ids']
+    dispositions = inventory['task_disposition']
+    require(len(previous) == len(set(previous)) and set(previous) == set(dispositions),
+            'previous task disposition coverage differs')
+    for key, disposition in dispositions.items():
+        require(disposition['status'] in ['retained', 'replaced', 'deferred'], 'unknown task disposition')
+        require(bool(disposition['reason'].strip()), 'missing task disposition reason')
+        successors = disposition['successors']
+        require(len(successors) == len(set(successors)) and set(successors) <= ids,
+                'unknown or duplicate task disposition successor')
+        if disposition['status'] == 'retained':
+            require(key in ids and successors == [key], 'retained task disposition drift')
+        else:
+            require(key not in ids, 'retired task still has an active card')
+            require(bool(successors) if disposition['status'] == 'replaced' else not successors,
+                    'task disposition successor drift')
     coverage = inventory['issue_coverage']
     for issue, owners in coverage.items():
         require(bool(owners), 'unmapped issue: ' + issue)
         for owner in owners:
-            require(owner in ids or owner.startswith('completed:'), 'unknown issue owner: ' + owner)
+            require(owner in ids or owner.startswith(('completed:', 'deferred:')), 'unknown issue owner: ' + owner)
+            if owner.startswith('deferred:'):
+                require(bool(inventory['deferred_issues'].get(issue, '').strip()), 'deferred issue lacks a reason')
             if owner in ids:
                 task = next(t for t in tasks if t['id'] == owner)
                 require('https://github.com/git-stunts/locks/issues/' + issue in task['issues'], 'issue map drift')
@@ -164,7 +188,7 @@ def render(tasks, inventory):
                           for layer in layers for key in layer)
     roadmap = (ROOT / 'ROADMAP.md').read_bytes().decode('utf-8')
     required = sum(t['release_required'] for t in tasks)
-    count_claim = f'**{len(tasks)} task cards: {required} required hardening tasks and {len(tasks) - required} optional product tasks**'
+    count_claim = f'**{len(tasks)} task cards: {required} required delivery tasks and {len(tasks) - required} gated extension tasks**'
     require(count_claim in roadmap, 'roadmap task count drift')
     start, end = '<!-- TASK CHECKLIST BEGIN -->', '<!-- TASK CHECKLIST END -->'
     require(roadmap.count(start) == roadmap.count(end) == 1, 'roadmap checklist marker drift')

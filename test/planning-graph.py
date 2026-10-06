@@ -104,6 +104,36 @@ with tempfile.TemporaryDirectory(prefix='roadmap-fixture-') as temporary:
              lambda text: text.replace('"before-action"', '"unknown"', 1), 'unknown gate phase')
     mutation('gate phase prose drift', card,
              lambda text: text.replace('`workflow_permission` (before-action)', '`workflow_permission` (completion)'), 'gate phase prose drift')
+    mutation('active inventory drift', fixture / 'docs/planning/inventory.json',
+             lambda text: json.dumps(dict(json.loads(text), active_tasks=[])), 'active task inventory differs')
+    def remove_disposition(text):
+        data = json.loads(text)
+        del data['task_disposition']['GL-004']
+        return json.dumps(data)
+    mutation('missing prior-task disposition', fixture / 'docs/planning/inventory.json',
+             remove_disposition, 'previous task disposition coverage differs')
+    def unknown_successor(text):
+        data = json.loads(text)
+        data['task_disposition']['GL-004']['successors'] = ['GL-999']
+        return json.dumps(data)
+    mutation('unknown replacement successor', fixture / 'docs/planning/inventory.json',
+             unknown_successor, 'unknown or duplicate task disposition successor')
+    orphan = fixture / 'docs/tasks/orphan.md'
+    try:
+        orphan.write_text('Unlisted task\n')
+        module.ROOT = fixture
+        rejected('unlisted task document', module.load, 'unexpected task document')
+    finally:
+        module.ROOT = ROOT
+        orphan.unlink()
+    extra = fixture / 'docs/tasks/GL-999.md'
+    try:
+        extra.write_text(card.read_text().replace('GL-001', 'GL-999'))
+        module.ROOT = fixture
+        rejected('extra valid task card', module.load, 'active task inventory differs')
+    finally:
+        module.ROOT = ROOT
+        extra.unlink()
     completion_task = copy.deepcopy(next(task for task in tasks if task['id'] == 'GL-030'))
     completion_task['dependencies'] = []
     candidate_graph = json.loads(module.render([completion_task] + [task for task in tasks if task['id'] != 'GL-030'], inventory)['docs/tasks/graph.json'])
