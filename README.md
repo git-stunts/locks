@@ -107,6 +107,7 @@ See the [Git object layout and two-worker example](docs/state-protocol.md) for t
 - [Wrapper lifetime and failure handling](docs/wrapper-lifetime.md)
 - [Store setup](docs/store-initialization.md), [trust](docs/store-trust.md), and [recovery](docs/state-integrity.md)
 - [State protocol and offline upgrade](docs/state-protocol.md)
+- [Git-backed design options: libraries, indexing, notifications, and fencing](docs/design-options.md)
 - [Development and releases](docs/development.md), [test isolation](docs/testing.md), and [changelog](CHANGELOG.md)
 
 ## License

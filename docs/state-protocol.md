@@ -28,6 +28,10 @@ still appear as `refs/locks/...` in internal plans and doctor findings. Only
 `refs/locks/state` exists physically in the namespace. Records keep their
 existing schemas and acquisition identities.
 
+For possible native-library, tree-index, notification, maintenance, and fencing
+extensions, see [Git-backed design options](design-options.md). That discussion
+distinguishes proposed behavior from this protocol's current guarantees.
+
 ## Read, plan, publish
 
 1. Read the root OID. Reject legacy refs, a non-tree root, unreadable objects,
