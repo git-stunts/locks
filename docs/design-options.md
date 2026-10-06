@@ -6,6 +6,10 @@ every successful acquisition must still publish through Git's conditional update
 of `refs/locks/state`. This note evaluates design options; it does not adopt a
 rewrite or describe new supported features.
 
+The 2026-10-05 follow-up includes a [complete native-operation audit](native-library-audit.md),
+a [bounded hierarchical-index and GC experiment](studies/hierarchical-intentions/README.md),
+and a [resource-enforced fencing proposal](fencing-proposal.md).
+
 ## Current guarantees and their boundaries
 
 The [state protocol](state-protocol.md) already reads one immutable tree and
@@ -45,6 +49,12 @@ direct-ref handling, object-format support, store isolation, error semantics,
 and the existing invariant checks. Use the library's supported ref transaction
 API; writing the loose ref file directly would bypass backend semantics.
 
+The follow-up audit found a concrete strict-create mismatch in the inspected
+gitoxide source and experimental SHA-256 gates in libgit2 and its Rust binding.
+Relevant APIs exist, but neither library has demonstrated complete parity here.
+Retain CLI plumbing until the [operation matrix and adapter gates](native-library-audit.md)
+are satisfied; a native implementation need not eliminate every Git subprocess.
+
 Sub-millisecond or microsecond **end-to-end acquisition** is an unmeasured
 hypothesis. Object encoding, compression, storage writes, durability, validation,
 and CAS retries remain. The current planner scans the stored state, and disjoint
@@ -74,6 +84,28 @@ one coordinated runner, and observable failure. Spawning detached GC from every
 release would not satisfy those requirements. No automatic maintenance policy is
 introduced here.
 
+### Would an empty parent commit retain old state?
+
+No: a commit points to its parent, while a parent does not point to its children.
+Two sibling state commits with the same empty parent do not retain one another.
+A live ref to the newest commit retains that commit, its tree, and its ancestors;
+it does not retain an older sibling. The current state root is a tree and cannot
+have a commit parent at all.
+
+A chain in which each new state commit names the previous state commit as parent
+would retain successful history while the newest commit stays reachable. It would
+also grow without bound until an explicit retention scheme cuts that history,
+and would not protect candidates that never became reachable. The isolated
+[SHA-1/SHA-256 GC experiment](studies/hierarchical-intentions/README.md#gc-experiment-an-empty-parent-is-not-a-retention-root)
+demonstrates both cases.
+
+For now, prefer destructive pruning only after all clients are stopped and
+in-flight operations have finished. Online reclamation requires a designed
+retention/admission protocol, with actual Git object edges or refs protecting
+objects; an OID written as text inside a JSON blob is not a reachability edge.
+Any reader-pin scheme must close the race between selecting a snapshot and
+publishing its pin, and account for crashed or paused readers before retiring it.
+
 ## Hierarchical summaries inside trees
 
 A path trie with descendant summaries could avoid scanning every descendant
@@ -100,6 +132,12 @@ path traversal, entry lookup, ancestor updates, and any validation still cost
 work. Metadata also needs a separate namespace or an escaping scheme so a
 legitimate path named `.intent` cannot collide with the index. Preserve the
 existing distinction between an exact path and a trailing-slash prefix.
+
+The [experimental index](studies/hierarchical-intentions/README.md) now stores
+per-acquisition entries and maximum-expiry summaries. Its Boolean conflict queries
+matched 34,000 flat-oracle comparisons; real Git checks cover both hash formats.
+It remains outside the production engine. Full-store validation, wide-node update
+cost, holder reporting, and integration with job/family policy remain unresolved.
 
 ## Notifications without moving authority into a daemon
 
@@ -209,11 +247,17 @@ and escalates to KILL; it does not terminate at TTL expiry. See
 Ordinary filesystem writes do not acquire fencing merely by exporting an OID or
 generation in an environment variable.
 
+The [concrete fencing proposal](fencing-proposal.md) adds a resource activation
+handshake before protected work starts. The adapter must serialize activation
+with old in-flight mutations and durably reject stale tokens on every write.
+Git issues the grant; the protected resource enforces it. Generic shell commands
+cannot receive that guarantee solely from an exported token.
+
 ## Decision boundary
 
 These options preserve Git as the source of reservation authority when every
 grant still passes through root CAS. A native implementation, incremental tree
 index, notifier, maintenance policy, and fencing protocol are separate design
-decisions with separate evidence requirements. None of the performance numbers,
-daemon behavior, or fencing extensions discussed here has been implemented or
-benchmarked by this documentation change.
+decisions with separate evidence requirements. The bounded index/GC experiment
+has run; native-library execution, production index integration, daemon behavior,
+and fencing enforcement remain unimplemented and unbenchmarked here.

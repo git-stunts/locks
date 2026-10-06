@@ -1,0 +1,47 @@
+{
+  "scope": "experimental index and sequential Git schedules; not production integration",
+  "differential": {
+    "seed": 90423,
+    "updates": 400,
+    "oracle_comparisons": 34000,
+    "prior_snapshot_query_checks": 6800,
+    "wide_children": 128,
+    "wide_prefix_visited_nodes": 2
+  },
+  "git": [
+    {
+      "object_format": "sha1",
+      "roundtrip": true,
+      "stale_cas_rejected": true,
+      "strict_create_same_target_rejected": true,
+      "replan_preserves_both": true,
+      "packed_ref_update": true,
+      "structural_sharing": true,
+      "forged_summary_rejected": true
+    },
+    {
+      "object_format": "sha256",
+      "roundtrip": true,
+      "stale_cas_rejected": true,
+      "strict_create_same_target_rejected": true,
+      "replan_preserves_both": true,
+      "packed_ref_update": true,
+      "structural_sharing": true,
+      "forged_summary_rejected": true
+    }
+  ],
+  "gc": [
+    {
+      "object_format": "sha1",
+      "empty_parent_does_not_retain_sibling": true,
+      "unpublished_candidate_pruned": true,
+      "reachable_parent_chain_retains_old": true
+    },
+    {
+      "object_format": "sha256",
+      "empty_parent_does_not_retain_sibling": true,
+      "unpublished_candidate_pruned": true,
+      "reachable_parent_chain_retains_old": true
+    }
+  ]
+}

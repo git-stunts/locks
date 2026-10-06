@@ -1,0 +1,11 @@
+{
+  "image": "sha256:9f145953f6e79a59749a683d11a476133cb7cef0588b79256dc195b1d0c87ad7",
+  "recipe_verified": true,
+  "worker_profile": "5",
+  "host_free_bytes": 723832217600,
+  "vm_free_bytes": 687930257408,
+  "worker_writable_bytes": 233472,
+  "retained_evidence_allocated_bytes": 42349600,
+  "global_build_cache_bytes_reported": 2548000000,
+  "mounts": []
+}

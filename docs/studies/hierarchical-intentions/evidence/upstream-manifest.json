@@ -1,0 +1,184 @@
+{
+  "gix": {
+    "repository": "GitoxideLabs/gitoxide",
+    "commit": "9272d45a1b08ca6f26779389954bd718f8308a80",
+    "files": {
+      "gix/Cargo.toml": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/Cargo.toml",
+        "sha256": "1aac1680348703c639259f6a16cbe82c3c5fe679c54993c87431d3136ee3e4dc"
+      },
+      "gix-ref/src/transaction/mod.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix-ref/src/transaction/mod.rs",
+        "sha256": "4015b0f6281fcb93c2d0375e1b77fdc72c0a22b75e8247dc2d19d5d751fd3ba4"
+      },
+      "gix-ref/src/store/file/transaction/commit.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix-ref/src/store/file/transaction/commit.rs",
+        "sha256": "ac6d44fa9baf4226dba6d41ab644e3d9729def770d1ba14e29a356370c0ba45c"
+      },
+      "gix/src/open/options.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/open/options.rs",
+        "sha256": "19ca14b6351ebe2e09633064d197a5210ef8074e49525352d83d8dafb527d565"
+      },
+      "gix/src/object/tree/editor.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/object/tree/editor.rs",
+        "sha256": "725bd84a7b4679e05dfe724bf8016e25317037caef7405837097b47dbe10371e"
+      },
+      "gix/src/repository/object.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/repository/object.rs",
+        "sha256": "72259a4162769a439c937e83471292ac707f195374197f024d5cad7ce654eba1"
+      },
+      "gix/src/repository/reference.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/repository/reference.rs",
+        "sha256": "7ecb2b5b1a2f9f7db547964d7d519bdfb2e73dd53f78c3566644d67c94f19299"
+      },
+      "gix/src/open/repository.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/open/repository.rs",
+        "sha256": "81dc7bf53123ed4d7741f9579ff2aee36eaf4cf17a0aeb7a980f094d88ec2594"
+      },
+      "gix/src/open/permissions.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/open/permissions.rs",
+        "sha256": "aeaf76909c1ffc0b6a6e74c92bf3e55dfe8ed5384a757229d0f7db391a13d40f"
+      },
+      "gix/src/repository/config/mod.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/repository/config/mod.rs",
+        "sha256": "588aac59e892761aa5e2341a5e2d16de83200b2c95eeae992f95a66c4dcb68e3"
+      },
+      "gix-ref/src/lib.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix-ref/src/lib.rs",
+        "sha256": "023afaf7cad239b731e7b296b112062e61f9ca0fe3b9ca908ea2006ce7f2a870"
+      },
+      "gix-ref/src/store/mod.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix-ref/src/store/mod.rs",
+        "sha256": "d160b6f8a2388fe6978cd94675af910d85f2030168bba4a173a30384948ac3ec"
+      },
+      "gix-ref/src/store/file/transaction/prepare.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix-ref/src/store/file/transaction/prepare.rs",
+        "sha256": "7d3c9c69a1ca6a8b223c51469817448232b32f565c14a503170fb8ea4134ddf7"
+      },
+      "gix/src/create.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/create.rs",
+        "sha256": "b4d3ab8ac100b1d3f93d684aaf94123c19832cd57b32e3f8bd639a311dfebe35"
+      },
+      "gix/src/discover.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/discover.rs",
+        "sha256": "8c5bbbe820acc3a485dac71fd67655ce31479ca7248bb94111c4376a0bf4d54e"
+      },
+      "gix/src/config/tree/sections/extensions.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/config/tree/sections/extensions.rs",
+        "sha256": "9280e3e3e077bbd169408975445c36528121dc9d07ddb2438b63248e4ef244c7"
+      },
+      "gix/src/config/cache/init.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/config/cache/init.rs",
+        "sha256": "989836788274e6f780938ae664f2a6937c19fbdd129fc070607973561e558d80"
+      },
+      "gix/src/config/cache/mod.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix/src/config/cache/mod.rs",
+        "sha256": "e9ccd8eb097929f4d8732aa012117a412d0e20909225c9f37f8c02469c96bd86"
+      },
+      "gix-object/src/lib.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix-object/src/lib.rs",
+        "sha256": "80c5c702b17bc3070386a44012436e9a626925adbb35d338fe6576dc2d46e219"
+      },
+      "gix-odb/src/store_impls/loose/write.rs": {
+        "url": "https://raw.githubusercontent.com/GitoxideLabs/gitoxide/9272d45a1b08ca6f26779389954bd718f8308a80/gix-odb/src/store_impls/loose/write.rs",
+        "sha256": "b16e7b74efaf923bb16d70df5b83569c4319f4944f59745b9df47b8718e32f14"
+      }
+    }
+  },
+  "libgit2": {
+    "repository": "libgit2/libgit2",
+    "commit": "0551dfd4ad989b6a3d5683c0d4cf326c6efef929",
+    "files": {
+      "README.md": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/README.md",
+        "sha256": "ef8addb2c8cb590218ecd7d966bdb2ece078a7aaea0943526547022adfb35a3f"
+      },
+      "include/git2/refs.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/refs.h",
+        "sha256": "92a46ae929a8a485c8e961c837065611437343e7a23383a960761e659a9d1412"
+      },
+      "include/git2/transaction.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/transaction.h",
+        "sha256": "a5958a266937e111eb6f060e98fa3e2573d72b62cd0b2e1898ea0b03fbca50e4"
+      },
+      "include/git2/repository.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/repository.h",
+        "sha256": "7562b800f005183527601cbea7ee2a3bc3e8e393f1c52bc176340f7fbeeb72cd"
+      },
+      "include/git2/odb.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/odb.h",
+        "sha256": "3eabaf5df5709f2758efbf0920f26e11389ae1b884bbf7440f7d3d1131418178"
+      },
+      "include/git2/tree.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/tree.h",
+        "sha256": "86daa1edc716c7aa9734cb5ab4118e3d199d254cfeed179c34422e69c576f3d2"
+      },
+      "src/libgit2/refs.c": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/src/libgit2/refs.c",
+        "sha256": "aa11b50cd303614b428fcc7fcb7c25fdea566c4306095444888f1c9ee6b019e1"
+      },
+      "include/git2/config.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/config.h",
+        "sha256": "6d52734836b58a87e9304ccf1f5aeacc6aa7ea0f45ff28526805b3de94bf531b"
+      },
+      "include/git2/index.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/index.h",
+        "sha256": "82969ad31cf6a31c181eceef7f3a9eb2229f098ca0f60721c770567b72937a01"
+      },
+      "include/git2/blob.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/blob.h",
+        "sha256": "6f8b1da0fcffd5f8a5c40a51704397741b820981d49d363990f0526145ef3992"
+      },
+      "include/git2/common.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/common.h",
+        "sha256": "fff71a29c061f8180705715c04975b1c96c6b436b075fbf123c607d73f2bfce9"
+      },
+      "src/libgit2/repository.c": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/src/libgit2/repository.c",
+        "sha256": "cb3df7a1a5e32868de98b9f0149e57e82085767048c64214cf4db3e2b55bdbaa"
+      },
+      "src/libgit2/settings.c": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/src/libgit2/settings.c",
+        "sha256": "c8e8bf35c2f22c9cd0b0cfee25e599ea2b824c583e4f274c183dfd89b86e2cc1"
+      },
+      "include/git2/experimental.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/experimental.h",
+        "sha256": "11218571e33eaced42fc23331994179c25faaa6bb918a75087afea89d07ae3f0"
+      },
+      "src/libgit2/refdb.c": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/src/libgit2/refdb.c",
+        "sha256": "cb5f796027ba6c7266febcaea2196cc4afbaab14a834707a16dbd067a2baf890"
+      },
+      "include/git2/version.h": {
+        "url": "https://raw.githubusercontent.com/libgit2/libgit2/0551dfd4ad989b6a3d5683c0d4cf326c6efef929/include/git2/version.h",
+        "sha256": "4bbf9d164bf7dc569ca7bc4f6130f564258a7426cb70a450684589f0c369bc96"
+      }
+    }
+  },
+  "git2": {
+    "repository": "rust-lang/git2-rs",
+    "commit": "f6f11169dee36b6eec224416350bc3f6238b6a83",
+    "files": {
+      "Cargo.toml": {
+        "url": "https://raw.githubusercontent.com/rust-lang/git2-rs/f6f11169dee36b6eec224416350bc3f6238b6a83/Cargo.toml",
+        "sha256": "970f92f42b9397e0dc0cc928abd4e8a30cb0168ea2ec5fe54a3c2f02f7005ca4"
+      },
+      "src/oid.rs": {
+        "url": "https://raw.githubusercontent.com/rust-lang/git2-rs/f6f11169dee36b6eec224416350bc3f6238b6a83/src/oid.rs",
+        "sha256": "22e21421d9df6b105364e7fd89f87360bb5baaba37205a4618eefa877b96985f"
+      },
+      "src/transaction.rs": {
+        "url": "https://raw.githubusercontent.com/rust-lang/git2-rs/f6f11169dee36b6eec224416350bc3f6238b6a83/src/transaction.rs",
+        "sha256": "9b32201967cf65d826b9d70ebcb913c5425ade57be389542638a33e83bfc70ff"
+      },
+      "src/repo.rs": {
+        "url": "https://raw.githubusercontent.com/rust-lang/git2-rs/f6f11169dee36b6eec224416350bc3f6238b6a83/src/repo.rs",
+        "sha256": "be6b59c86a94ac9152307f0fd0fb1973785094478a175683c41d7dd0e8fa5d3d"
+      },
+      "libgit2-sys/build.rs": {
+        "url": "https://raw.githubusercontent.com/rust-lang/git2-rs/f6f11169dee36b6eec224416350bc3f6238b6a83/libgit2-sys/build.rs",
+        "sha256": "de27b2c234d44ac9200d0cf646c9d07a89b59ff70d70d93b884ea6684e5e9796"
+      }
+    }
+  }
+}

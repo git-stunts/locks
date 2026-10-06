@@ -1,0 +1,8 @@
+{
+  "baseline_commit": "566e577b9e89e191894a8ec7284540e41fdefbdb",
+  "tested_files": {
+    "prototype.py": "8c8ed727e9bfb7c597b32fd98a419b2217c42aed868f3eb29121e11ca5c46afb",
+    "check.py": "715d541ac34218e885c45de78832b0c94728475ff7efb53437c2b1767dd50aa3"
+  },
+  "scope": "Executed final experiment scripts; subsequent edits only add or update documentation and copied receipts."
+}

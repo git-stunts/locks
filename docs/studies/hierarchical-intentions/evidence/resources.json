@@ -1,0 +1,14 @@
+{
+  "peak_tmpfs_bytes": {
+    "/work": 3342336,
+    "/tmp": 282624,
+    "/home/node": 0,
+    "/evidence": 12288,
+    "/dev/shm": 0
+  },
+  "minimum_vm_free_bytes": 687863148544,
+  "stdout_bytes": 1293,
+  "guard_error": null,
+  "peak_generated_nonobject_bytes": 53248,
+  "runtime_log_budget_bytes": 72989568
+}
